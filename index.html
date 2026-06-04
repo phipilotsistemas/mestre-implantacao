@@ -2842,11 +2842,9 @@ function confirmarCadastroFranqueado() {
     salvarContatoExterno({ empresa:origemEmpresa, responsavel:origemResponsavel, tel:origemTel, email:origemEmail });
   }
 
-  const dados     = getDados();
-  const ticket    = 'MO-' + String(dados.length+1).padStart(3,'0');
-  // Construir e salvar o franqueado diretamente
-  const fid  = 'frq_' + Date.now();
-  const novo = {
+  const dados = getDados();
+  const fid   = 'frq_' + Date.now();
+  const novo  = {
     id: fid,
     ticket: gerarTicket(),
     nome, cpf, tel, email, cidade, uf, modelo,
@@ -2878,29 +2876,22 @@ function confirmarCadastroFranqueado() {
     pastas: {},
     assinaturas: {},
   };
-  dados.push(novo);
-  salvarDados(dados);
-  localStorage.setItem('portal_liberado_'+fid, '1');
-  console.log('[CADASTRO] Franqueado salvo:', novo.id, novo.nome);
-  console.log('[CADASTRO] Total no localStorage:', getDados().length);
-  fecharModal();
-  toast(`${nome} cadastrado(a)! Salvando na planilha...`, 'gn');
-
-  const senha = $('nf-senha')?.value?.trim() || '1234';
+  // Coletar senha ANTES de fechar o modal
+  const senha = $('nf-senha')?.value?.trim() || '123456';
   novo.email = email;
   novo.senha = senha;
+
+  dados.push(novo);
+  salvarDados(dados);
+  fecharModal();
   atualizarBadges();
   renderFranqueados();
   toast(`${nome} cadastrado! Ticket: ${novo.ticket}`, 'gn');
 
-  // Criar usuário no Firebase Auth para o portal
+  // Criar usuário no Firebase Auth
   auth.createUserWithEmailAndPassword(email, senha)
-    .then(cred => {
-      const uid = cred.user.uid;
-      // Salvar perfil do franqueado vinculado ao uid
-      return db.ref('portal_usuarios/' + uid).set({ fid: novo.id, email });
-    })
-    .then(() => toast('Acesso ao portal criado para ' + nome.split(' ')[0] + '!', 'gn'))
+    .then(cred => db.ref('portal_usuarios/' + cred.user.uid).set({ fid: novo.id, email }))
+    .then(() => toast('Portal liberado para ' + nome.split(' ')[0] + '!', 'gn'))
     .catch(err => {
       if(err.code === 'auth/email-already-in-use') {
         toast('E-mail já cadastrado no portal.', 'or');
