@@ -1017,10 +1017,11 @@ const FB_CFG = {
    Perfis, acessos e cores
 ══════════════════════════════════════════════════ */
 const EQUIPE = {
-  'GES-001': { nome:'Maria Cláudia Souza',  cargo:'Gestora de Implantação', tipo:'gestor',    cor:'#EA580C' },
-  'GES-002': { nome:'Rafael Torres',         cargo:'Consultor de Implantação',tipo:'gestor',   cor:'#1E40AF' },
-  'EST-001': { nome:'Beatriz Oliveira',       cargo:'Estagiária',            tipo:'estagiario', cor:'#16A34A' },
-  'AUX-001': { nome:'Lucas Pereira',          cargo:'Auxiliar Administrativo',tipo:'auxiliar',  cor:'#7C3AED' },
+  'ADM-PHILLIPE': { nome:'Phillipe de Paula',    cargo:'Administrador',           tipo:'gestor',    cor:'#1B3F8B', email:'phillipe@mestrework.com' },
+  'GES-001':      { nome:'Maria Cláudia Souza',  cargo:'Gestora de Implantação',  tipo:'gestor',    cor:'#EA580C', email:'claudia@mestrework.com'  },
+  'GES-002':      { nome:'Rafael Torres',         cargo:'Consultor de Implantação',tipo:'gestor',    cor:'#1E40AF', email:'rafael@mestrework.com'   },
+  'EST-001':      { nome:'Beatriz Oliveira',       cargo:'Estagiária',             tipo:'estagiario',cor:'#16A34A', email:'beatriz@mestrework.com'  },
+  'AUX-001':      { nome:'Lucas Pereira',          cargo:'Auxiliar Administrativo',tipo:'auxiliar',  cor:'#7C3AED', email:'lucas@mestrework.com'    },
 };
 
 /* Permissões por tipo */
@@ -1485,18 +1486,15 @@ function logarFirebase() {
   auth.signInWithEmailAndPassword(email, senha)
     .then(cred => {
       const uid = cred.user.uid;
-      // Buscar perfil da equipe no Firebase
-      return db.ref('equipe').once('value').then(snap => {
-        const equipe = snap.val() || {};
-        // Encontrar membro pelo email
-        const membro = Object.values(equipe).find(m => m.email?.toLowerCase() === email);
-        if(!membro) throw new Error('Perfil não encontrado. Contate o administrador.');
-        SESSAO = { token: membro.token, uid, ...membro };
-        PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
-        localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
-        if(erro) erro.style.display='none';
-        iniciarApp();
-      });
+      // Buscar perfil direto no objeto EQUIPE pelo email
+      const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
+      if(!entrada) throw new Error('Perfil não encontrado. Verifique se o e-mail está cadastrado na equipe.');
+      const [token, membro] = entrada;
+      SESSAO = { token, uid, ...membro };
+      PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
+      localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
+      if(erro) erro.style.display='none';
+      iniciarApp();
     })
     .catch(err => {
       if(erro) {
