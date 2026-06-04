@@ -2736,19 +2736,27 @@ function abrirCadastroFranqueado() {
        <div style="font-size:10px;color:var(--text-dim);margin-top:8px">Se a empresa já está nos contatos externos, os dados são preenchidos automaticamente ao digitar o nome.</div>
      </div>`,
     `<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" onclick="confirmarCadastroFranqueado()">Próximo → Confirmação de documentos</button>`
+     <button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar franqueado</button>`
   );
 }
 
 function confirmarCadastroFranqueado() {
-  const nome   = $('nf-nome')?.value.trim();
-  const cpf    = $('nf-cpf')?.value.trim();
-  const tel    = $('nf-tel')?.value.trim();
-  const email  = $('nf-email')?.value.trim();
-  const cidade = $('nf-cidade')?.value.trim();
-  const uf     = $('nf-uf')?.value;
-  const modelo = $('nf-modelo')?.value;
-  const gestor = $('nf-gestor')?.value;
+  const nome      = $('nf-nome')?.value?.trim();
+  const cpf       = $('nf-cpf')?.value?.trim();
+  const tel       = $('nf-tel')?.value?.trim();
+  const email     = $('nf-email')?.value?.trim();
+  const cidade    = $('nf-cidade')?.value?.trim();
+  const uf        = $('nf-uf')?.value;
+  const modelo    = $('nf-modelo')?.value;
+  const gestor    = $('nf-gestor')?.value;
+  const nascimento= $('nf-nascimento')?.value || '';
+  const civil     = $('nf-civil')?.value || '';
+  const profissao = $('nf-profissao')?.value?.trim() || '';
+  const renda     = $('nf-renda')?.value?.trim() || '';
+  const capital   = $('nf-capital')?.value?.trim() || '';
+  const investido = $('nf-investido')?.value?.trim() || '';
+  const ponto     = $('nf-ponto')?.value?.trim() || '';
+  const obs       = $('nf-obs')?.value?.trim() || '';
 
   const origemEmpresa    = $('nf-origem-empresa')?.value.trim();
   const origemResponsavel= $('nf-origem-responsavel')?.value.trim();
@@ -2765,50 +2773,45 @@ function confirmarCadastroFranqueado() {
 
   const dados     = getDados();
   const ticket    = 'MO-' + String(dados.length+1).padStart(3,'0');
-  const declaracao = `Eu, ${SESSAO.nome}, declaro para todos os fins legais que tenho sob minha posse física e arquivados:\n1. COF (Circular de Oferta de Franquia) assinada pelo franqueado ${nome};\n2. Pré-contrato assinado pelo franqueado ${nome};\nAmbos foram conferidos e estão aptos para dar início ao processo de implantação.\nData: ${hoje()} às ${agora()}.`;
-
-  abrirModal('Confirmação obrigatória — documentos iniciais',
-    `<div style="margin-bottom:14px">
-       <div style="font-size:13px;font-weight:700">${nome}</div>
-       <div style="font-size:11px;color:var(--text-dim)">${ticket} · ${cidade}/${uf} · ${modelo}</div>
-     </div>
-     <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6">
-       Antes de iniciar o processo de implantação, o sistema exige que você confirme digitalmente que os documentos abaixo estão em sua posse:
-     </div>
-     <div id="ass-cad-container"></div>`,
-    `<button class="btn" onclick="fecharModal()">Cancelar</button>`
-  );
-
-  setTimeout(()=>{
-    renderAssBox('ass-cad-container', declaracao, 'Confirmar documentos e cadastrar franqueado', async ()=>{
-      const reg = await assinarDigital(`implantacao/pre_cadastro_${Date.now()}`, declaracao);
-      const novo = {
-        id:           'frq_' + Date.now(),
-        ticket,
-        nome, cpf, tel, email, cidade, uf, modelo, gestor,
-        origem: { empresa:origemEmpresa, responsavel:origemResponsavel, tel:origemTel, email:origemEmail },
-        processoIniciado: false,
-        etapaAtual:   1,
-        dataEntrada:  hoje(),
-        portalLiberado: false,
-        historico:    [{
-          data:   new Date().toLocaleDateString('pt-BR'),
-          texto:  'Cadastrado no sistema. COF e Pré-contrato confirmados pela gestora.',
-          autor:  SESSAO.nome,
-        }],
-        pastas:    {},
-        assinaturas: { cad_inicial: reg },
-      };
-      dados.push(novo);
-      salvarDados(dados);
-      fecharModal();
-      toast(`${nome} cadastrado(a) com sucesso!`, 'gn');
-      atualizarBadges();
-      renderFranqueados();
-      // Abrir ficha automaticamente
-      setTimeout(()=>abrirFicha(novo.id), 200);
-    });
-  },100);
+  // Construir e salvar o franqueado diretamente
+  const fid  = 'frq_' + Date.now();
+  const novo = {
+    id: fid,
+    ticket: gerarTicket(),
+    nome, cpf, tel, email, cidade, uf, modelo,
+    gestorToken: gestor,
+    nascimento: nascimento || '',
+    civil:      civil || '',
+    profissao:  profissao || '',
+    renda:      renda || '',
+    capital:    capital || '',
+    investido:  investido || '',
+    ponto:      ponto || '',
+    obs:        obs || '',
+    origemEmpresa: origemEmpresa || '',
+    origemResponsavel: origemResponsavel || '',
+    origemTel: origemTel || '',
+    origemEmail: origemEmail || '',
+    etapaAtual: 0,
+    status: 'em_implantacao',
+    dataInicio: hoje(),
+    etapas: [],
+    historico: [{
+      tipo: 'cadastro',
+      descricao: 'Franqueado cadastrado no sistema.',
+      data: hoje(), hora: agora(),
+      autor: SESSAO.nome,
+    }],
+    pastas: {},
+    assinaturas: {},
+  };
+  dados.push(novo);
+  salvarDados(dados);
+  fecharModal();
+  toast(`${nome} cadastrado(a) com sucesso! Agora inicie a Etapa 1 na ficha.`, 'gn');
+  atualizarBadges();
+  renderFranqueados();
+  setTimeout(()=>abrirFicha(novo.id), 200);
 }
 
 /* ══════════════════════════════════════════════════
@@ -10906,6 +10909,12 @@ enviarMsgMotalk = function() {
   renderListaMOTalk($('motalk-busca')?.value||'');
 };
 
+
+function gerarTicket() {
+  const dados = getDados();
+  const num   = String(dados.length + 1).padStart(3, '0');
+  return 'MO-' + num;
+}
 
 window.addEventListener('DOMContentLoaded', ()=>{
   setTimeout(atualizarBadgeAlertas, 500);
