@@ -1567,9 +1567,11 @@ function getDados() {
 
 function salvarDados(dados) {
   localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-  // Sincronizar com Firebase
+  // Sincronizar com Firebase — usar objeto indexado por posição
   try {
-    db.ref('franqueados').set(dados);
+    const obj = {};
+    dados.forEach((f,i) => { obj[f.id || ('f'+i)] = f; });
+    db.ref('franqueados').set(obj);
   } catch(e) { console.warn('Firebase sync:', e); }
 }
 
@@ -10940,11 +10942,19 @@ function gerarTicket() {
 window.addEventListener('DOMContentLoaded', ()=>{
   // Sincronizar com Firebase em tempo real
   db.ref('franqueados').on('value', snap => {
-    const dados = snap.val();
-    if(dados && Array.isArray(dados) && dados.length > 0) {
+    const raw = snap.val();
+    if(!raw) return;
+    const dados = Array.isArray(raw) 
+      ? raw.filter(Boolean) 
+      : Object.values(raw).filter(Boolean);
+    if(dados.length > 0) {
       localStorage.setItem('mo_franqueados', JSON.stringify(dados));
       // Re-renderizar se estiver na tela de franqueados
-      if(document.querySelector('.esteira-tab')) renderFranqueados();
+      const esteiraVisivel = document.querySelector('.esteira-tab');
+      if(esteiraVisivel) {
+        renderFranqueados();
+        atualizarBadges();
+      }
     }
   });
   setTimeout(atualizarBadgeAlertas, 500);
