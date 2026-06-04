@@ -1650,6 +1650,7 @@ function renderEsteiraPainel() {
   const ativos     = dados.filter(f => f.processoIniciado && f.etapaAtual >= 1 && f.etapaAtual <= ETAPAS.length);
   const desist     = dados.filter(f => f.status === 'desistencia');
   const aguardando = dados.filter(f => !f.processoIniciado);
+  console.log('[RENDER] Total dados:', dados.length, '| Aguardando:', aguardando.length, '| Ativos:', ativos.length);
   const hoje_ts    = Date.now();
 
   // ── Tempo médio de implantação ──
@@ -2820,6 +2821,8 @@ function confirmarCadastroFranqueado() {
   dados.push(novo);
   salvarDados(dados);
   localStorage.setItem('portal_liberado_'+fid, '1');
+  console.log('[CADASTRO] Franqueado salvo:', novo.id, novo.nome);
+  console.log('[CADASTRO] Total no localStorage:', getDados().length);
   fecharModal();
   toast(`${nome} cadastrado(a)! Salvando na planilha...`, 'gn');
 
@@ -2835,21 +2838,20 @@ function confirmarCadastroFranqueado() {
     autorNome: SESSAO?.nome || 'Gestor'
   }).then(res => {
     if(res.ok) {
-      // Atualizar fid e ticket com os da planilha
-      const idx = dados.findIndex(f => f.id === fid);
-      if(idx >= 0) {
-        dados[idx].id     = res.fid || fid;
-        dados[idx].ticket = res.ticket || novo.ticket;
-        salvarDados(dados);
+      const dados2 = getDados();
+      const i2 = dados2.findIndex(f => f.id === fid);
+      if(i2 >= 0) {
+        dados2[i2].id     = res.fid || fid;
+        dados2[i2].ticket = res.ticket || novo.ticket;
+        salvarDados(dados2);
       }
-      toast(`${nome} salvo(a) na planilha! Ticket: ${res.ticket || novo.ticket}`, 'gn');
+      toast(`${nome} salvo na planilha! Ticket: ${res.ticket||novo.ticket}`, 'gn');
     } else {
-      toast('Salvo localmente. Erro na planilha: ' + (res.erro||''), 'or');
+      toast('Salvo localmente. Erro: '+(res.erro||''), 'or');
     }
-  }).catch(() => toast('Salvo localmente. Planilha indisponível.', 'or'));
+  }).catch(() => toast('Salvo localmente. Planilha indisponível.','or'));
   atualizarBadges();
   renderFranqueados();
-  setTimeout(()=>abrirFicha(novo.id), 200);
 }
 
 /* ══════════════════════════════════════════════════
