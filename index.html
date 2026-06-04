@@ -936,6 +936,25 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
+const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
+
+// ── API helpers ──
+async function gasGet(params) {
+  const url = URL_GAS + '?' + new URLSearchParams(params).toString();
+  const r   = await fetch(url);
+  return r.json();
+}
+
+async function gasPost(body) {
+  const r = await fetch(URL_GAS, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return r.json();
+}
+
+
 /* ══════════════════════════════════════════════════
    CONFIGURAÇÃO — Firebase
    Substitua pelas credenciais do projeto MO
@@ -1861,6 +1880,19 @@ function renderEsteiraPainel() {
   <!-- ── KPIs secundários ── -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
 
+    <div class="stat-card kpi-card" onclick="toggleKpiDropdown('kpi-aguardando',this)" style="cursor:pointer;position:relative;border-left:3px solid var(--amber)">
+      <div class="stat-label">Aguardando início</div>
+      <div class="stat-val" style="color:var(--amber)">${aguardando.length}</div>
+      <div class="stat-sub">${aguardando.length === 1 ? 'franqueado' : 'franqueados'} · portal liberado</div>
+      <div id="kpi-aguardando-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:0 0 10px 10px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:50;max-height:200px;overflow-y:auto">
+        ${aguardando.length ? aguardando.map(f=>`
+          <div onclick="event.stopPropagation();irFicha('${f.id}')" style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='none'">
+            <div style="font-weight:600">${f.nome.split(' ').slice(0,2).join(' ')}</div>
+            <div style="color:var(--text-muted)">${f.ticket} · ${f.cidade}/${f.uf}</div>
+          </div>`).join('') : '<div style="padding:10px 12px;font-size:12px;color:var(--text-muted)">Nenhum aguardando.</div>'}
+      </div>
+    </div>
+
     <div class="stat-card kpi-card" onclick="toggleKpiDropdown('kpi-ativos',this)" style="cursor:pointer;position:relative">
       <div class="stat-label">Em implantação</div>
       <div class="stat-val" style="color:var(--primary)">${ativos.length}</div>
@@ -2068,6 +2100,26 @@ function renderEsteiraPainel() {
           </div>`}).join('')}
       </div>
     </div>` : ''}
+  </div>` : ''}
+
+  <!-- ── AGUARDANDO INÍCIO ── -->
+  ${aguardando.length ? `
+  <div class="card" style="margin-bottom:12px;border-left:4px solid var(--amber)">
+    <div class="card-head">
+      <div class="card-title">⏳ Aguardando início do processo</div>
+      <span class="badge badge-amber">${aguardando.length}</span>
+    </div>
+    <div class="card-body" style="padding:4px 16px">
+      ${aguardando.map(f=>`
+        <div onclick="irFicha('${f.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='none'">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${(f.nome||'').split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--text)">${f.nome.split(' ').slice(0,3).join(' ')}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${f.ticket} · ${f.cidade}/${f.uf} · ${f.modelo}</div>
+          </div>
+          <button onclick="event.stopPropagation();iniciarProcesso('${f.id}')" class="btn primary sm">▶ Iniciar</button>
+        </div>`).join('')}
+    </div>
   </div>` : ''}
 
   <!-- ── FEED ── -->
@@ -2809,10 +2861,33 @@ function confirmarCadastroFranqueado() {
   };
   dados.push(novo);
   salvarDados(dados);
-  // Liberar acesso ao portal automaticamente
   localStorage.setItem('portal_liberado_'+fid, '1');
   fecharModal();
-  toast(`${nome} cadastrado(a) com sucesso! Acesso ao portal liberado.`, 'gn');
+  toast(`${nome} cadastrado(a)! Salvando na planilha...`, 'gn');
+
+  // Salvar na planilha Google Sheets
+  gasPost({
+    action: 'cadastrarFranqueado',
+    nome, email, senha, cpf, tel, nascimento, civil,
+    profissao, renda, capital, investido, ponto, obs,
+    cidade, uf, modelo,
+    gestorToken: gestor,
+    origemEmpresa, origemResponsavel,
+    autorNome: SESSAO?.nome || 'Gestor'
+  }).then(res => {
+    if(res.ok) {
+      // Atualizar fid e ticket com os da planilha
+      const idx = dados.findIndex(f => f.id === fid);
+      if(idx >= 0) {
+        dados[idx].id     = res.fid || fid;
+        dados[idx].ticket = res.ticket || novo.ticket;
+        salvarDados(dados);
+      }
+      toast(`${nome} salvo(a) na planilha! Ticket: ${res.ticket || novo.ticket}`, 'gn');
+    } else {
+      toast('Salvo localmente. Erro na planilha: ' + (res.erro||''), 'or');
+    }
+  }).catch(() => toast('Salvo localmente. Planilha indisponível.', 'or'));
   atualizarBadges();
   renderFranqueados();
   setTimeout(()=>abrirFicha(novo.id), 200);

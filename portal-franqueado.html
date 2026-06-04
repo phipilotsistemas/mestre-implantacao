@@ -1125,6 +1125,24 @@ body { overflow-x:hidden }
 <script>
 'use strict';
 
+const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
+
+async function gasGet(params) {
+  const url = URL_GAS + '?' + new URLSearchParams(params).toString();
+  const r   = await fetch(url);
+  return r.json();
+}
+
+async function gasPost(body) {
+  const r = await fetch(URL_GAS, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return r.json();
+}
+
+
 /* ══ HELPERS ══ */
 const $ = id => document.getElementById(id);
 const hoje = () => new Date().toLocaleDateString('pt-BR');
