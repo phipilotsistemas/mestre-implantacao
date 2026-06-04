@@ -938,6 +938,66 @@ select.inp{cursor:pointer}
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
+// ── Sincronizar planilha com localStorage ──
+async function syncPlanilha() {
+  try {
+    const res = await gasGet({ action:'listarFranqueados' });
+    if(!res.ok || !res.data?.length) return;
+
+    const local  = getDados();
+    const localIds = local.map(f=>f.id);
+
+    // Adicionar franqueados da planilha que não estão localmente
+    let atualizado = false;
+    res.data.forEach(frq => {
+      if(!localIds.includes(frq.id)) {
+        // Converter campos da planilha para o formato local
+        const novo = {
+          id:               frq.id,
+          ticket:           frq.ticket,
+          nome:             frq.nome,
+          email:            frq.email || '',
+          cpf:              frq.cpf || '',
+          tel:              frq.tel || '',
+          cidade:           frq.cidade || '',
+          uf:               frq.uf || '',
+          modelo:           frq.modelo || 'Premium',
+          gestorToken:      frq.gestorToken || 'GES-001',
+          etapaAtual:       parseInt(frq.etapaAtual) || 0,
+          processoIniciado: frq.processoIniciado === true || frq.processoIniciado === 'TRUE',
+          portalLiberado:   frq.portalLiberado   === true || frq.portalLiberado   === 'TRUE',
+          status:           frq.status || 'em_implantacao',
+          dataInicio:       frq.dataInicio || '',
+          origemEmpresa:    frq.origemEmpresa || '',
+          origemResponsavel:frq.origemResponsavel || '',
+          historico:        [{ data:frq.dataInicio||'', texto:'Cadastrado via sistema.', autor:'Sistema' }],
+          pastas:           {},
+          assinaturas:      {},
+        };
+        local.push(novo);
+        atualizado = true;
+      } else {
+        // Atualizar etapa e status do franqueado existente
+        const idx = local.findIndex(f=>f.id===frq.id);
+        if(idx >= 0) {
+          local[idx].etapaAtual       = parseInt(frq.etapaAtual) || local[idx].etapaAtual;
+          local[idx].processoIniciado = frq.processoIniciado === true || frq.processoIniciado === 'TRUE' || local[idx].processoIniciado;
+          local[idx].portalLiberado   = frq.portalLiberado   === true || frq.portalLiberado   === 'TRUE' || local[idx].portalLiberado;
+        }
+      }
+    });
+
+    if(atualizado) {
+      salvarDados(local);
+      // Re-renderizar se estiver na tela de franqueados
+      if(document.querySelector('.esteira-tab')) renderFranqueados();
+      toast('Planilha sincronizada — '+res.data.length+' franqueado(s)', 'gn');
+    }
+  } catch(e) {
+    console.warn('Sync planilha falhou:', e);
+  }
+}
+
 // ── API helpers ──
 async function gasGet(params) {
   const url = URL_GAS + '?' + new URLSearchParams(params).toString();
@@ -1520,121 +1580,8 @@ function getDados() {
     const s = localStorage.getItem(key);
     if(s) return JSON.parse(s);
   } catch(e) {}
-  // Dados iniciais
-  const ini_dados = [
-    // ── CONCLUÍDOS (inaugurados) ──
-    { id:'frq_1', ticket:'MO-001', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:true, nome:'Fernando Dias Caldas', cpf:'111.222.333-44', tel:'11999990001', email:'fernando@email.com',
-      cidade:'São Paulo', uf:'SP', modelo:'Premium', etapaAtual:12,
-      dataEntrada:'2025-08-10', dataInicioProcesso:'11/08/2025', dataInauguracao:'2025-12-15', diasTotais:127,
-      gestor:'GES-001', portalLiberado:true,
-      historico:[{data:'10/08/2025',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'15/12/2025',texto:'Inauguração realizada com sucesso. Unidade em operação.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_2', ticket:'MO-002', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:true, nome:'Roberta Alves Pinheiro', cpf:'222.333.444-55', tel:'21999990002', email:'roberta@email.com',
-      cidade:'Rio de Janeiro', uf:'RJ', modelo:'Smart', etapaAtual:12,
-      dataEntrada:'2025-09-05', dataInicioProcesso:'06/09/2025', dataInauguracao:'2026-01-20', diasTotais:137,
-      gestor:'GES-002', portalLiberado:true,
-      historico:[{data:'05/09/2025',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'20/01/2026',texto:'Inauguração realizada. Unidade em operação.',autor:'Rafael Torres Mendonça'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_3', ticket:'MO-003', origem:{empresa:'Rede de Franquias SP',responsavel:'Carla Duarte',tel:'11988880020',email:'carla@redesp.com.br'},
-      processoIniciado:true, nome:'Carlos Lima Bezerra', cpf:'333.444.555-66', tel:'31999990003', email:'carlos@email.com',
-      cidade:'Belo Horizonte', uf:'MG', modelo:'Premium', etapaAtual:12,
-      dataEntrada:'2025-10-01', dataInicioProcesso:'02/10/2025', dataInauguracao:'2026-02-28', diasTotais:150,
-      gestor:'GES-001', portalLiberado:true,
-      historico:[{data:'01/10/2025',texto:'Recebido pela Rede de Franquias SP',autor:'Sistema'},{data:'28/02/2026',texto:'Inauguração realizada.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_4', ticket:'MO-004', origem:{empresa:'A300 Consultoria',responsavel:'Fernanda Lima',tel:'11977770030',email:'fernanda@a300.com.br'},
-      processoIniciado:true, nome:'Patrícia Sousa Vieira', cpf:'444.555.666-77', tel:'51999990004', email:'patricia@email.com',
-      cidade:'Porto Alegre', uf:'RS', modelo:'Smart', etapaAtual:12,
-      dataEntrada:'2025-11-12', dataInicioProcesso:'13/11/2025', dataInauguracao:'2026-03-30', diasTotais:138,
-      gestor:'GES-002', portalLiberado:true,
-      historico:[{data:'12/11/2025',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'30/03/2026',texto:'Inauguração realizada.',autor:'Rafael Torres Mendonça'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_5', ticket:'MO-005', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:true, nome:'Marcos Andrade Filho', cpf:'555.666.777-88', tel:'85999990005', email:'marcos@email.com',
-      cidade:'Fortaleza', uf:'CE', modelo:'Premium', etapaAtual:12,
-      dataEntrada:'2025-07-20', dataInicioProcesso:'21/07/2025', dataInauguracao:'2025-11-10', diasTotais:113,
-      gestor:'GES-001', portalLiberado:true,
-      historico:[{data:'20/07/2025',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'10/11/2025',texto:'Inauguração realizada. Melhor tempo da rede.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    // ── EM IMPLANTAÇÃO — estágios variados ──
-    { id:'frq_6', ticket:'MO-006', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:true, nome:'Juliana Ramos Costa', cpf:'666.777.888-99', tel:'41999990006', email:'juliana@email.com',
-      cidade:'Curitiba', uf:'PR', modelo:'Premium', etapaAtual:9,
-      dataEntrada:'2026-01-15', gestor:'GES-001', portalLiberado:true,
-      historico:[{data:'15/01/2026',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'20/03/2026',texto:'Ponto comercial aprovado — Av. Sete de Setembro, 3417',autor:'Maria Cláudia Souza Ferreira'},{data:'15/04/2026',texto:'CNPJ constituído.',autor:'Maria Cláudia Souza Ferreira'},{data:'02/06/2026',texto:'Treinamento presencial agendado para 15/06',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_7', ticket:'MO-007', origem:{empresa:'Rede de Franquias SP',responsavel:'Carla Duarte',tel:'11988880020',email:'carla@redesp.com.br'},
-      processoIniciado:true, nome:'Roberto Cunha Neves', cpf:'777.888.999-00', tel:'11999990007', email:'roberto@email.com',
-      cidade:'Campinas', uf:'SP', modelo:'Smart', etapaAtual:6,
-      dataEntrada:'2026-02-20', gestor:'GES-002', portalLiberado:true,
-      historico:[{data:'20/02/2026',texto:'Recebido pela Rede de Franquias SP',autor:'Sistema'},{data:'10/04/2026',texto:'Obra iniciada. Previsão de conclusão: 30/05.',autor:'Rafael Torres Mendonça'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_8', ticket:'MO-008', origem:{empresa:'A300 Consultoria',responsavel:'Fernanda Lima',tel:'11977770030',email:'fernanda@a300.com.br'},
-      processoIniciado:true, nome:'Ana Paula Figueiredo', cpf:'888.999.000-11', tel:'71999990008', email:'anapaula@email.com',
-      cidade:'Salvador', uf:'BA', modelo:'Premium', etapaAtual:4,
-      dataEntrada:'2026-03-01', gestor:'GES-001', portalLiberado:true,
-      historico:[{data:'01/03/2026',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'15/04/2026',texto:'Ponto comercial aprovado — Shopping Barra, piso L2.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_9', ticket:'MO-009', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:true, nome:'Thiago Menezes Braga', cpf:'999.000.111-22', tel:'61999990009', email:'thiago@email.com',
-      cidade:'Brasília', uf:'DF', modelo:'Smart', etapaAtual:2,
-      dataEntrada:'2026-04-10', gestor:'GES-002', portalLiberado:false,
-      historico:[{data:'10/04/2026',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'25/04/2026',texto:'Onboarding concluído. Iniciando busca de ponto.',autor:'Rafael Torres Mendonça'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_10', ticket:'MO-010', origem:{empresa:'Indicação direta',responsavel:'Marco Antonio Borba',tel:'11955550040',email:'marco@mestradeobra.com.br'},
-      processoIniciado:true, nome:'Luciana Torres Mota', cpf:'000.111.222-33', tel:'92999990010', email:'luciana@email.com',
-      cidade:'Manaus', uf:'AM', modelo:'Premium', etapaAtual:7,
-      dataEntrada:'2026-02-05', gestor:'GES-001', portalLiberado:true,
-      historico:[{data:'05/02/2026',texto:'Indicação direta de Marco Antonio Borba',autor:'Sistema'},{data:'01/04/2026',texto:'Obras concluídas. Iniciando seleção de equipe.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_11', ticket:'MO-011', origem:{empresa:'A300 Consultoria',responsavel:'Fernanda Lima',tel:'11977770030',email:'fernanda@a300.com.br'},
-      processoIniciado:true, nome:'Diego Falcão Matos', cpf:'112.233.344-55', tel:'81999990011', email:'diego@email.com',
-      cidade:'Recife', uf:'PE', modelo:'Smart', etapaAtual:11,
-      dataEntrada:'2026-01-08', gestor:'GES-002', portalLiberado:true,
-      historico:[{data:'08/01/2026',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'28/05/2026',texto:'Treinamento presencial concluído. Aguardando data de inauguração.',autor:'Rafael Torres Mendonça'}], pastas:{}, assinaturas:{} },
-
-    // ── AGUARDANDO INÍCIO ──
-    { id:'frq_12', ticket:'MO-012', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:false, nome:'Camila Ferreira Leal', cpf:'223.344.455-66', tel:'62999990012', email:'camila@email.com',
-      cidade:'Goiânia', uf:'GO', modelo:'Smart', etapaAtual:1,
-      dataEntrada:'2026-05-20', gestor:'GES-001', portalLiberado:false,
-      historico:[{data:'20/05/2026',texto:'Recebido pela A300 Consultoria',autor:'Sistema'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_13', ticket:'MO-013', origem:{empresa:'Rede de Franquias SP',responsavel:'Carla Duarte',tel:'11988880020',email:'carla@redesp.com.br'},
-      processoIniciado:false, nome:'Eduardo Lins Cavalcante', cpf:'334.455.566-77', tel:'83999990013', email:'eduardo@email.com',
-      cidade:'João Pessoa', uf:'PB', modelo:'Premium', etapaAtual:1,
-      dataEntrada:'2026-06-01', gestor:'GES-002', portalLiberado:false,
-      historico:[{data:'01/06/2026',texto:'Recebido pela Rede de Franquias SP',autor:'Sistema'}], pastas:{}, assinaturas:{} },
-
-    // ── DESISTÊNCIAS ──
-    { id:'frq_14', ticket:'MO-014', origem:{empresa:'A300 Consultoria',responsavel:'Fernanda Lima',tel:'11977770030',email:'fernanda@a300.com.br'},
-      processoIniciado:true, nome:'Renata Barbosa Cruz', cpf:'445.566.677-88', tel:'47999990014', email:'renata@email.com',
-      cidade:'Joinville', uf:'SC', modelo:'Smart', etapaAtual:0,
-      dataEntrada:'2025-11-05', dataDesistencia:'2026-01-20', etapaDesistencia:3,
-      motivoDesistencia:'Dificuldades financeiras para abertura do CNPJ e conta bancária. Franqueado não conseguiu cumprir os requisitos de estruturação financeira.',
-      status:'desistencia', gestor:'GES-001', portalLiberado:false,
-      historico:[{data:'05/11/2025',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'20/01/2026',texto:'DESISTÊNCIA registrada na Etapa 3 — Formalização Legal. Motivo: dificuldades financeiras.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_15', ticket:'MO-015', origem:{empresa:'A300 Consultoria',responsavel:'João Mendes',tel:'11999990010',email:'joao@a300.com.br'},
-      processoIniciado:true, nome:'Alexandre Dutra Pinto', cpf:'556.677.788-99', tel:'48999990015', email:'alexandre@email.com',
-      cidade:'Florianópolis', uf:'SC', modelo:'Premium', etapaAtual:0,
-      dataEntrada:'2025-12-10', dataDesistencia:'2026-03-05', etapaDesistencia:5,
-      motivoDesistencia:'Desacordo com fornecedores homologados. Franqueado considerou os valores acima do orçamento previsto e optou por não prosseguir.',
-      status:'desistencia', gestor:'GES-002', portalLiberado:false,
-      historico:[{data:'10/12/2025',texto:'Recebido pela A300 Consultoria',autor:'Sistema'},{data:'05/03/2026',texto:'DESISTÊNCIA registrada na Etapa 5 — Compras de Infraestrutura. Motivo: desacordo com fornecedores.',autor:'Rafael Torres Mendonça'}], pastas:{}, assinaturas:{} },
-
-    { id:'frq_16', ticket:'MO-016', origem:{empresa:'Rede de Franquias SP',responsavel:'Carla Duarte',tel:'11988880020',email:'carla@redesp.com.br'},
-      processoIniciado:true, nome:'Fernanda Gomes Rocha', cpf:'667.788.899-00', tel:'11999990016', email:'fernanda.g@email.com',
-      cidade:'Santo André', uf:'SP', modelo:'Smart', etapaAtual:0,
-      dataEntrada:'2026-01-15', dataDesistencia:'2026-02-28', etapaDesistencia:2,
-      motivoDesistencia:'Ponto comercial reprovado duas vezes pela franqueadora. Franqueado desistiu após não encontrar localização adequada dentro do prazo.',
-      status:'desistencia', gestor:'GES-001', portalLiberado:false,
-      historico:[{data:'15/01/2026',texto:'Recebido pela Rede de Franquias SP',autor:'Sistema'},{data:'28/02/2026',texto:'DESISTÊNCIA registrada na Etapa 2 — Ponto Comercial. Motivo: localização reprovada.',autor:'Maria Cláudia Souza Ferreira'}], pastas:{}, assinaturas:{} },
-  ];
-  localStorage.setItem(key, JSON.stringify(ini_dados));
-  return ini_dados;
+  // Sem dados iniciais — planilha é a fonte de verdade
+  return [];
 }
 
 function salvarDados(dados) {
@@ -10996,6 +10943,8 @@ function gerarTicket() {
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
+  // Sincronizar com planilha Google Sheets
+  setTimeout(syncPlanilha, 1500);
   setTimeout(atualizarBadgeAlertas, 500);
   // Verificar versão dos dados — limpar se for versão antiga (sem campos novos)
   try {
