@@ -1459,18 +1459,7 @@ function renderAssBox(containerId, texto, labelBtn, onConfirm) {
 /* ══════════════════════════════════════════════════
    LOGIN
 ══════════════════════════════════════════════════ */
-function iniciarLogin() {
-  const lista = $('perfil-lista');
-  lista.innerHTML = Object.entries(EQUIPE).map(([tk,u])=>`
-    <button class="perfil-btn" onclick="logar('${tk}')">
-      <div class="perfil-av" style="background:${u.cor}">${ini(u.nome)}</div>
-      <div>
-        <div class="perfil-nome">${u.nome}</div>
-        <div class="perfil-cargo">${u.cargo}</div>
-      </div>
-      <div class="perfil-arrow">›</div>
-    </button>`).join('');
-}
+function iniciarLogin() {}
 
 function logarFirebase() {
   const email = document.getElementById('painel-email')?.value?.trim().toLowerCase();
@@ -1669,6 +1658,36 @@ function renderFranqueados() {
 
   `;
   renderEsteiraPainel();
+  // Garantir que seção aguardando é renderizada
+  setTimeout(() => {
+    const painel = $('esteira-aba-painel');
+    if(painel && !painel.querySelector('.card[style*="amber"]')) {
+      const dados = getDados();
+      const aguardando = dados.filter(f => !f.processoIniciado);
+      if(aguardando.length > 0) {
+        const secao = document.createElement('div');
+        secao.innerHTML = `
+          <div class="card" style="margin-bottom:12px;border-left:4px solid var(--amber)">
+            <div class="card-head">
+              <div class="card-title">⏳ Aguardando início do processo</div>
+              <span class="badge badge-amber">${aguardando.length}</span>
+            </div>
+            <div class="card-body" style="padding:4px 16px">
+              ${aguardando.map(f=>`
+                <div onclick="irFicha('${f.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">
+                  <div style="width:36px;height:36px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${ini(f.nome)}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:700;color:var(--text)">${f.nome.split(' ').slice(0,3).join(' ')}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${f.ticket} · ${f.cidade||''}/${f.uf||''} · ${f.modelo||''}</div>
+                  </div>
+                  <button onclick="event.stopPropagation();iniciarProcesso('${f.id}')" class="btn primary sm">▶ Iniciar</button>
+                </div>`).join('')}
+            </div>
+          </div>`;
+        painel.prepend(secao.firstElementChild);
+      }
+    }
+  }, 100);
 }
 
 function trocarAbaEsteira(aba, btn) {
