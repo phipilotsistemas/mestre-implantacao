@@ -2794,11 +2794,13 @@ function confirmarCadastroFranqueado() {
     origemEmail: origemEmail || '',
     etapaAtual: 0,
     status: 'em_implantacao',
+    portalLiberado: true,
+    processoIniciado: false,
     dataInicio: hoje(),
     etapas: [],
     historico: [{
       tipo: 'cadastro',
-      descricao: 'Franqueado cadastrado no sistema.',
+      descricao: 'Franqueado cadastrado. Acesso ao portal liberado automaticamente.',
       data: hoje(), hora: agora(),
       autor: SESSAO.nome,
     }],
@@ -2807,8 +2809,10 @@ function confirmarCadastroFranqueado() {
   };
   dados.push(novo);
   salvarDados(dados);
+  // Liberar acesso ao portal automaticamente
+  localStorage.setItem('portal_liberado_'+fid, '1');
   fecharModal();
-  toast(`${nome} cadastrado(a) com sucesso! Agora inicie a Etapa 1 na ficha.`, 'gn');
+  toast(`${nome} cadastrado(a) com sucesso! Acesso ao portal liberado.`, 'gn');
   atualizarBadges();
   renderFranqueados();
   setTimeout(()=>abrirFicha(novo.id), 200);
