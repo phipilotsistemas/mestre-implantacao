@@ -2688,49 +2688,62 @@ function encerrarFranquia(fid) {
 function abrirCadastroFranqueado() {
   if(!PERM.cadastrar){ toast('Sem permissão para cadastrar.','rd'); return; }
 
+  const gestores = Object.entries(EQUIPE)
+    .filter(([,u])=>u.tipo==='gestor')
+    .map(([tk,u])=>`<option value="${tk}">${u.nome.split(' ').slice(0,2).join(' ')}</option>`)
+    .join('');
+
   abrirModal('Cadastrar novo franqueado',
-    `<div style="background:var(--amber-soft);border:1px solid var(--amber-border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#92400E">
-       <b>Atenção:</b> O cadastro só poderá avançar após confirmação de que a COF e o Pré-contrato assinados estão em sua posse física.
-     </div>
-     <div class="grid-2">
-       <div class="field"><label>Nome completo *</label><input class="inp" id="nf-nome" placeholder="Nome do franqueado"></div>
-       <div class="field"><label>CPF *</label><input class="inp" id="nf-cpf" placeholder="000.000.000-00"></div>
-       <div class="field"><label>Telefone *</label><input class="inp" id="nf-tel" placeholder="(11) 99999-0000"></div>
-       <div class="field"><label>E-mail *</label><input class="inp" id="nf-email" placeholder="email@email.com"></div>
-         <div class="field"><label>Senha inicial *</label><input class="inp" id="nf-senha" placeholder="Senha para acesso ao portal" value="1234"></div>
-       <div class="field"><label>Cidade *</label><input class="inp" id="nf-cidade" placeholder="Cidade"></div>
-       <div class="field"><label>UF *</label>
-         <select class="inp" id="nf-uf">
-           ${['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(u=>`<option>${u}</option>`).join('')}
-         </select>
+    `<div style="display:flex;flex-direction:column;gap:0">
+       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Dados pessoais</div>
+       <div class="grid-2" style="margin-bottom:12px">
+         <div class="field"><label>Nome completo *</label><input class="inp" id="nf-nome" placeholder="Nome do franqueado"></div>
+         <div class="field"><label>CPF *</label><input class="inp" id="nf-cpf" placeholder="000.000.000-00"></div>
+         <div class="field"><label>Data de nascimento</label><input class="inp" type="date" id="nf-nascimento"></div>
+         <div class="field"><label>Estado civil</label>
+           <select class="inp" id="nf-civil">
+             <option value="">Selecionar</option>
+             <option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União estável</option>
+           </select>
+         </div>
+         <div class="field"><label>Profissão atual</label><input class="inp" id="nf-profissao" placeholder="Ex: Engenheiro, Empresário..."></div>
+         <div class="field"><label>Renda mensal declarada</label><input class="inp" id="nf-renda" placeholder="R$ 0,00"></div>
        </div>
-       <div class="field"><label>Modelo *</label>
-         <select class="inp" id="nf-modelo"><option>Premium</option><option>Smart</option></select>
+       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Contato e acesso</div>
+       <div class="grid-2" style="margin-bottom:12px">
+         <div class="field"><label>Telefone / WhatsApp *</label><input class="inp" id="nf-tel" placeholder="(11) 99999-0000"></div>
+         <div class="field"><label>E-mail *</label><input class="inp" id="nf-email" placeholder="email@email.com"></div>
+         <div class="field"><label>Senha inicial do portal *</label><input class="inp" id="nf-senha" value="1234" placeholder="Senha para o portal"></div>
        </div>
-       <div class="field"><label>Gestor responsável *</label>
-         <select class="inp" id="nf-gestor">
-           ${Object.entries(EQUIPE).filter(([,u])=>u.tipo==='gestor').map(([tk,u])=>`<option value="${tk}">${u.nome.split(' ').slice(0,2).join(' ')}</option>`).join('')}
-         </select>
+       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Localização da unidade</div>
+       <div class="grid-2" style="margin-bottom:12px">
+         <div class="field"><label>Cidade *</label><input class="inp" id="nf-cidade" placeholder="Cidade"></div>
+         <div class="field"><label>UF *</label>
+           <select class="inp" id="nf-uf">
+             ${['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(u=>`<option>${u}</option>`).join('')}
+           </select>
+         </div>
        </div>
-     </div>
-     <div style="background:#EFF6FF;border:1px solid var(--blue-border);border-radius:8px;padding:12px;margin-top:4px">
-       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue);margin-bottom:10px">Origem do franqueado</div>
+       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Dados da franquia</div>
+       <div class="grid-2" style="margin-bottom:12px">
+         <div class="field"><label>Modelo *</label>
+           <select class="inp" id="nf-modelo"><option>Premium</option><option>Smart</option></select>
+         </div>
+         <div class="field"><label>Gestor responsável *</label>
+           <select class="inp" id="nf-gestor">${gestores}</select>
+         </div>
+         <div class="field"><label>Capital disponível</label><input class="inp" id="nf-capital" placeholder="R$ 0,00"></div>
+         <div class="field"><label>Valor investido até hoje</label><input class="inp" id="nf-investido" placeholder="R$ 0,00"></div>
+         <div class="field" style="grid-column:1/-1"><label>Ponto comercial em vista</label><input class="inp" id="nf-ponto" placeholder="Endereço ou descrição do ponto"></div>
+         <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea class="inp" id="nf-obs" rows="2" placeholder="Anotações relevantes..."></textarea></div>
+       </div>
+       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Origem / indicação</div>
        <div class="grid-2">
-         <div class="field" style="margin-bottom:0"><label>Empresa de origem *</label>
-           <input class="inp" id="nf-origem-empresa" list="lista-origens" placeholder="Ex: A300 Consultoria">
-           <datalist id="lista-origens">${getContatosExternos().map(x=>`<option value="${x.empresa}">`).join('')}</datalist>
-         </div>
-         <div class="field" style="margin-bottom:0"><label>Responsável pelo envio *</label>
-           <input class="inp" id="nf-origem-responsavel" placeholder="Nome do responsável">
-         </div>
-         <div class="field" style="margin-bottom:0"><label>Telefone / WhatsApp</label>
-           <input class="inp" id="nf-origem-tel" placeholder="(11) 99999-0000">
-         </div>
-         <div class="field" style="margin-bottom:0"><label>E-mail</label>
-           <input class="inp" id="nf-origem-email" placeholder="email@empresa.com">
-         </div>
+         <div class="field"><label>Empresa de origem *</label><input class="inp" id="nf-origem-empresa" placeholder="Ex: A300 Consultoria"></div>
+         <div class="field"><label>Responsável *</label><input class="inp" id="nf-origem-responsavel" placeholder="Nome do responsável"></div>
+         <div class="field"><label>Telefone</label><input class="inp" id="nf-origem-tel" placeholder="(11) 99999-0000"></div>
+         <div class="field"><label>E-mail</label><input class="inp" id="nf-origem-email" placeholder="email@origem.com"></div>
        </div>
-       <div style="font-size:10px;color:var(--text-dim);margin-top:8px">Se a empresa já está nos contatos externos, os dados são preenchidos automaticamente ao digitar o nome.</div>
      </div>`,
     `<button class="btn" onclick="fecharModal()">Cancelar</button>
      <button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar franqueado</button>`
