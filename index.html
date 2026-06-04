@@ -1586,9 +1586,6 @@ function getDados() {
 
 function salvarDados(dados) {
   localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-  if(db) {
-    try { db.ref('franqueados').set(dados); } catch(e) {}
-  }
 }
 
 function getFranqueado(id) {
@@ -2700,6 +2697,7 @@ function abrirCadastroFranqueado() {
        <div class="field"><label>CPF *</label><input class="inp" id="nf-cpf" placeholder="000.000.000-00"></div>
        <div class="field"><label>Telefone *</label><input class="inp" id="nf-tel" placeholder="(11) 99999-0000"></div>
        <div class="field"><label>E-mail *</label><input class="inp" id="nf-email" placeholder="email@email.com"></div>
+         <div class="field"><label>Senha inicial *</label><input class="inp" id="nf-senha" placeholder="Senha para acesso ao portal" value="1234"></div>
        <div class="field"><label>Cidade *</label><input class="inp" id="nf-cidade" placeholder="Cidade"></div>
        <div class="field"><label>UF *</label>
          <select class="inp" id="nf-uf">
@@ -2813,6 +2811,7 @@ function confirmarCadastroFranqueado() {
   toast(`${nome} cadastrado(a)! Salvando na planilha...`, 'gn');
 
   // Salvar na planilha Google Sheets
+  const senha = $('nf-senha')?.value?.trim() || '1234';
   gasPost({
     action: 'cadastrarFranqueado',
     nome, email, senha, cpf, tel, nascimento, civil,
