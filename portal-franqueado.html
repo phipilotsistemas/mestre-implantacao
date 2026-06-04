@@ -1016,6 +1016,10 @@ body { overflow-x:hidden }
 .btn-validar:hover { transform:translateY(-1px);box-shadow:0 6px 20px rgba(27,63,139,.35) }
 </style>
 
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -1037,9 +1041,6 @@ body { overflow-x:hidden }
     <button class="btn primary" style="width:100%;margin-top:18px;padding:13px;font-size:14px;border-radius:12px" onclick="fazerLogin()">Entrar</button>
     <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
       <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:2px">Acesso rápido (demonstração)</div>
-      <button class="btn" style="width:100%;font-size:12px" onclick="loginRapido('fernando@mestrework.com','1234')">Fernando Dias Caldas — MO-001</button>
-      <button class="btn" style="width:100%;font-size:12px" onclick="loginRapido('ana@mestrework.com','1234')">Ana Paula Figueiredo — MO-008</button>
-      <button class="btn" style="width:100%;font-size:12px" onclick="loginRapido('carlos@mestrework.com','1234')">Carlos Eduardo Martins — MO-009</button>
       <button class="btn" style="width:100%;font-size:12px" onclick="loginRapido('joao@mestrework.com','1234')">João Guilherme Campos de Paula — MO-010</button>
     </div>
     <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-muted)">
@@ -1125,22 +1126,21 @@ body { overflow-x:hidden }
 <script>
 'use strict';
 
-const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
+// ── FIREBASE ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAWJIsl7ECTUed8AocEQkdkIjw9_qQ-sng",
+  authDomain: "mestre-implantacao.firebaseapp.com",
+  databaseURL: "https://mestre-implantacao-default-rtdb.firebaseio.com",
+  projectId: "mestre-implantacao",
+  storageBucket: "mestre-implantacao.firebasestorage.app",
+  messagingSenderId: "75920848277",
+  appId: "1:75920848277:web:ccd5d229fdc9bd8a7d329c"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.database();
 
-async function gasGet(params) {
-  const url = URL_GAS + '?' + new URLSearchParams(params).toString();
-  const r   = await fetch(url);
-  return r.json();
-}
 
-async function gasPost(body) {
-  const r = await fetch(URL_GAS, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' }
-  });
-  return r.json();
-}
 
 
 /* ══ HELPERS ══ */
@@ -1275,10 +1275,8 @@ const DOCS_DEFAULT = {
 };
 
 const USUARIOS = {
-  'fernando@mestrework.com': {senha:'1234',fid:'frq_1', nome:'Fernando Dias Caldas',          ticket:'MO-001',etapaAtual:3,processoIniciado:true, gestor:{nome:'Maria Cláudia Souza',token:'GES-001',cor:'#1B3F8B',tel:'(42) 99999-0001'}},
-  'ana@mestrework.com':      {senha:'1234',fid:'frq_8', nome:'Ana Paula Figueiredo',           ticket:'MO-008',etapaAtual:2,processoIniciado:true, gestor:{nome:'Rafael Torres',     token:'GES-002',cor:'#065F46',tel:'(42) 99999-0002'}},
-  'carlos@mestrework.com':   {senha:'1234',fid:'frq_9', nome:'Carlos Eduardo Martins',         ticket:'MO-009',etapaAtual:0,processoIniciado:false,gestor:{nome:'Maria Cláudia Souza',token:'GES-001',cor:'#1B3F8B',tel:'(42) 99999-0001'}},
-  'joao@mestrework.com':     {senha:'1234',fid:'frq_10',nome:'João Guilherme Campos de Paula', ticket:'MO-010',etapaAtual:0,processoIniciado:false,gestor:{nome:'Maria Cláudia Souza',token:'GES-001',cor:'#1B3F8B',tel:'(42) 99999-0001'}},
+  // Usuários de demonstração — remover em produção
+  'joao@mestrework.com': {senha:'1234',fid:'frq_10',nome:'João Guilherme Campos de Paula',ticket:'MO-010',etapaAtual:0,processoIniciado:false,gestor:{nome:'Maria Cláudia Souza',token:'GES-001',cor:'#1B3F8B',tel:'(42) 99999-0001'}},
 };
 
 let PORTAL = {};

@@ -793,6 +793,10 @@ select.inp{cursor:pointer}
 
 
 </style>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -938,80 +942,47 @@ select.inp{cursor:pointer}
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
-// ── Sincronizar planilha com localStorage ──
-async function syncPlanilha() {
-  try {
-    const res = await gasGet({ action:'listarFranqueados' });
-    if(!res.ok || !res.data?.length) return;
 
-    const local  = getDados();
-    const localIds = local.map(f=>f.id);
-
-    // Adicionar franqueados da planilha que não estão localmente
-    let atualizado = false;
-    res.data.forEach(frq => {
-      if(!localIds.includes(frq.id)) {
-        // Converter campos da planilha para o formato local
-        const novo = {
-          id:               frq.id,
-          ticket:           frq.ticket,
-          nome:             frq.nome,
-          email:            frq.email || '',
-          cpf:              frq.cpf || '',
-          tel:              frq.tel || '',
-          cidade:           frq.cidade || '',
-          uf:               frq.uf || '',
-          modelo:           frq.modelo || 'Premium',
-          gestorToken:      frq.gestorToken || 'GES-001',
-          etapaAtual:       parseInt(frq.etapaAtual) || 0,
-          processoIniciado: frq.processoIniciado === true || frq.processoIniciado === 'TRUE',
-          portalLiberado:   frq.portalLiberado   === true || frq.portalLiberado   === 'TRUE',
-          status:           frq.status || 'em_implantacao',
-          dataInicio:       frq.dataInicio || '',
-          origemEmpresa:    frq.origemEmpresa || '',
-          origemResponsavel:frq.origemResponsavel || '',
-          historico:        [{ data:frq.dataInicio||'', texto:'Cadastrado via sistema.', autor:'Sistema' }],
-          pastas:           {},
-          assinaturas:      {},
-        };
-        local.push(novo);
-        atualizado = true;
-      } else {
-        // Atualizar etapa e status do franqueado existente
-        const idx = local.findIndex(f=>f.id===frq.id);
-        if(idx >= 0) {
-          local[idx].etapaAtual       = parseInt(frq.etapaAtual) || local[idx].etapaAtual;
-          local[idx].processoIniciado = frq.processoIniciado === true || frq.processoIniciado === 'TRUE' || local[idx].processoIniciado;
-          local[idx].portalLiberado   = frq.portalLiberado   === true || frq.portalLiberado   === 'TRUE' || local[idx].portalLiberado;
-        }
-      }
-    });
-
-    if(atualizado) {
-      salvarDados(local);
-      // Re-renderizar se estiver na tela de franqueados
-      if(document.querySelector('.esteira-tab')) renderFranqueados();
-      toast('Planilha sincronizada — '+res.data.length+' franqueado(s)', 'gn');
-    }
-  } catch(e) {
-    console.warn('Sync planilha falhou:', e);
-  }
-}
 
 // ── API helpers ──
-async function gasGet(params) {
-  const url = URL_GAS + '?' + new URLSearchParams(params).toString();
-  const r   = await fetch(url);
-  return r.json();
+// JSONP para contornar CORS do Apps Script
+function gasGet(params) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gasCallback_' + Date.now();
+    params.callback = cbName;
+    const url = URL_GAS + '?' + new URLSearchParams(params).toString();
+    const script = document.createElement('script');
+    window[cbName] = (data) => {
+      delete window[cbName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+    script.onerror = () => { delete window[cbName]; reject(new Error('JSONP error')); };
+    script.src = url;
+    document.body.appendChild(script);
+  });
 }
 
-async function gasPost(body) {
-  const r = await fetch(URL_GAS, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' }
+// POST via JSONP (envia dados como GET com payload codificado)
+function gasPost(body) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gasCallback_' + Date.now();
+    const params = { callback: cbName, ...body };
+    // Converter objetos aninhados para string
+    Object.keys(params).forEach(k => {
+      if(typeof params[k] === 'object') params[k] = JSON.stringify(params[k]);
+    });
+    const url = URL_GAS + '?' + new URLSearchParams(params).toString();
+    const script = document.createElement('script');
+    window[cbName] = (data) => {
+      delete window[cbName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+    script.onerror = () => { delete window[cbName]; reject(new Error('JSONP error')); };
+    script.src = url;
+    document.body.appendChild(script);
   });
-  return r.json();
 }
 
 
@@ -1326,7 +1297,19 @@ const PASTAS_BASE = [
 ══════════════════════════════════════════════════ */
 var SESSAO    = null;
 var PERM      = null;
-var db        = null;
+// ── FIREBASE ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAWJIsl7ECTUed8AocEQkdkIjw9_qQ-sng",
+  authDomain: "mestre-implantacao.firebaseapp.com",
+  databaseURL: "https://mestre-implantacao-default-rtdb.firebaseio.com",
+  projectId: "mestre-implantacao",
+  storageBucket: "mestre-implantacao.firebasestorage.app",
+  messagingSenderId: "75920848277",
+  appId: "1:75920848277:web:ccd5d229fdc9bd8a7d329c"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.database();
 var _abaAtual = 'franqueados';
 var _chatAtual = null;
 var _chatRef   = null;
@@ -1575,17 +1558,19 @@ function ir(aba, btn, fid) {
    DADOS SIMULADOS
 ══════════════════════════════════════════════════ */
 function getDados() {
-  const key = 'mo_franqueados';
   try {
-    const s = localStorage.getItem(key);
+    const s = localStorage.getItem('mo_franqueados');
     if(s) return JSON.parse(s);
   } catch(e) {}
-  // Sem dados iniciais — planilha é a fonte de verdade
   return [];
 }
 
 function salvarDados(dados) {
   localStorage.setItem('mo_franqueados', JSON.stringify(dados));
+  // Sincronizar com Firebase
+  try {
+    db.ref('franqueados').set(dados);
+  } catch(e) { console.warn('Firebase sync:', e); }
 }
 
 function getFranqueado(id) {
@@ -2113,7 +2098,7 @@ function renderEsteiraLista() {
   el.innerHTML = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div style="font-size:12px;color:var(--text-dim)">${ativos.length} franqueado${ativos.length!==1?'s':''} em implantação</div>
-    <button class="btn primary" onclick="novoFranqueado()">+ Novo franqueado</button>
+    <button class="btn primary" onclick="abrirCadastroFranqueado()">+ Novo franqueado</button>
   </div>
   <div class="card" style="overflow:hidden">
     <table class="frq-table" style="width:100%">
@@ -2826,32 +2811,28 @@ function confirmarCadastroFranqueado() {
   fecharModal();
   toast(`${nome} cadastrado(a)! Salvando na planilha...`, 'gn');
 
-  // Salvar na planilha Google Sheets
   const senha = $('nf-senha')?.value?.trim() || '1234';
-  gasPost({
-    action: 'cadastrarFranqueado',
-    nome, email, senha, cpf, tel, nascimento, civil,
-    profissao, renda, capital, investido, ponto, obs,
-    cidade, uf, modelo,
-    gestorToken: gestor,
-    origemEmpresa, origemResponsavel,
-    autorNome: SESSAO?.nome || 'Gestor'
-  }).then(res => {
-    if(res.ok) {
-      const dados2 = getDados();
-      const i2 = dados2.findIndex(f => f.id === fid);
-      if(i2 >= 0) {
-        dados2[i2].id     = res.fid || fid;
-        dados2[i2].ticket = res.ticket || novo.ticket;
-        salvarDados(dados2);
-      }
-      toast(`${nome} salvo na planilha! Ticket: ${res.ticket||novo.ticket}`, 'gn');
-    } else {
-      toast('Salvo localmente. Erro: '+(res.erro||''), 'or');
-    }
-  }).catch(() => toast('Salvo localmente. Planilha indisponível.','or'));
+  novo.email = email;
+  novo.senha = senha;
   atualizarBadges();
   renderFranqueados();
+  toast(`${nome} cadastrado! Ticket: ${novo.ticket}`, 'gn');
+
+  // Criar usuário no Firebase Auth para o portal
+  auth.createUserWithEmailAndPassword(email, senha)
+    .then(cred => {
+      const uid = cred.user.uid;
+      // Salvar perfil do franqueado vinculado ao uid
+      return db.ref('portal_usuarios/' + uid).set({ fid: novo.id, email });
+    })
+    .then(() => toast('Acesso ao portal criado para ' + nome.split(' ')[0] + '!', 'gn'))
+    .catch(err => {
+      if(err.code === 'auth/email-already-in-use') {
+        toast('E-mail já cadastrado no portal.', 'or');
+      } else {
+        console.warn('Firebase Auth:', err.message);
+      }
+    });
 }
 
 /* ══════════════════════════════════════════════════
@@ -10957,8 +10938,15 @@ function gerarTicket() {
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
-  // Sincronizar com planilha Google Sheets
-  setTimeout(syncPlanilha, 1500);
+  // Sincronizar com Firebase em tempo real
+  db.ref('franqueados').on('value', snap => {
+    const dados = snap.val();
+    if(dados && Array.isArray(dados) && dados.length > 0) {
+      localStorage.setItem('mo_franqueados', JSON.stringify(dados));
+      // Re-renderizar se estiver na tela de franqueados
+      if(document.querySelector('.esteira-tab')) renderFranqueados();
+    }
+  });
   setTimeout(atualizarBadgeAlertas, 500);
   // Verificar versão dos dados — limpar se for versão antiga (sem campos novos)
   try {
