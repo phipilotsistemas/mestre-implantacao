@@ -3353,38 +3353,7 @@ function cardChamadoPainel(c) {
       </div>
       ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
 
-      <!-- Histórico completo de trocas -->
-      ${(c.historico||[]).length > 0 ? `
-      <details style="margin-bottom:8px">
-        <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none;font-weight:600">
-          ↩ ${c.historico.length} troca${c.historico.length>1?'s':''} anteriores
-        </summary>
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-          ${(c.historico||[]).map((h,i) => `
-          <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border)">
-            <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
-              Rodada ${i+1} — Resposta do gestor · ${h.dataResposta||''}
-            </div>
-            <div style="padding:8px 10px;font-size:12px;color:var(--text);background:#fff">${h.respostaGestor||'—'}</div>
-            ${h.retornoFranqueado ? `
-            <div style="background:#FEF9C3;padding:6px 10px;font-size:10px;font-weight:700;color:#92400E">
-              Retorno do franqueado · ${h.dataRetorno||''}
-            </div>
-            <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${h.retornoFranqueado}</div>` : ''}
-          </div>`).join('')}
-        </div>
-      </details>` : ''}
-
-      <!-- Última resposta atual -->
-      ${c.respostaGestor ? `
-      <div style="border-radius:8px;overflow:hidden;border:1px solid #BBF7D0;margin-bottom:8px">
-        <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
-          ${c.assinaturaFranqueado ? '✓ Resposta final' : 'Última resposta'} · ${c.dataResposta||''}
-        </div>
-        <div style="padding:8px 10px;font-size:12px;color:var(--text);background:#fff">${c.respostaGestor}</div>
-      </div>` : ''}
-
-      <!-- Retorno pendente do franqueado -->
+      <!-- Retorno pendente — sempre visível quando aberto -->
       ${c.retornoFranqueado && c.status === 'aberto' ? `
       <div style="border-radius:8px;overflow:hidden;border:1px solid #FDE68A;margin-bottom:8px">
         <div style="background:#FEF3C7;padding:6px 10px;font-size:10px;font-weight:700;color:#92400E">
@@ -3393,9 +3362,41 @@ function cardChamadoPainel(c) {
         <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${c.retornoFranqueado}</div>
       </div>` : ''}
 
+      <!-- Última resposta — sempre visível -->
+      ${c.respostaGestor ? `
+      <div style="border-radius:8px;overflow:hidden;border:1px solid #BBF7D0;margin-bottom:8px">
+        <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
+          ${c.assinaturaFranqueado ? '✓ Resposta final' : 'Última resposta'} · ${c.dataResposta||''}
+        </div>
+        <div style="padding:8px 10px;font-size:12px;color:var(--text);background:#fff">${c.respostaGestor}</div>
+      </div>` : ''}
+
+      <!-- Histórico de trocas — recolhido por padrão -->
+      ${(c.historico||[]).length > 0 ? `
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none;font-weight:600;padding:4px 0">
+          📋 Histórico de trocas (${c.historico.length} rodada${c.historico.length>1?'s':''})
+        </summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+          ${(c.historico||[]).map((h,i) => `
+          <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+            <div style="background:#F8FAFC;padding:5px 10px;font-size:10px;font-weight:700;color:var(--text-dim)">
+              Rodada ${i+1} · ${h.dataResposta||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:var(--text);border-bottom:1px solid var(--border)">
+              <span style="font-size:10px;font-weight:700;color:var(--green)">Resposta: </span>${h.respostaGestor||'—'}
+            </div>
+            ${h.retornoFranqueado ? `
+            <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">
+              <span style="font-size:10px;font-weight:700;color:#92400E">Retorno (${h.dataRetorno||''}): </span>${h.retornoFranqueado}
+            </div>` : ''}
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+
       ${c.assinaturaFranqueado ? `
-      <div style="font-size:11px;color:var(--green);font-weight:700;padding:6px 0">
-        ✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo total: ${c.tempAtendimento}
+      <div style="font-size:11px;color:var(--green);font-weight:700;padding:4px 0;border-top:1px solid var(--border);margin-top:6px">
+        ✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}
       </div>` : ''}
       <!-- Ações do gestor -->
       ${c.status !== 'concluido' && c.status !== 'cancelado' ? `
