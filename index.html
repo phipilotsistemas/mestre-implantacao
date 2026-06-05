@@ -3323,6 +3323,33 @@ function confirmarCadastroFranqueado() {
   novo.email = email;
   novo.senha = senha;
 
+  // Capturar valores dos campos ANTES de fechar o modal
+  // (após fecharModal os inputs são removidos do DOM)
+  const _fichaData = {
+    ticket:            novo.ticket,
+    nome,
+    cpf:               $('nf-cpf')?.value?.trim()              || novo.cpf || '',
+    tel,
+    email,
+    cidade,
+    uf:                $('nf-uf')?.value                        || '',
+    modelo:            $('nf-modelo')?.value                    || '',
+    gestor:            Object.values(EQUIPE).find(e=>e.token===gestor||e.id===gestor)?.nome || gestor || '',
+    dataCadastro:      hoje(),
+    estadoCivil:       $('nf-civil')?.value                     || '',
+    profissao:         $('nf-profissao')?.value?.trim()         || '',
+    renda:             $('nf-renda')?.value?.trim()             || '',
+    capital:           $('nf-capital')?.value?.trim()           || '',
+    investido:         $('nf-investido')?.value?.trim()         || '',
+    ponto:             $('nf-ponto')?.value?.trim()             || '',
+    obs:               $('nf-obs')?.value?.trim()               || '',
+    origemEmpresa:     origemEmpresa  || '',
+    origemResponsavel: origemResponsavel || '',
+    origemTel:         origemTel     || '',
+    origemEmail:       origemEmail   || '',
+  };
+  const _fid = novo.id;
+
   dados.push(novo);
   salvarDados(dados);
   fecharModal();
@@ -3337,41 +3364,31 @@ function confirmarCadastroFranqueado() {
       // 1. Criar estrutura de pastas
       const pastas = await appsGet({
         action: 'criarPastas',
-        fid: novo.id,
-        nome,
-        ticket: novo.ticket,
+        fid:    _fid,
+        nome:   _fichaData.nome,
+        ticket: _fichaData.ticket,
       });
       if(pastas.erro) throw new Error(pastas.erro);
 
       // Salvar IDs das pastas na ficha do franqueado
-      atualizarFranqueado(novo.id, { drivePasstas: pastas });
+      atualizarFranqueado(_fid, { drivePasstas: pastas });
+
+      // Salvar também no Firebase para o portal ler
+      try {
+        db.ref('franqueados/' + _fid + '/drivePasstas').set(pastas);
+      } catch(e2) {}
 
       // 2. Gerar Ficha Cadastral na pasta 00_Cadastro
-      await gerarPDFNoDrive('ficha_cadastral', pastas.pasta_et00_id, {
-        ticket:           novo.ticket,
-        nome,
-        cpf:              $('nf-cpf')?.value || novo.cpf,
-        tel,
-        email,
-        cidade,
-        uf:               $('nf-uf')?.value,
-        modelo:           $('nf-modelo')?.value,
-        gestor:           Object.values(EQUIPE).find(e=>e.token===gestor||e.id===gestor)?.nome || gestor,
-        dataCadastro:     hoje(),
-        origemEmpresa:    origemEmpresa || '',
-        origemResponsavel:origemResponsavel || '',
-        origemTel:        origemTel || '',
-        origemEmail:      origemEmail || '',
-        renda:            $('nf-renda')?.value || '',
-        capital:          $('nf-capital')?.value || '',
-        investido:        $('nf-investido')?.value || '',
-        ponto:            $('nf-ponto')?.value || '',
-      });
+      const pdfResult = await gerarPDFNoDrive('ficha_cadastral', pastas.pasta_et00_id, _fichaData);
 
-      toast(`Pastas criadas no Drive para ${nome.split(' ')[0]}!`, 'gn');
+      if(pdfResult?.ok) {
+        toast(`✓ Pastas e Ficha Cadastral criadas no Drive para ${_fichaData.nome.split(' ')[0]}!`, 'gn');
+      } else {
+        toast(`Pastas criadas. Ficha Cadastral pendente.`, 'or');
+      }
     } catch(e) {
       console.warn('Drive/PDF:', e.message);
-      toast('Cadastro salvo. Pastas no Drive pendentes (verifique conexão).', 'or');
+      toast('Cadastro salvo. Drive pendente: ' + e.message, 'or');
     }
   })();
 
