@@ -1964,21 +1964,41 @@ function cardChamado(c) {
         </span>
       </div>
       <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:8px">${c.descricao.slice(0,120)}${c.descricao.length>120?'...':''}</div>
-      ${c.totalRetornos > 0 ? `<div style="font-size:10px;color:var(--amber);font-weight:700;margin-bottom:4px">↩ Reaberto ${c.totalRetornos}x pelo franqueado</div>` : ''}
-      ${c.retornoFranqueado && c.status === 'aberto' ? `
-      <div style="background:#FEF3C7;border-radius:6px;padding:8px;margin-bottom:8px">
-        <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:2px">Retorno do franqueado · ${c.dataRetorno||''}</div>
-        <div style="font-size:11px;color:#92400E">${c.retornoFranqueado}</div>
-      </div>` : ''}
-      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600">⏱ Prazo do gestor: ${c.prazoGestor}</div>` : ''}
+      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px">⏱ Prazo do gestor: ${c.prazoGestor}</div>` : ''}
+
+      <!-- Histórico de trocas anteriores -->
+      ${(c.historico||[]).length > 0 ? `
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none;padding:4px 0">
+          📋 Ver histórico de trocas (${c.historico.length})
+        </summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+          ${(c.historico||[]).map((h,i) => `
+          <div style="border-radius:8px;border:1px solid var(--border);overflow:hidden">
+            <div style="background:#F0FDF4;padding:5px 10px;font-size:10px;font-weight:700;color:var(--green)">
+              Rodada ${i+1} — Resposta do gestor · ${h.dataResposta||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:var(--text)">${h.respostaGestor||'—'}</div>
+            ${h.retornoFranqueado ? `
+            <div style="background:#FEF9C3;padding:5px 10px;font-size:10px;font-weight:700;color:#92400E">
+              Seu retorno · ${h.dataRetorno||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${h.retornoFranqueado}</div>` : ''}
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+
+      <!-- Resposta atual do gestor -->
       ${c.respostaGestor ? `
-      <div style="background:#F0FDF4;border-radius:8px;padding:10px;margin-top:8px">
-        <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px">Resposta do gestor · ${c.dataResposta}</div>
-        <div style="font-size:12px;color:var(--text)">${c.respostaGestor}</div>
+      <div style="border-radius:8px;border:1px solid #BBF7D0;overflow:hidden;margin-top:4px">
+        <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
+          ${c.assinaturaFranqueado ? '✓ Resposta final' : 'Resposta do gestor'} · ${c.dataResposta}
+        </div>
+        <div style="padding:10px;font-size:12px;color:var(--text)">${c.respostaGestor}</div>
         ${c.status === 'em_andamento' && !c.assinaturaFranqueado ? `
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <div style="padding:0 10px 10px;display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="assinarConclusaoChamado('${c.id}')"
-            style="padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+            style="padding:8px 16px;border-radius:8px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:12px;font-weight:800">
             ✓ Confirmar atendimento
           </button>
           <button onclick="reabrirChamado('${c.id}')"
@@ -1986,7 +2006,22 @@ function cardChamado(c) {
             ↩ Não resolvido
           </button>
         </div>` : ''}
-        ${c.assinaturaFranqueado ? `<div style="font-size:10px;color:var(--green);margin-top:6px">✓ Confirmado por você em ${c.dataAssinatura}</div>` : ''}
+        ${c.assinaturaFranqueado ? `
+        <div style="padding:8px 10px;font-size:11px;color:var(--green);font-weight:700;border-top:1px solid #BBF7D0">
+          ✓ Confirmado por você em ${c.dataAssinatura}
+        </div>` : ''}
+      </div>` : ''}
+
+      <!-- Retorno pendente (quando reaberto e aguardando gestor) -->
+      ${c.retornoFranqueado && c.status === 'aberto' ? `
+      <div style="border-radius:8px;border:1px solid #FDE68A;overflow:hidden;margin-top:6px">
+        <div style="background:#FEF3C7;padding:5px 10px;font-size:10px;font-weight:700;color:#92400E">
+          ⚠ Seu retorno enviado · ${c.dataRetorno||''}
+        </div>
+        <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${c.retornoFranqueado}</div>
+        <div style="padding:6px 10px;font-size:10px;color:#92400E;background:#FEF3C7">
+          Aguardando nova resposta do gestor...
+        </div>
       </div>` : ''}
     </div>`;
 }
@@ -2126,12 +2161,20 @@ function confirmarAbrirChamado() {
     gestorToken:  PORTAL.gestor?.token || '',
   };
 
-  const lista = getChamados();
-  lista.unshift(chamado); // mais recente primeiro
-  salvarChamados(lista);
-  fecharModal();
-  toast('Chamado ' + id + ' aberto. Seu gestor será notificado.', 'gn');
-  renderSuporte();
+  // getChamados é async — usar await
+  getChamados().then(lista => {
+    lista.unshift(chamado);
+    salvarChamados(lista);
+    fecharModal();
+    toast('Chamado ' + id + ' aberto. Seu gestor será notificado.', 'gn');
+    renderSuporte();
+  }).catch(e => {
+    // Fallback — criar lista nova se Firebase falhar
+    salvarChamados([chamado]);
+    fecharModal();
+    toast('Chamado ' + id + ' aberto.', 'gn');
+    renderSuporte();
+  });
 }
 
 async function assinarConclusaoChamado(chamadoId) {
