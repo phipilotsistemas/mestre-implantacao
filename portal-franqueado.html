@@ -1303,13 +1303,158 @@ function fazerLogin() {
     return;
   }
   PORTAL = {...u}; delete PORTAL.senha;
+  // Guardar senha atual temporariamente para verificar se já foi trocada
+  PORTAL._senhaAtual = senha;
   $('tela-login').style.display='none';
+
+  // Verificar se o franqueado já trocou a senha do 1º acesso
+  const senhaTrocada = localStorage.getItem('senha_trocada_' + PORTAL.fid) === '1';
+  if(!senhaTrocada) {
+    // Forçar troca de senha antes de qualquer outra tela
+    renderTrocarSenha();
+    return;
+  }
+
+  // Senha já foi trocada — seguir fluxo normal
+  entrarNoPortal();
+}
+
+function entrarNoPortal() {
   $('app').style.display='flex';
   $('app').style.flexDirection='column';
   $('topbar-av').textContent = ini(PORTAL.nome);
   $('topbar-ticket').textContent = PORTAL.ticket;
   irAba('inicio', document.querySelector('[data-aba=inicio]'));
   atualizarBadges();
+}
+
+function renderTrocarSenha() {
+  // Mostrar tela de troca de senha sobre tudo (antes do app principal)
+  const overlay = document.createElement('div');
+  overlay.id = 'tela-troca-senha';
+  overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(145deg,#1B3F8B 0%,#2D5FCC 100%);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:32px;max-width:420px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.3)">
+      <!-- Header -->
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:32px;margin-bottom:10px">🔐</div>
+        <div style="font-size:18px;font-weight:800;color:#1B3F8B;margin-bottom:6px">Crie sua senha pessoal</div>
+        <div style="font-size:12px;color:#64748B;line-height:1.6">
+          Por segurança, você precisa criar uma senha pessoal antes de continuar.<br>
+          <strong>Não compartilhe sua senha com ninguém.</strong>
+        </div>
+      </div>
+
+      <!-- Aviso -->
+      <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:10px 14px;margin-bottom:20px;font-size:11px;color:#92400E;line-height:1.5">
+        ⚠ Esta senha substituirá a senha provisória enviada no cadastro. Após confirmar, somente você terá acesso ao portal com esta senha.
+      </div>
+
+      <!-- Campos -->
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Nova senha <span style="color:#DC2626">*</span></label>
+        <input type="password" id="ts-nova" class="inp" placeholder="Mínimo 6 caracteres"
+          style="width:100%;padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:10px;font-size:13px;outline:none">
+        <div id="ts-forca" style="margin-top:4px;height:3px;border-radius:2px;background:#E5E7EB;transition:all .3s"></div>
+        <div id="ts-forca-txt" style="font-size:10px;color:#9CA3AF;margin-top:3px"></div>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">Confirmar senha <span style="color:#DC2626">*</span></label>
+        <input type="password" id="ts-confirma" class="inp" placeholder="Repita a nova senha"
+          style="width:100%;padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:10px;font-size:13px;outline:none">
+      </div>
+      <div id="ts-erro" style="display:none;background:#FEE2E2;color:#DC2626;font-size:12px;padding:10px 12px;border-radius:8px;margin-bottom:14px"></div>
+
+      <!-- Botão -->
+      <button onclick="confirmarTrocaSenha()"
+        style="width:100%;padding:13px;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:15px;font-weight:800;letter-spacing:.04em">
+        Confirmar minha senha
+      </button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  // Medidor de força da senha
+  $('ts-nova')?.addEventListener('input', function() {
+    const v = this.value;
+    const fEl = $('ts-forca');
+    const fTxt = $('ts-forca-txt');
+    if(!v) { fEl.style.background='#E5E7EB'; fEl.style.width='0%'; fTxt.textContent=''; return; }
+    let pts = 0;
+    if(v.length >= 6)  pts++;
+    if(v.length >= 10) pts++;
+    if(/[A-Z]/.test(v)) pts++;
+    if(/[0-9]/.test(v)) pts++;
+    if(/[^A-Za-z0-9]/.test(v)) pts++;
+    const cores = ['#DC2626','#F59E0B','#10B981','#059669'];
+    const labels = ['Muito fraca','Fraca','Boa','Forte'];
+    const idx = Math.min(pts-1, 3);
+    fEl.style.background = cores[idx] || '#E5E7EB';
+    fEl.style.width = ((pts/5)*100) + '%';
+    fTxt.textContent = labels[idx] || '';
+    fTxt.style.color = cores[idx] || '#9CA3AF';
+  });
+}
+
+function confirmarTrocaSenha() {
+  const nova     = $('ts-nova')?.value;
+  const confirma = $('ts-confirma')?.value;
+  const erroEl   = $('ts-erro');
+
+  if(!nova || nova.length < 6) {
+    erroEl.style.display='block';
+    erroEl.textContent='A senha deve ter pelo menos 6 caracteres.';
+    return;
+  }
+  if(nova !== confirma) {
+    erroEl.style.display='block';
+    erroEl.textContent='As senhas não coincidem.';
+    return;
+  }
+  // Não deixar usar a mesma senha provisória
+  if(nova === (PORTAL._senhaAtual || '')) {
+    erroEl.style.display='block';
+    erroEl.textContent='Sua nova senha deve ser diferente da senha provisória.';
+    return;
+  }
+
+  // Registrar troca de senha
+  const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
+  localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
+
+  // Atualizar a senha no USUARIOS (em memória e localStorage)
+  const emailKey = Object.keys(USUARIOS).find(k => USUARIOS[k].fid === PORTAL.fid);
+  if(emailKey) {
+    USUARIOS[emailKey].senha = nova;
+    // Persistir atualização de senha para a sessão atual
+    try {
+      const dados = JSON.parse(localStorage.getItem('portal_usuarios_senha') || '{}');
+      dados[PORTAL.fid] = nova;
+      localStorage.setItem('portal_usuarios_senha', JSON.stringify(dados));
+    } catch(e) {}
+  }
+
+  // Notificar o painel gestor via localStorage (o painel lê ao abrir a ficha)
+  try {
+    const reg = {
+      fid:     PORTAL.fid,
+      ticket:  PORTAL.ticket,
+      nome:    PORTAL.nome,
+      data:    agora_str,
+      acao:    'senha_alterada_primeiro_acesso',
+    };
+    const hist = JSON.parse(localStorage.getItem('portal_eventos') || '[]');
+    hist.push(reg);
+    localStorage.setItem('portal_eventos', JSON.stringify(hist));
+  } catch(e) {}
+
+  // Remover overlay
+  const overlay = $('tela-troca-senha');
+  if(overlay) overlay.remove();
+
+  // Prosseguir para o portal (próximo passo: termo)
+  entrarNoPortal();
 }
 
 /* ══ NAVEGAÇÃO ══ */
