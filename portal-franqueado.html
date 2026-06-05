@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#1B3F8B">
 <title>Mestre da Obra — Portal do Franqueado</title>
@@ -1147,6 +1148,30 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.database();
 
+// Configurar persistência — SESSION evita o erro 400 de token expirado
+// ao reabrir o portal em nova aba/sessão
+auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+  .catch(e => console.warn('Persistência:', e.message));
+
+// Listener de estado — se sessão expirar, volta para login
+auth.onAuthStateChanged(user => {
+  // Só agir se o portal já estiver ativo (PORTAL.fid preenchido)
+  if(!user && window.PORTAL?.fid) {
+    console.warn('Sessão expirada — retornando ao login');
+    // Limpar estado e mostrar login
+    window.PORTAL = {};
+    const app = document.getElementById('app');
+    const login = document.getElementById('tela-login');
+    if(app) app.style.display = 'none';
+    if(login) login.style.display = 'flex';
+    // Limpar campos
+    const emailEl = document.getElementById('login-email');
+    const senhaEl = document.getElementById('login-senha');
+    if(emailEl) emailEl.value = '';
+    if(senhaEl) senhaEl.value = '';
+  }
+});
+
 
 
 
@@ -1470,11 +1495,16 @@ function fazerLogin() {
       erro.style.color = '#DC2626';
       erro.style.borderColor = '#FECACA';
       if(err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-login-credentials') {
-        erro.textContent = 'E-mail ou senha incorretos.';
+        erro.textContent = 'E-mail ou senha incorretos. Verifique os dados ou contate seu gestor.';
       } else if(err.code === 'auth/too-many-requests') {
-        erro.textContent = 'Muitas tentativas. Aguarde alguns minutos.';
+        erro.textContent = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+      } else if(err.code === 'auth/invalid-email') {
+        erro.textContent = 'E-mail inválido. Verifique o endereço digitado.';
+      } else if(err.code === 'auth/network-request-failed') {
+        erro.textContent = 'Sem conexão. Verifique sua internet e tente novamente.';
       } else {
         erro.textContent = err.message || 'Erro ao conectar. Tente novamente.';
+        console.error('Login erro:', err.code, err.message);
       }
     });
 }
