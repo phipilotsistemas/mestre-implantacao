@@ -1007,15 +1007,6 @@ function gasPost(body) {
    CONFIGURAÇÃO — Firebase
    Substitua pelas credenciais do projeto MO
 ══════════════════════════════════════════════════ */
-const FB_CFG = {
-  apiKey:            'COLE_AQUI_API_KEY',
-  authDomain:        'mestre-da-obra.firebaseapp.com',
-  databaseURL:       'https://mestre-da-obra-default-rtdb.firebaseio.com',
-  projectId:         'mestre-da-obra',
-  storageBucket:     'mestre-da-obra.firebasestorage.app',
-  messagingSenderId: 'COLE_AQUI_SENDER_ID',
-  appId:             'COLE_AQUI_APP_ID',
-};
 
 /* ══════════════════════════════════════════════════
    USUÁRIOS DA EQUIPE INTERNA
@@ -1600,14 +1591,28 @@ function iniciarApp() {
   if(PERM.verRelatorios) $('sb-relatorios').style.display = '';
 
   // Iniciar Firebase (modo offline gracioso)
-  try {
-    if(!firebase.apps.length) firebase.initializeApp(FB_CFG);
-    db = firebase.database();
-  } catch(e) { db = null; }
+  // Firebase já inicializado
 
   ir('franqueados');
   atualizarBadges();
   setTimeout(atualizarBadgeChamados, 800);
+
+  // Listener para solicitações de validação de etapa
+  try {
+    db.ref('notif_gestor').on('value', snap => {
+      const raw = snap.val();
+      if(!raw) return;
+      let pendentes = 0;
+      Object.values(raw).forEach(n => { if(!n.lido) pendentes++; });
+      const badgeAlt = $('badge-alertas');
+      if(badgeAlt && pendentes > 0) {
+        badgeAlt.textContent = pendentes;
+        badgeAlt.style.background = '#F5A623';
+        badgeAlt.style.color      = '#1B3F8B';
+        badgeAlt.style.display    = '';
+      }
+    });
+  } catch(e) {}
 }
 
 /* ══════════════════════════════════════════════════
@@ -1668,6 +1673,71 @@ function ir(aba, btn, fid) {
 /* ══════════════════════════════════════════════════
    DADOS SIMULADOS
 ══════════════════════════════════════════════════ */
+
+async function carregarFranqueadosDoFirebase() {
+  try {
+    const snap = await db.ref('franqueados').once('value');
+    const raw  = snap.val();
+    if(!raw) return;
+    const lista = Object.values(raw).filter(Boolean);
+    lista.forEach(f => {
+      if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) f.etapaAtual = 1;
+    });
+    localStorage.setItem('mo_franqueados', JSON.stringify(lista));
+    return lista;
+  } catch(e) { console.warn('carregarFranqueadosDoFirebase:', e.message); }
+}
+
+async function carregarEquipeDoFirebase() {
+  try {
+    const snap = await db.ref('equipe').once('value');
+    const raw  = snap.val();
+    if(!raw) return;
+    const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+    if(lista.length > 0) {
+      localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
+      lista.forEach(col => {
+        if(col.token) EQUIPE[col.token] = {
+          nome: col.nome, cargo: col.cargo,
+          tipo: col.tipo, cor: col.cor, email: col.email,
+        };
+      });
+    }
+    return lista;
+  } catch(e) { console.warn('carregarEquipeDoFirebase:', e.message); }
+}
+
+function registrarEvento(fid, tipo, dados) {
+  if(!fid || !tipo) return;
+  const ts = Date.now();
+  const evento = {
+    tipo, fid,
+    data:      hoje(),
+    hora:      agora(),
+    timestamp: ts,
+    autor:     SESSAO?.nome  || dados?.autor || 'Sistema',
+    cargo:     SESSAO?.cargo || dados?.cargo || '',
+    token:     SESSAO?.token || dados?.token || '',
+    ...(dados||{}),
+  };
+  try { db.ref(`historico/${fid}/${ts}`).set(evento).catch(()=>{}); } catch(e) {}
+  try {
+    const dados2 = getDados();
+    const f = dados2.find(x => x.id === fid);
+    if(f) {
+      if(!f.historico) f.historico = [];
+      f.historico.push({
+        tipo, data: hoje(), hora: agora(),
+        texto: dados?.texto || `${tipo} registrado`,
+        autor: SESSAO?.nome || 'Sistema',
+        hash:  dados?.hash  || '',
+      });
+      localStorage.setItem('mo_franqueados', JSON.stringify(dados2));
+      db.ref(`franqueados/${fid}/historico`).set(f.historico).catch(()=>{});
+    }
+  } catch(e) {}
+}
+
 function getDados() {
   try {
     const s = localStorage.getItem('mo_franqueados');
@@ -2556,7 +2626,7 @@ function renderDrawerBody(f) {
       <div class="ficha-label">Esteira · Etapa ${f.etapaAtual} de ${ETAPAS.length}</div>
       ${ETAPAS.map(et=>{
         const concluida  = et.id < f.etapaAtual;
-        const atual      = Number(et.id) === Number(f.etapaAtual);
+        const atual      = et.id === f.etapaAtual;
         const bloqueada  = et.id > f.etapaAtual;
         const pendFrq    = atual && f.etapasPendentes && f.etapasPendentes[et.id]?.status === 'aguardando_franqueado';
         const cls = concluida?'concluida':atual?'atual':'pendente';
@@ -3196,12 +3266,8 @@ function renderEsteiraArquivados() {
    Responde, define prazo, resolve sem reunião
 ══════════════════════════════════════════════════════════════ */
 
-async function renderSuportePainel() {
-  $('content').innerHTML = `
-    <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
-      <div style="font-size:32px;margin-bottom:12px">⏳</div>
-      <div style="font-size:13px">Carregando chamados...</div>
-    </div>`;
+function renderSuportePainel() {
+  $('content').innerHTML = '<div style="text-align:center;padding:60px">⏳ Carregando...</div>';
   const dados    = getDados();
   // Coletar todos os chamados de todos os franqueados
   let todosChamados = [];
@@ -3955,6 +4021,124 @@ function devVerLocalStorage() {
 ${JSON.stringify(dados, null, 2).slice(0, 8000)}${JSON.stringify(dados).length > 8000 ? '\n... (truncado)' : ''}
     </pre>
   `, `<button class="btn primary" onclick="fecharModal()">Fechar</button>`);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   VALIDAÇÃO DE ETAPA — Gestor confirma ou rejeita conclusão
+   solicitada pelo franqueado
+══════════════════════════════════════════════════════════════ */
+async function verificarValidacaoPendente(fid, etapaId) {
+  try {
+    const snap = await db.ref(`validacoes/${fid}/et${etapaId}`).once('value');
+    return snap.val();
+  } catch(e) { return null; }
+}
+
+function confirmarValidacaoEtapa(fid, etapaId) {
+  const f  = getFranqueado(fid);
+  const et = ETAPAS.find(e => e.id === Number(etapaId));
+
+  const declaracao = `Eu, ${SESSAO.nome}, valido a conclusão da Etapa ${etapaId} — "${et?.nome||''}" — pelo franqueado ${f?.nome} (${f?.ticket}), confirmando que todos os requisitos foram cumpridos. Data: ${hoje()} às ${agora()}.`;
+
+  abrirModal('Confirmar conclusão de etapa', `
+    <div style="background:#F0FDF4;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;color:var(--green)">✓ Validar conclusão da Etapa ${etapaId}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${f?.nome} · ${f?.ticket}</div>
+    </div>
+    <div id="val-ass-container"></div>
+    <button onclick="fecharModal()" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">Cancelar</button>
+  `, '');
+
+  setTimeout(() => {
+    renderAssBox('val-ass-container', declaracao, 'Assinar e confirmar avanço', async () => {
+      const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+      const ts   = Date.now();
+      const proxEtapa = Number(etapaId) + 1;
+
+      try {
+        // 1. Avançar etapa do franqueado
+        atualizarFranqueado(fid, { etapaAtual: proxEtapa });
+
+        // 2. Registrar evento na etapa
+        salvarEventoEtapa(fid, etapaId, {
+          tipo:  'etapa_concluida',
+          texto: `Etapa ${etapaId} validada e concluída por ${SESSAO.nome}. Franqueado avança para Etapa ${proxEtapa}.`,
+          autor: SESSAO.nome,
+          hash,
+          data:  hoje(),
+          hora:  agora(),
+        });
+
+        // 3. Notificar franqueado via Firebase
+        await db.ref(`validacoes/${fid}/et${etapaId}`).update({
+          status:          'aprovada',
+          validadoPor:     SESSAO.nome,
+          dataValidacao:   hoje(),
+          horaValidacao:   agora(),
+          declaracaoGestor: declaracao,
+          hashGestor:      hash,
+        });
+
+        // 4. Registrar no histórico central
+        registrarEvento(fid, 'etapa_concluida', {
+          texto:  `Etapa ${etapaId} concluída. Franqueado avança para Etapa ${proxEtapa}.`,
+          etapa:  etapaId,
+          hash,
+        });
+
+        // 5. Marcar notificação como lida
+        await db.ref(`notif_gestor/${fid}`).update({ lido: true });
+
+        fecharModal();
+        toast(`Etapa ${etapaId} validada! ${f?.nome?.split(' ')[0]} avança para Etapa ${proxEtapa}.`, 'gn');
+        renderFranqueados();
+      } catch(e) {
+        toast('Erro ao validar: ' + e.message, 'rd');
+      }
+    });
+  }, 150);
+}
+
+async function rejeitarValidacaoEtapa(fid, etapaId) {
+  abrirModal('Rejeitar validação', `
+    <div class="field">
+      <label>Motivo da rejeição <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="rej-motivo" rows="3"
+        placeholder="Informe o que falta para concluir esta etapa..."></textarea>
+    </div>
+  `, `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarRejeicaoEtapa('${fid}',${etapaId})">Rejeitar e notificar</button>`);
+}
+
+async function confirmarRejeicaoEtapa(fid, etapaId) {
+  const motivo = $('rej-motivo')?.value?.trim();
+  if(!motivo) { toast('Informe o motivo.','rd'); return; }
+  const f = getFranqueado(fid);
+
+  try {
+    await db.ref(`validacoes/${fid}/et${etapaId}`).update({
+      status:        'rejeitada',
+      motivoRejeicao: motivo,
+      rejeitadoPor:  SESSAO.nome,
+      dataRejeicao:  hoje(),
+    });
+
+    salvarEventoEtapa(fid, etapaId, {
+      tipo:  'validacao_rejeitada',
+      texto: `Validação da Etapa ${etapaId} rejeitada por ${SESSAO.nome}. Motivo: ${motivo}`,
+      autor: SESSAO.nome,
+      data:  hoje(),
+      hora:  agora(),
+    });
+
+    await db.ref(`notif_gestor/${fid}`).update({ lido: true });
+
+    fecharModal();
+    toast('Rejeição registrada. Franqueado será notificado.', 'or');
+  } catch(e) {
+    toast('Erro: ' + e.message, 'rd');
+  }
 }
 
 function encerrarFranquia(fid) {
@@ -5889,7 +6073,7 @@ function abrirDetalheEtapa(fid, etapaId) {
   const et      = ETAPAS.find(e=>e.id===etapaId);
   const eventos  = getEventosEtapa(fid, etapaId);
   const concluida = etapaId < f.etapaAtual;
-  const atual     = Number(etapaId) === Number(f.etapaAtual);
+  const atual     = etapaId === f.etapaAtual;
   const pendFrq   = atual && f.etapasPendentes?.[etapaId]?.status === 'aguardando_franqueado';
 
   // Status da etapa
@@ -7478,7 +7662,7 @@ function gerarDossieEsteira(fid) {
     const subchat   = StorageAdapter.listarSubchat(fid, et.id);
     const prazo     = StorageAdapter.lerPrazo(fid, et.id);
     const concluida = et.id < f.etapaAtual;
-    const atual     = Number(et.id) === Number(f.etapaAtual);
+    const atual     = et.id === f.etapaAtual;
 
     // Datas reais da etapa
     const evIni  = eventos.find(e=>e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
@@ -8003,7 +8187,7 @@ function renderProcessoImplantacao(fid) {
       <div style="flex:1;overflow-y:auto;padding:8px 0">
         ${ETAPAS.map(et => {
           const concluida = et.id < f.etapaAtual;
-          const atual     = Number(et.id) === Number(f.etapaAtual);
+          const atual     = et.id === f.etapaAtual;
           const bloqueada = et.id > f.etapaAtual;
           const prazo     = StorageAdapter.lerPrazo(fid, et.id);
           const prazoVenc = prazo && new Date(prazo) < new Date();
@@ -8103,14 +8287,41 @@ function abrirEtapaProcesso(fid, etapaId) {
     if(btn) btn.style.background = e.id===etapaId ? 'var(--primary-soft)' : 'none';
   });
 
-  const _etId      = Number(etapaId);
-  const _etAtual   = Number(f.etapaAtual);
-  const concluida  = _etId < _etAtual;
-  const atual      = _etId === _etAtual;
-  const bloqueada  = _etId > _etAtual;
+  const concluida  = etapaId < f.etapaAtual;
+  const atual      = etapaId === f.etapaAtual;
+  const bloqueada  = etapaId > f.etapaAtual;
 
   // Verificar e registrar atrasos automaticamente
   if(!concluida && !bloqueada) StorageAdapter.verificarAtrasos(fid, etapaId, f);
+
+  // Verificar se há validação pendente do franqueado
+  if(atual) {
+    verificarValidacaoPendente(fid, etapaId).then(val => {
+      const div = $('div-val-pendente-' + etapaId);
+      if(!div) return;
+      if(val && val.status === 'aguardando') {
+        div.innerHTML = `
+          <div style="background:#FEF3C7;border:2px solid #F5A623;border-radius:12px;padding:14px 18px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-size:13px;font-weight:800;color:#92400E">⏳ ${val.franqueado} solicitou validação desta etapa</div>
+                <div style="font-size:11px;color:#92400E;margin-top:2px">${val.data} às ${val.hora} · Hash: ${val.hash?.slice(0,8)}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onclick="confirmarValidacaoEtapa('${fid}',${etapaId})"
+                  style="padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+                  ✓ Confirmar e avançar
+                </button>
+                <button onclick="rejeitarValidacaoEtapa('${fid}',${etapaId})"
+                  style="padding:8px 16px;border-radius:8px;background:#FEE2E2;color:#DC2626;border:1px solid #FECACA;cursor:pointer;font-size:12px;font-weight:700">
+                  ✗ Rejeitar
+                </button>
+              </div>
+            </div>
+          </div>`;
+      }
+    }).catch(() => {});
+  }
 
   const prazo      = StorageAdapter.lerPrazo(fid, etapaId);
   const prazoVenc  = prazo && new Date(prazo) < new Date();
@@ -8149,10 +8360,12 @@ function abrirEtapaProcesso(fid, etapaId) {
 
   area.innerHTML = resumoHistoricoHTML + `
 
-  <!-- CABEÇALHO DA ETAPA -->
-  <!-- Botão de concluir etapa — destaque no topo quando é a etapa atual -->
+  <!-- Validação pendente do franqueado -->
+  <div id="div-val-pendente-${etapaId}"></div>
+
+  <!-- Botão concluir etapa — destaque quando é a etapa atual -->
   ${atual && PERM.assinar ? `
-  <div style="background:var(--primary);border-radius:12px;padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+  <div style="background:var(--primary);border-radius:12px;padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div>
       <div style="font-size:13px;font-weight:800;color:#fff">Etapa ${etapaId} em andamento</div>
       <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">Quando todos os requisitos estiverem cumpridos, assine para avançar</div>
@@ -8163,6 +8376,7 @@ function abrirEtapaProcesso(fid, etapaId) {
     </button>
   </div>` : ''}
 
+  <!-- CABEÇALHO DA ETAPA -->
   <div class="card" style="margin-bottom:14px">
     <div style="padding:16px 18px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
@@ -8347,7 +8561,7 @@ function abrirEtapaProcesso(fid, etapaId) {
   <div class="card" style="margin-bottom:14px">
     <div class="card-head">
       <div class="card-title">📋 Histórico de eventos</div>
-      ${atual&&PERM.assinar?`<button class="btn sm primary" onclick="abrirEtapa('${fid}',${etapaId})">✍ Assinar etapa</button>`:''}
+      ${atual&&PERM.assinar?`<button class="btn sm primary" onclick="abrirEtapa('${fid}',${etapaId})">Assinar etapa</button>`:''}
     </div>
     <div class="card-body" style="padding:0">
       ${eventos.length ? eventos.map(ev=>`
