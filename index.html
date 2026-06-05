@@ -3196,19 +3196,43 @@ function renderEsteiraArquivados() {
    Responde, define prazo, resolve sem reunião
 ══════════════════════════════════════════════════════════════ */
 
-function renderSuportePainel() {
+async function renderSuportePainel() {
   setConteudo('suporte');
-  const dados    = getDados();
-  // Coletar todos os chamados de todos os franqueados
+
+  // Mostrar loading
+  $('content').innerHTML = `
+    <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <div style="font-size:32px;margin-bottom:12px">⏳</div>
+      <div style="font-size:13px">Carregando chamados...</div>
+    </div>`;
+
+  const dados = getDados();
+
+  // Ler chamados do Firebase (fonte da verdade — vem do portal do franqueado)
   let todosChamados = [];
-  dados.forEach(f => {
-    try {
-      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-      lista.forEach(c => {
-        todosChamados.push({ ...c, _franqueado: f });
+  try {
+    const snap = await db.ref('chamados').once('value');
+    const raw  = snap.val();
+    if(raw) {
+      // raw é { fid: [lista de chamados], ... }
+      Object.entries(raw).forEach(([fid, lista]) => {
+        const f = dados.find(x => x.id === fid);
+        const arr = Array.isArray(lista) ? lista : Object.values(lista);
+        arr.filter(Boolean).forEach(ch => {
+          todosChamados.push({ ...ch, _franqueado: f || { nome: ch.franqueado, ticket: ch.ticket } });
+        });
       });
-    } catch(e) {}
-  });
+    }
+  } catch(e) {
+    console.warn('Erro ao ler chamados do Firebase:', e.message);
+    // Fallback: tentar localStorage
+    dados.forEach(f => {
+      try {
+        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+        lista.forEach(ch => todosChamados.push({ ...ch, _franqueado: f }));
+      } catch(e2) {}
+    });
+  }
 
   // Ordenar por timestamp desc
   todosChamados.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
@@ -3258,18 +3282,32 @@ function renderSuportePainel() {
   `;
 }
 
-function filtrarChamadosPainel(status, btn) {
+async function filtrarChamadosPainel(status, btn) {
   document.querySelectorAll('.esteira-tab').forEach(b => b.classList.remove('ativa'));
   btn.classList.add('ativa');
 
   const dados = getDados();
   let todosChamados = [];
-  dados.forEach(f => {
-    try {
-      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-      lista.forEach(c => todosChamados.push({ ...c, _franqueado: f }));
-    } catch(e) {}
-  });
+  try {
+    const snap = await db.ref('chamados').once('value');
+    const raw  = snap.val();
+    if(raw) {
+      Object.entries(raw).forEach(([fid, lista]) => {
+        const f = dados.find(x => x.id === fid);
+        const arr = Array.isArray(lista) ? lista : Object.values(lista);
+        arr.filter(Boolean).forEach(ch => {
+          todosChamados.push({ ...ch, _franqueado: f || { nome: ch.franqueado, ticket: ch.ticket } });
+        });
+      });
+    }
+  } catch(e) {
+    dados.forEach(f => {
+      try {
+        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+        lista.forEach(ch => todosChamados.push({ ...ch, _franqueado: f }));
+      } catch(e2) {}
+    });
+  }
 
   const filtrados = todosChamados
     .filter(c => c.status === status)
@@ -3489,19 +3527,39 @@ function confirmarCancelamentoChamado(fid, chamadoId) {
 }
 
 function atualizarBadgeChamados() {
-  const dados = getDados();
-  let total = 0;
-  dados.forEach(f => {
-    try {
-      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-      total += lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
-    } catch(e) {}
+  // Ler do Firebase para ter dados em tempo real
+  db.ref('chamados').once('value').then(snap => {
+    const raw = snap.val();
+    let total = 0;
+    if(raw) {
+      Object.values(raw).forEach(lista => {
+        const arr = Array.isArray(lista) ? lista : Object.values(lista);
+        total += arr.filter(Boolean).filter(c =>
+          c.status === 'aberto' || c.status === 'em_andamento'
+        ).length;
+      });
+    }
+    const badge = $('badge-chamados-nav');
+    if(badge) {
+      badge.style.display = total > 0 ? 'inline-block' : 'none';
+      badge.textContent   = total;
+    }
+  }).catch(() => {
+    // Fallback localStorage
+    const dados = getDados();
+    let total = 0;
+    dados.forEach(f => {
+      try {
+        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+        total += lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
+      } catch(e) {}
+    });
+    const badge = $('badge-chamados-nav');
+    if(badge) {
+      badge.style.display = total > 0 ? 'inline-block' : 'none';
+      badge.textContent   = total;
+    }
   });
-  const badge = $('badge-chamados-nav');
-  if(badge) {
-    badge.style.display = total > 0 ? 'inline-block' : 'none';
-    badge.textContent   = total;
-  }
 }
 
 
