@@ -3196,8 +3196,12 @@ function renderEsteiraArquivados() {
    Responde, define prazo, resolve sem reunião
 ══════════════════════════════════════════════════════════════ */
 
-function renderSuportePainel() {
-  setConteudo('suporte');
+async function renderSuportePainel() {
+  $('content').innerHTML = `
+    <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <div style="font-size:32px;margin-bottom:12px">⏳</div>
+      <div style="font-size:13px">Carregando chamados...</div>
+    </div>`;
   const dados    = getDados();
   // Coletar todos os chamados de todos os franqueados
   let todosChamados = [];
@@ -8146,6 +8150,19 @@ function abrirEtapaProcesso(fid, etapaId) {
   area.innerHTML = resumoHistoricoHTML + `
 
   <!-- CABEÇALHO DA ETAPA -->
+  <!-- Botão de concluir etapa — destaque no topo quando é a etapa atual -->
+  ${atual && PERM.assinar ? `
+  <div style="background:var(--primary);border-radius:12px;padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:13px;font-weight:800;color:#fff">Etapa ${etapaId} em andamento</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">Quando todos os requisitos estiverem cumpridos, assine para avançar</div>
+    </div>
+    <button onclick="abrirEtapa('${fid}',${etapaId})"
+      style="padding:10px 20px;border-radius:10px;background:#fff;color:var(--primary);border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
+      ✍ Concluir etapa
+    </button>
+  </div>` : ''}
+
   <div class="card" style="margin-bottom:14px">
     <div style="padding:16px 18px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
@@ -8330,7 +8347,7 @@ function abrirEtapaProcesso(fid, etapaId) {
   <div class="card" style="margin-bottom:14px">
     <div class="card-head">
       <div class="card-title">📋 Histórico de eventos</div>
-      ${atual&&PERM.assinar?`<button class="btn sm primary" onclick="abrirEtapa('${fid}',${etapaId})">Assinar etapa</button>`:''}
+      ${atual&&PERM.assinar?`<button class="btn sm primary" onclick="abrirEtapa('${fid}',${etapaId})">✍ Assinar etapa</button>`:''}
     </div>
     <div class="card-body" style="padding:0">
       ${eventos.length ? eventos.map(ev=>`
