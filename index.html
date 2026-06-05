@@ -875,6 +875,10 @@ select.inp{cursor:pointer}
 
       <!-- SUPORTE -->
       <div class="sb-group">SUPORTE</div>
+      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
+        <div class="dot"></div><span>Chamados</span>
+        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
+      </button>
       <button class="sb-item" onclick="ir('onboarding_ref',this)">
         <div class="dot"></div><span>Onboarding</span>
       </button>
@@ -1584,6 +1588,7 @@ function iniciarApp() {
 
   ir('franqueados');
   atualizarBadges();
+  setTimeout(atualizarBadgeChamados, 800);
 }
 
 /* ══════════════════════════════════════════════════
@@ -1609,11 +1614,12 @@ const RENDERS = {
   inaugurados:     renderInaugurados,
   onboarding_ref:  renderOnboardingRef,
   manual:          renderManual,
-  alertas:     renderAlertas,
-  chat:        renderChat,
-  equipe:      renderEquipe,
-  relatorios:  renderRelatorios,
-  contatos:    renderContatosExternos,
+  alertas:         renderAlertas,
+  chat:            renderChat,
+  equipe:          renderEquipe,
+  relatorios:      renderRelatorios,
+  contatos:        renderContatosExternos,
+  suporte:         renderSuportePainel,
 }
 // Armazena o fid do processo em visualização
 let _processoAtual = null;;
@@ -3161,6 +3167,321 @@ function renderEsteiraArquivados() {
       </div>
     </div>`;
   }).join('')}`;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   MÓDULO SUPORTE — PAINEL DO GESTOR
+   Lista chamados de todos os franqueados do gestor
+   Responde, define prazo, resolve sem reunião
+══════════════════════════════════════════════════════════════ */
+
+function renderSuportePainel() {
+  setConteudo('suporte');
+  const dados    = getDados();
+  // Coletar todos os chamados de todos os franqueados
+  let todosChamados = [];
+  dados.forEach(f => {
+    try {
+      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+      lista.forEach(c => {
+        todosChamados.push({ ...c, _franqueado: f });
+      });
+    } catch(e) {}
+  });
+
+  // Ordenar por timestamp desc
+  todosChamados.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
+
+  const abertos   = todosChamados.filter(c => c.status === 'aberto');
+  const andamento = todosChamados.filter(c => c.status === 'em_andamento');
+  const concluidos= todosChamados.filter(c => c.status === 'concluido');
+
+  // Atualizar badge no nav
+  const badgeNav = $('badge-chamados-nav');
+  const nAbertos = abertos.length + andamento.length;
+  if(badgeNav) {
+    badgeNav.style.display = nAbertos > 0 ? 'inline-block' : 'none';
+    badgeNav.textContent   = nAbertos;
+  }
+
+  $('content').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:var(--text)">Central de Suporte</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${todosChamados.length} chamados no total · ${nAbertos} pendentes</div>
+      </div>
+    </div>
+
+    <!-- Abas de status -->
+    <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0">
+      <button class="esteira-tab ativa" onclick="filtrarChamadosPainel('aberto',this)" style="font-size:12px">
+        🔴 Abertos <span style="background:#DC2626;color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;margin-left:4px">${abertos.length}</span>
+      </button>
+      <button class="esteira-tab" onclick="filtrarChamadosPainel('em_andamento',this)" style="font-size:12px">
+        🟡 Em andamento <span style="background:#D97706;color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;margin-left:4px">${andamento.length}</span>
+      </button>
+      <button class="esteira-tab" onclick="filtrarChamadosPainel('concluido',this)" style="font-size:12px">
+        🟢 Concluídos <span style="background:#16A34A;color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;margin-left:4px">${concluidos.length}</span>
+      </button>
+    </div>
+
+    <div id="lista-chamados-painel">
+      ${abertos.length === 0 && andamento.length === 0 ?
+        `<div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
+          <div style="font-size:36px;margin-bottom:12px">✅</div>
+          <div style="font-size:14px;font-weight:700">Nenhum chamado pendente</div>
+          <div style="font-size:12px;margin-top:6px">Todos os chamados estão resolvidos.</div>
+        </div>`
+        : [...abertos, ...andamento].map(c => cardChamadoPainel(c)).join('')}
+    </div>
+  `;
+}
+
+function filtrarChamadosPainel(status, btn) {
+  document.querySelectorAll('.esteira-tab').forEach(b => b.classList.remove('ativa'));
+  btn.classList.add('ativa');
+
+  const dados = getDados();
+  let todosChamados = [];
+  dados.forEach(f => {
+    try {
+      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+      lista.forEach(c => todosChamados.push({ ...c, _franqueado: f }));
+    } catch(e) {}
+  });
+
+  const filtrados = todosChamados
+    .filter(c => c.status === status)
+    .sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
+
+  $('lista-chamados-painel').innerHTML = filtrados.length === 0
+    ? `<div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
+        <div style="font-size:32px;margin-bottom:10px">📭</div>
+        <div style="font-size:13px">Nenhum chamado com este status.</div>
+      </div>`
+    : filtrados.map(c => cardChamadoPainel(c)).join('');
+}
+
+function cardChamadoPainel(c) {
+  const f    = c._franqueado || {};
+  const cor  = {aberto:'#DC2626', em_andamento:'#D97706', concluido:'#16A34A', cancelado:'#94A3B8'};
+  const lbl  = {aberto:'Aberto', em_andamento:'Em andamento', concluido:'Concluído', cancelado:'Cancelado'};
+  return `
+    <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:10px;border:1px solid var(--border);border-left:4px solid ${cor[c.status]||'var(--border)'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:var(--text)">${c.id} · ${c.titulo}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+            ${f.nome||c.franqueado||'—'} (${f.ticket||c.ticket||'—'}) · ${c.nomeEtapa||'—'} · ${c.dataAbertura||'—'}
+          </div>
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:${cor[c.status]||'var(--border)'}22;color:${cor[c.status]||'var(--text-muted)'}">
+          ${lbl[c.status]||c.status}
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:10px;padding:8px;background:var(--bg);border-radius:6px">
+        ${c.descricao}
+      </div>
+      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:8px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
+      ${c.respostaGestor ? `<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ Resposta enviada em ${c.dataResposta}</div>` : ''}
+      ${c.assinaturaFranqueado ? `<div style="font-size:11px;color:var(--green);font-weight:700">✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}</div>` : ''}
+      <!-- Ações do gestor -->
+      ${c.status !== 'concluido' && c.status !== 'cancelado' ? `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <button onclick="responderChamado('${c.fid}','${c.id}')"
+          style="padding:7px 14px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+          💬 Responder
+        </button>
+        <button onclick="definirPrazoChamado('${c.fid}','${c.id}')"
+          style="padding:7px 14px;border-radius:8px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;cursor:pointer;font-size:12px;font-weight:700">
+          📅 Definir prazo
+        </button>
+        <button onclick="resolverSemReuniaChamado('${c.fid}','${c.id}')"
+          style="padding:7px 14px;border-radius:8px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;cursor:pointer;font-size:12px;font-weight:700">
+          ✓ Resolver
+        </button>
+        <button onclick="cancelarChamado('${c.fid}','${c.id}')"
+          style="padding:7px 14px;border-radius:8px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;cursor:pointer;font-size:12px;font-weight:700">
+          ✕ Cancelar
+        </button>
+      </div>` : ''}
+    </div>`;
+}
+
+function responderChamado(fid, chamadoId) {
+  abrirModal('Responder chamado',`
+    <div class="field" style="margin-bottom:12px">
+      <label>Resposta ao franqueado <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="resp-texto" rows="4"
+        placeholder="Descreva as orientações, providências tomadas ou próximos passos..."
+        style="resize:vertical"></textarea>
+    </div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarRespostaChamado('${fid}','${chamadoId}')">Enviar resposta</button>`
+  );
+}
+
+function confirmarRespostaChamado(fid, chamadoId) {
+  const texto = $('resp-texto')?.value?.trim();
+  if(!texto) { toast('Digite a resposta.','rd'); return; }
+
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
+
+  c.respostaGestor  = texto;
+  c.gestorNome      = SESSAO.nome;
+  c.gestorToken     = SESSAO.token;
+  c.dataResposta    = hoje() + ' às ' + agora();
+  c.status          = 'em_andamento';
+
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+
+  fecharModal();
+  toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
+  renderSuportePainel();
+}
+
+function definirPrazoChamado(fid, chamadoId) {
+  abrirModal('Definir prazo',`
+    <div class="field" style="margin-bottom:12px">
+      <label>Data limite para resolução</label>
+      <input class="inp" type="date" id="prazo-data" min="${hoje().split('/').reverse().join('-')}">
+    </div>
+    <div class="field">
+      <label>Observação (opcional)</label>
+      <input class="inp" id="prazo-obs" placeholder="Ex: aguardando documento do franqueado">
+    </div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarPrazoChamado('${fid}','${chamadoId}')">Definir prazo</button>`
+  );
+}
+
+function confirmarPrazoChamado(fid, chamadoId) {
+  const dataISO = $('prazo-data')?.value;
+  if(!dataISO) { toast('Selecione uma data.','rd'); return; }
+  const [y,m,d]  = dataISO.split('-');
+  const prazoFmt = d + '/' + m + '/' + y;
+
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
+
+  c.prazoGestor = prazoFmt;
+  c.prazoObs    = $('prazo-obs')?.value?.trim() || '';
+
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+
+  // Adicionar na agenda
+  try {
+    const eventos = JSON.parse(localStorage.getItem('mo_agenda_eventos') || '[]');
+    eventos.push({
+      id:     'chamado_' + chamadoId,
+      tipo:   'prazo',
+      titulo: 'Prazo: ' + (c.titulo||chamadoId),
+      data:   prazoFmt,
+      fid,
+      chamadoId,
+      franqueado: c.franqueado,
+      ticket:     c.ticket,
+      cor:        'cal-ev-prazo',
+    });
+    localStorage.setItem('mo_agenda_eventos', JSON.stringify(eventos));
+  } catch(e) {}
+
+  fecharModal();
+  toast('Prazo definido: ' + prazoFmt + '. Evento adicionado à agenda.', 'gn');
+  renderSuportePainel();
+}
+
+function resolverSemReuniaChamado(fid, chamadoId) {
+  abrirModal('Resolver chamado',`
+    <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:4px">✓ Marcar como resolvido</div>
+      <div style="font-size:11px;color:var(--text-dim)">Informe como o problema foi resolvido. O franqueado receberá a resposta e precisará confirmar o atendimento.</div>
+    </div>
+    <div class="field">
+      <label>Como foi resolvido <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="resolv-texto" rows="3"
+        placeholder="Descreva a solução aplicada..."></textarea>
+    </div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarResolucaoChamado('${fid}','${chamadoId}')">Marcar como resolvido</button>`
+  );
+}
+
+function confirmarResolucaoChamado(fid, chamadoId) {
+  const texto = $('resolv-texto')?.value?.trim();
+  if(!texto) { toast('Descreva a solução.','rd'); return; }
+
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
+
+  c.respostaGestor  = texto;
+  c.gestorNome      = SESSAO.nome;
+  c.dataResposta    = hoje() + ' às ' + agora();
+  c.status          = 'em_andamento'; // concluído só após franqueado assinar
+  c.resolvidoGestor = true;
+
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+
+  fecharModal();
+  toast('Chamado marcado como resolvido. Aguardando confirmação do franqueado.', 'gn');
+  renderSuportePainel();
+}
+
+function cancelarChamado(fid, chamadoId) {
+  abrirModal('Cancelar chamado',`
+    <div class="field">
+      <label>Motivo do cancelamento <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="cancel-motivo" rows="3"
+        placeholder="Explique o motivo do cancelamento..."></textarea>
+    </div>
+  `,`<button class="btn" onclick="fecharModal()">Voltar</button>
+     <button class="btn red" onclick="confirmarCancelamentoChamado('${fid}','${chamadoId}')">Cancelar chamado</button>`
+  );
+}
+
+function confirmarCancelamentoChamado(fid, chamadoId) {
+  const motivo = $('cancel-motivo')?.value?.trim();
+  if(!motivo) { toast('Informe o motivo.','rd'); return; }
+
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
+
+  c.status           = 'cancelado';
+  c.motivoCancelamento = motivo;
+  c.canceladoPor     = SESSAO.nome;
+  c.dataCancelamento = hoje() + ' às ' + agora();
+
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+
+  fecharModal();
+  toast('Chamado cancelado e registrado.', 'or');
+  renderSuportePainel();
+}
+
+function atualizarBadgeChamados() {
+  const dados = getDados();
+  let total = 0;
+  dados.forEach(f => {
+    try {
+      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+      total += lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
+    } catch(e) {}
+  });
+  const badge = $('badge-chamados-nav');
+  if(badge) {
+    badge.style.display = total > 0 ? 'inline-block' : 'none';
+    badge.textContent   = total;
+  }
 }
 
 function encerrarFranquia(fid) {
