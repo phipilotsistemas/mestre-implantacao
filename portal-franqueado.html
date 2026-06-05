@@ -1927,6 +1927,342 @@ function assinarConclusaoChamado(chamadoId) {
   }, 100);
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO C — AGENDAMENTO DE REUNIÕES (PORTAL DO FRANQUEADO)
+   Franqueado vê vagas disponíveis e agenda com 24h de antecedência
+   Uma reunião por vez — só pode agendar nova após concluir a atual
+══════════════════════════════════════════════════════════════ */
+
+function getDisponibilidadeGestor() {
+  // Ler do Firebase — disponibilidade configurada pelo gestor
+  return new Promise(resolve => {
+    const token = PORTAL.gestor?.token || '';
+    if(!token) { resolve({}); return; }
+    db.ref('disponibilidade/' + token).once('value')
+      .then(snap => resolve(snap.val() || {}))
+      .catch(() => resolve({}));
+  });
+}
+
+function getReunioesPortal() {
+  return new Promise(resolve => {
+    db.ref('reunioes').once('value')
+      .then(snap => {
+        const raw = snap.val();
+        if(!raw) { resolve([]); return; }
+        const lista = Array.isArray(raw) ? raw : Object.values(raw);
+        resolve(lista.filter(Boolean));
+      })
+      .catch(() => resolve([]));
+  });
+}
+
+async function renderAgendaReunioes() {
+  $('portal-content').innerHTML = `
+    <div style="text-align:center;padding:40px 20px;color:var(--text-dim)">
+      <div style="font-size:24px;margin-bottom:8px">⏳</div>
+      <div style="font-size:13px">Carregando vagas disponíveis...</div>
+    </div>`;
+
+  const [disp, todasReunioes] = await Promise.all([
+    getDisponibilidadeGestor(),
+    getReunioesPortal(),
+  ]);
+
+  // Verificar se já tem reunião agendada
+  const minhaReuniao = todasReunioes.find(r =>
+    r.fid === PORTAL.fid && r.status === 'agendada'
+  );
+
+  // Verificar notificações do gestor (cancelamento, reagendamento)
+  let notif = null;
+  try {
+    const snap = await db.ref('reunioes_notif/' + PORTAL.fid).once('value');
+    notif = snap.val();
+  } catch(e) {}
+
+  if(minhaReuniao) {
+    renderMihaReuniao(minhaReuniao, notif);
+    return;
+  }
+
+  if(!disp.link) {
+    $('portal-content').innerHTML = `
+      <div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
+        <div style="font-size:36px;margin-bottom:12px">📅</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Sem vagas disponíveis</div>
+        <div style="font-size:12px;line-height:1.6">Seu gestor ainda não configurou os horários de atendimento.<br>Entre em contato pelo MO Talk.</div>
+      </div>`;
+    return;
+  }
+
+  // Gerar vagas disponíveis (próximos 14 dias, mínimo 24h de antecedência)
+  const vagas = gerarVagasDisponiveis(disp, todasReunioes);
+
+  if(vagas.length === 0) {
+    $('portal-content').innerHTML = `
+      <div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
+        <div style="font-size:36px;margin-bottom:12px">📭</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Nenhuma vaga disponível</div>
+        <div style="font-size:12px">Não há vagas nos próximos 14 dias com antecedência mínima de 24h.<br>Tente mais tarde ou use o MO Talk.</div>
+      </div>`;
+    return;
+  }
+
+  // Agrupar vagas por data
+  const porData = {};
+  vagas.forEach(v => {
+    if(!porData[v.data]) porData[v.data] = [];
+    porData[v.data].push(v);
+  });
+
+  $('portal-content').innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:16px;font-weight:800;color:var(--text)">Agendar reunião</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+        Selecione uma vaga disponível · Mínimo 24h de antecedência · Uma reunião por vez
+      </div>
+    </div>
+
+    ${notif ? renderNotifGestor(notif) : ''}
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      ${Object.entries(porData).map(([data, horas]) => `
+        <div style="background:#fff;border-radius:12px;padding:14px;border:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">
+            📅 ${formatarDataExtenso(data)}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${horas.map(v => `
+              <button onclick="selecionarVaga('${data}','${v.hora}','${disp.link}',${disp.duracao||60})"
+                style="padding:8px 16px;border-radius:10px;border:1.5px solid var(--primary-border);background:var(--primary-soft);color:var(--primary);font-size:13px;font-weight:700;cursor:pointer">
+                ${v.hora}
+              </button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderMihaReuniao(r, notif) {
+  $('portal-content').innerHTML = `
+    ${notif ? renderNotifGestor(notif) : ''}
+    <div style="background:#fff;border-radius:16px;padding:20px;border:1px solid var(--border);border-top:4px solid var(--primary)">
+      <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px">Sua reunião agendada</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px">${r.id}</div>
+
+      <div style="display:grid;gap:10px;margin-bottom:16px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <span style="font-size:20px">📅</span>
+          <div>
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Data e hora</div>
+            <div style="font-size:14px;font-weight:800;color:var(--text)">${formatarDataExtenso(r.data)} às ${r.hora}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span style="font-size:20px">⏱</span>
+          <div>
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Duração</div>
+            <div style="font-size:14px;font-weight:800;color:var(--text)">${r.duracao||60} minutos</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span style="font-size:20px">🎯</span>
+          <div>
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Motivo</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${r.motivo}</div>
+          </div>
+        </div>
+      </div>
+
+      ${r.link ? `
+      <a href="${r.link}" target="_blank"
+        style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:12px;background:var(--primary);color:#fff;text-decoration:none;font-size:14px;font-weight:800;margin-bottom:12px">
+        🔗 Entrar na reunião
+      </a>` : ''}
+
+      <button onclick="cancelarReuniaoPortal('${r.id}')"
+        style="width:100%;padding:10px;border-radius:10px;background:none;border:1.5px solid #FECACA;color:#DC2626;cursor:pointer;font-size:12px;font-weight:700">
+        Cancelar minha reunião
+      </button>
+      <div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:6px">Cancelamentos com menos de 12h ficam registrados no histórico.</div>
+    </div>`;
+}
+
+function renderNotifGestor(notif) {
+  const tipos = {
+    cancelada: { icon:'❌', cor:'#FEE2E2', txtCor:'#DC2626', msg:'Sua reunião foi cancelada pelo gestor.' },
+    reagendada:{ icon:'📅', cor:'#EFF6FF', txtCor:'#1E40AF', msg:`Sua reunião foi reagendada para ${notif.novaData} às ${notif.horaV}.` },
+    resolvida_sem_reuniao:{ icon:'✅', cor:'#F0FDF4', txtCor:'#166534', msg:`Seu pedido foi resolvido pelo gestor sem necessidade de reunião.` },
+  };
+  const t = tipos[notif.tipo];
+  if(!t) return '';
+  return `<div style="background:${t.cor};border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center">
+    <span style="font-size:20px">${t.icon}</span>
+    <div>
+      <div style="font-size:12px;font-weight:700;color:${t.txtCor}">${t.msg}</div>
+      <div style="font-size:10px;color:${t.txtCor};margin-top:2px;opacity:.7">${notif.data||''}</div>
+    </div>
+  </div>`;
+}
+
+function gerarVagasDisponiveis(disp, todasReunioes) {
+  const diasSemana = ['dom','seg','ter','qua','qui','sex','sab'];
+  const vagas = [];
+  const agora2 = new Date();
+  const limite24h = new Date(agora2.getTime() + 24*3600*1000);
+
+  // Próximos 14 dias
+  for(let d=1; d<=14; d++) {
+    const data = new Date(agora2);
+    data.setDate(data.getDate() + d);
+    data.setHours(0,0,0,0);
+
+    const diaSem = diasSemana[data.getDay()];
+    const dispDia = disp.dias?.[diaSem];
+    if(!dispDia?.ativo || !dispDia.horarios?.length) continue;
+
+    const dataStr = data.toISOString().slice(0,10);
+
+    dispDia.horarios.forEach(hora => {
+      const [h,m] = hora.split(':').map(Number);
+      const dataHora = new Date(data);
+      dataHora.setHours(h, m, 0, 0);
+
+      // Mínimo 24h de antecedência
+      if(dataHora <= limite24h) return;
+
+      // Verificar se a vaga já está ocupada
+      const ocupada = todasReunioes.some(r =>
+        r.status === 'agendada' &&
+        r.data === dataStr &&
+        r.hora === hora
+      );
+      if(!ocupada) vagas.push({ data: dataStr, hora });
+    });
+  }
+  return vagas;
+}
+
+function formatarDataExtenso(dataISO) {
+  const [y,m,d] = dataISO.split('-').map(Number);
+  const data = new Date(y, m-1, d);
+  const dias = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  return `${dias[data.getDay()]}, ${d} de ${meses[m-1]}`;
+}
+
+function selecionarVaga(data, hora, link, duracao) {
+  abrirModal('Confirmar agendamento',`
+    <div style="background:var(--primary-soft);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;color:var(--primary)">
+        📅 ${formatarDataExtenso(data)} às ${hora}
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Duração: ${duracao} minutos</div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Motivo da reunião <span style="color:var(--red)">*</span></label>
+      <select class="inp" id="ag-motivo">
+        <option value="">Selecione o motivo...</option>
+        <option>Dúvida sobre etapa do processo</option>
+        <option>Problema com documento</option>
+        <option>Dificuldade financeira</option>
+        <option>Dúvida sobre ponto comercial</option>
+        <option>Dúvida sobre contrato</option>
+        <option>Dúvida sobre treinamento</option>
+        <option>Problema com sistema EMPSIS</option>
+        <option>Discussão sobre prazo</option>
+        <option>Assunto jurídico</option>
+        <option>Outro assunto</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:4px">
+      <label>Descrição detalhada <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="ag-descricao" rows="3"
+        placeholder="Descreva o que você precisa discutir na reunião..."></textarea>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:12px">
+      ⚠ Seu gestor avaliará o motivo e poderá resolver sem reunião se possível.
+    </div>
+    <div id="ag-erro" style="display:none;color:var(--red);font-size:11px;margin-bottom:8px"></div>
+  `,
+  `<button class="btn" onclick="fecharModal()">Cancelar</button>
+   <button class="btn primary" onclick="confirmarAgendamento('${data}','${hora}','${link}',${duracao})">Confirmar agendamento</button>`
+  );
+}
+
+async function confirmarAgendamento(data, hora, link, duracao) {
+  const motivo    = $('ag-motivo')?.value;
+  const descricao = $('ag-descricao')?.value?.trim();
+  const erroEl    = $('ag-erro');
+
+  if(!motivo)   { erroEl.style.display='block'; erroEl.textContent='Selecione o motivo.'; return; }
+  if(!descricao || descricao.length < 10) {
+    erroEl.style.display='block'; erroEl.textContent='Descreva com mais detalhes (mínimo 10 caracteres).'; return;
+  }
+
+  // Verificar novamente se a vaga ainda está livre
+  const todasReunioes = await getReunioesPortal();
+  const ocupada = todasReunioes.some(r =>
+    r.status === 'agendada' && r.data === data && r.hora === hora
+  );
+  if(ocupada) {
+    erroEl.style.display='block';
+    erroEl.textContent='Esta vaga acabou de ser ocupada. Escolha outro horário.';
+    return;
+  }
+
+  const id = 'REU-' + String(Math.floor(Math.random()*9000)+1000);
+  const reuniao = {
+    id,
+    fid:         PORTAL.fid,
+    franqueado:  PORTAL.nome,
+    ticket:      PORTAL.ticket,
+    gestorToken: PORTAL.gestor?.token || '',
+    etapa:       PORTAL.etapaAtual,
+    data,
+    hora,
+    link,
+    duracao,
+    motivo,
+    descricao,
+    status:      'agendada',
+    dataAgendamento: hoje() + ' às ' + agora(),
+    timestamp:   Date.now(),
+  };
+
+  // Salvar no Firebase
+  const novaLista = [...todasReunioes, reuniao];
+  try {
+    await db.ref('reunioes').set(novaLista);
+    // Limpar notificação anterior
+    await db.ref('reunioes_notif/' + PORTAL.fid).remove();
+  } catch(e) {
+    erroEl.style.display='block';
+    erroEl.textContent='Erro ao salvar. Tente novamente.';
+    return;
+  }
+
+  fecharModal();
+  toast('Reunião agendada! ' + formatarDataExtenso(data) + ' às ' + hora, 'gn');
+  renderAgendaReunioes();
+}
+
+async function cancelarReuniaoPortal(reuId) {
+  if(!confirm('Cancelar sua reunião? Esta ação fica registrada no histórico.')) return;
+  const todasReunioes = await getReunioesPortal();
+  const r = todasReunioes.find(x => x.id === reuId);
+  if(!r) return;
+  r.status = 'cancelada';
+  r.canceladaPor = 'franqueado';
+  r.dataCancelamento = hoje() + ' às ' + agora();
+  try {
+    await db.ref('reunioes').set(todasReunioes);
+  } catch(e) {}
+  toast('Reunião cancelada.', 'or');
+  renderAgendaReunioes();
+}
+
 function renderInicio() {
   // Se processo não iniciado — verificar termo primeiro
   if(!PORTAL.processoIniciado) {
@@ -2215,6 +2551,11 @@ function solicitarValidacao(etId) {
 
 /* ══ AGENDA ══ */
 function renderAgenda() {
+  // Redirecionar para a agenda de reuniões virtuais
+  renderAgendaReunioes();
+}
+
+function renderAgendaOriginal() {
   const evs   = getEventos();
   const hoje2 = new Date(); hoje2.setHours(0,0,0,0);
   const proxs = evs.filter(e=>new Date(e.data+'T00:00')>=hoje2).sort((a,b)=>a.data.localeCompare(b.data));
