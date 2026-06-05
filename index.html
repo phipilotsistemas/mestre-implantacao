@@ -1007,15 +1007,7 @@ function gasPost(body) {
    CONFIGURAÇÃO — Firebase
    Substitua pelas credenciais do projeto MO
 ══════════════════════════════════════════════════ */
-const FB_CFG = {
-  apiKey:            'COLE_AQUI_API_KEY',
-  authDomain:        'mestre-da-obra.firebaseapp.com',
-  databaseURL:       'https://mestre-da-obra-default-rtdb.firebaseio.com',
-  projectId:         'mestre-da-obra',
-  storageBucket:     'mestre-da-obra.firebasestorage.app',
-  messagingSenderId: 'COLE_AQUI_SENDER_ID',
-  appId:             'COLE_AQUI_APP_ID',
-};
+// Firebase config abaixo
 
 /* ══════════════════════════════════════════════════
    USUÁRIOS DA EQUIPE INTERNA
@@ -1614,9 +1606,8 @@ function iniciarApp() {
   }
   if(PERM.verRelatorios) $('sb-relatorios').style.display = '';
 
-  // Iniciar Firebase (modo offline gracioso)
+  // Firebase já inicializado no topo — só pegar a referência do DB
   try {
-    if(!firebase.apps.length) firebase.initializeApp(FB_CFG);
     db = firebase.database();
   } catch(e) { db = null; }
 
