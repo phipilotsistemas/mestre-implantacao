@@ -1150,25 +1150,42 @@ const db   = firebase.database();
 
 // Configurar persistência — SESSION evita o erro 400 de token expirado
 // ao reabrir o portal em nova aba/sessão
-auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
   .catch(e => console.warn('Persistência:', e.message));
 
-// Listener de estado — se sessão expirar, volta para login
+// Listener de estado — restaura sessão ao recarregar ou redireciona para login
 auth.onAuthStateChanged(user => {
-  // Só agir se o portal já estiver ativo (PORTAL.fid preenchido)
-  if(!user && window.PORTAL?.fid) {
-    console.warn('Sessão expirada — retornando ao login');
-    // Limpar estado e mostrar login
-    window.PORTAL = {};
-    const app = document.getElementById('app');
-    const login = document.getElementById('tela-login');
-    if(app) app.style.display = 'none';
-    if(login) login.style.display = 'flex';
-    // Limpar campos
-    const emailEl = document.getElementById('login-email');
-    const senhaEl = document.getElementById('login-senha');
-    if(emailEl) emailEl.value = '';
-    if(senhaEl) senhaEl.value = '';
+  if(user) {
+    // Usuário autenticado — verificar se já tem sessão montada
+    if(window.PORTAL?.fid) return; // já logado, não faz nada
+
+    // Tentar restaurar sessão do Firebase
+    db.ref('portal_usuarios').orderByChild('email').equalTo(user.email).once('value')
+      .then(snap => {
+        const dados = snap.val();
+        if(!dados) return; // não é franqueado
+        const uid = Object.keys(dados)[0];
+        const fid = dados[uid]?.fid;
+        if(!fid) return;
+
+        // Buscar dados do franqueado
+        return db.ref('franqueados/' + fid).once('value').then(snapF => {
+          const f = snapF.val();
+          if(!f) return;
+          montarPortal(f, null); // restaura sem senha (já autenticado)
+        });
+      })
+      .catch(e => console.warn('Restaurar sessão:', e.message));
+
+  } else {
+    // Sem usuário — se portal estava ativo, voltar para login
+    if(window.PORTAL?.fid) {
+      window.PORTAL = {};
+      const app   = document.getElementById('app');
+      const login = document.getElementById('tela-login');
+      if(app)   app.style.display   = 'none';
+      if(login) login.style.display = 'flex';
+    }
   }
 });
 
@@ -1510,6 +1527,7 @@ function fazerLogin() {
 }
 
 function montarPortal(f, senhaUsada) {
+  if(!f) return; // segurança
   // Montar objeto PORTAL com os dados do franqueado vindos do painel
   const gestor = f.gestor
     ? (typeof f.gestor === 'object' ? f.gestor : { nome: String(f.gestor) })
@@ -1920,19 +1938,92 @@ function cardChamado(c) {
         </span>
       </div>
       <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:8px">${c.descricao.slice(0,120)}${c.descricao.length>120?'...':''}</div>
+      ${c.totalRetornos > 0 ? `<div style="font-size:10px;color:var(--amber);font-weight:700;margin-bottom:4px">↩ Reaberto ${c.totalRetornos}x pelo franqueado</div>` : ''}
+      ${c.retornoFranqueado && c.status === 'aberto' ? `
+      <div style="background:#FEF3C7;border-radius:6px;padding:8px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:2px">Retorno do franqueado · ${c.dataRetorno||''}</div>
+        <div style="font-size:11px;color:#92400E">${c.retornoFranqueado}</div>
+      </div>` : ''}
       ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600">⏱ Prazo do gestor: ${c.prazoGestor}</div>` : ''}
       ${c.respostaGestor ? `
       <div style="background:#F0FDF4;border-radius:8px;padding:10px;margin-top:8px">
         <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px">Resposta do gestor · ${c.dataResposta}</div>
         <div style="font-size:12px;color:var(--text)">${c.respostaGestor}</div>
         ${c.status === 'em_andamento' && !c.assinaturaFranqueado ? `
-        <button onclick="assinarConclusaoChamado('${c.id}')"
-          style="margin-top:10px;padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
-          ✓ Confirmar atendimento
-        </button>` : ''}
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button onclick="assinarConclusaoChamado('${c.id}')"
+            style="padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+            ✓ Confirmar atendimento
+          </button>
+          <button onclick="reabrirChamado('${c.id}')"
+            style="padding:8px 16px;border-radius:8px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;cursor:pointer;font-size:12px;font-weight:700">
+            ↩ Não resolvido
+          </button>
+        </div>` : ''}
         ${c.assinaturaFranqueado ? `<div style="font-size:10px;color:var(--green);margin-top:6px">✓ Confirmado por você em ${c.dataAssinatura}</div>` : ''}
       </div>` : ''}
     </div>`;
+}
+
+
+async function reabrirChamado(chamadoId) {
+  abrirModal('Reabrir chamado', `
+    <div style="background:#FEF3C7;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:4px">↩ Reabrir chamado</div>
+      <div style="font-size:11px;color:#92400E;line-height:1.6">
+        Informe por que a resposta não resolveu seu problema.<br>
+        O gestor receberá seu retorno e poderá dar uma nova resposta.
+      </div>
+    </div>
+    <div class="field">
+      <label>Por que não foi resolvido? <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="reab-motivo" rows="3"
+        placeholder="Descreva o que ainda não está resolvido ou o que precisa de mais esclarecimento..."></textarea>
+    </div>
+  `,
+  `<button class="btn" onclick="fecharModal()">Cancelar</button>
+   <button class="btn primary" onclick="confirmarReabertura('${chamadoId}')">Reabrir chamado</button>`
+  );
+}
+
+async function confirmarReabertura(chamadoId) {
+  const motivo = $('reab-motivo')?.value?.trim();
+  if(!motivo || motivo.length < 10) {
+    toast('Descreva melhor o motivo (mínimo 10 caracteres).', 'rd');
+    return;
+  }
+
+  try {
+    const lista   = await getChamados();
+    const chamado = lista.find(c => c.id === chamadoId);
+    if(!chamado) return;
+
+    // Preservar histórico de respostas anteriores
+    if(!chamado.historico) chamado.historico = [];
+    chamado.historico.push({
+      respostaGestor:  chamado.respostaGestor,
+      dataResposta:    chamado.dataResposta,
+      gestorNome:      chamado.gestorNome,
+      retornoFranqueado: motivo,
+      dataRetorno:     hoje() + ' às ' + agora(),
+    });
+
+    // Reabrir
+    chamado.status          = 'aberto';
+    chamado.respostaGestor  = null;
+    chamado.dataResposta    = null;
+    chamado.resolvidoGestor = false;
+    chamado.retornoFranqueado = motivo;
+    chamado.dataRetorno     = hoje() + ' às ' + agora();
+    chamado.totalRetornos   = (chamado.totalRetornos || 0) + 1;
+
+    salvarChamados(lista);
+    fecharModal();
+    toast('Chamado reaberto. Seu gestor será notificado.', 'or');
+    renderSuporte();
+  } catch(e) {
+    toast('Erro ao reabrir: ' + e.message, 'rd');
+  }
 }
 
 function abrirNovoChamado() {
