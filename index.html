@@ -4439,11 +4439,25 @@ function confirmarCadastroFranqueado() {
         });
     })
     .catch(err => {
+      console.error('Firebase Auth cadastro portal:', err.code, err.message);
       if(err.code === 'auth/email-already-in-use') {
-        toast('E-mail já cadastrado no portal.', 'or');
+        // E-mail já existe — atualizar o mapeamento fid
+        toast('E-mail já cadastrado. Atualizando mapeamento...', 'or');
+        // Buscar o uid existente
+        db.ref('portal_usuarios').orderByChild('email').equalTo(email).once('value')
+          .then(snap => {
+            const dados = snap.val();
+            if(dados) {
+              const uid = Object.keys(dados)[0];
+              return db.ref('portal_usuarios/' + uid).set({ fid: novo.id, email });
+            }
+          })
+          .then(() => toast('Portal liberado para ' + nome.split(' ')[0] + '!', 'gn'))
+          .catch(() => toast('E-mail já em uso. Verifique no Firebase.', 'rd'));
+      } else if(err.code === 'auth/invalid-email') {
+        toast('E-mail inválido. Verifique o endereço digitado.', 'rd');
       } else {
-        console.warn('Firebase Auth (portal):', err.message);
-        toast('Atenção: conta no portal não criada. Verifique o e-mail.', 'or');
+        toast('Erro ao criar acesso: ' + (err.message||err.code), 'rd');
       }
     });
 }
@@ -7569,6 +7583,32 @@ const StorageAdapter = {
   },
   lerPrazo(fid, etapaId) {
     return localStorage.getItem(`mo_prazo_${fid}_et${etapaId}`) || '';
+  },
+
+  // ── Subchat das etapas ──
+  salvarMensagemSubchat(fid, etapaId, msg) {
+    const key  = `mo_subchat_${fid}_et${etapaId}`;
+    const msgs = JSON.parse(localStorage.getItem(key)||'[]');
+    msgs.push({
+      id:        `msg_${Date.now()}`,
+      tipo:      msg.tipo,
+      texto:     msg.texto,
+      autor:     msg.autor,
+      data:      new Date().toLocaleDateString('pt-BR'),
+      hora:      new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+      timestamp: Date.now(),
+      lido:      false,
+    });
+    localStorage.setItem(key, JSON.stringify(msgs));
+    // Firebase
+    try { db.ref(`etapas/${fid}/et${etapaId}/subchat`).set(msgs); } catch(e) {}
+    return msgs[msgs.length-1];
+  },
+
+  listarSubchat(fid, etapaId) {
+    const key = `mo_subchat_${fid}_et${etapaId}`;
+    try { return JSON.parse(localStorage.getItem(key)||'[]'); }
+    catch(e) { return []; }
   },
 };
 
