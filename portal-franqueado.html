@@ -2164,16 +2164,52 @@ function verificarCheckTermo() {
 }
 
 function assinarTermo() {
+  // Desabilitar botão imediatamente para evitar duplo clique
+  const btn = $('btn-assinar-termo');
+  if(btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Obtendo localização...';
+    btn.style.background = 'var(--border)';
+    btn.style.color = 'var(--text-muted)';
+    btn.style.cursor = 'not-allowed';
+  }
+
   const registrar = (lat, lon) => {
     const ts  = new Date().toISOString();
-    const reg = { nome:PORTAL.nome, fid:PORTAL.fid, ticket:PORTAL.ticket, ts, data:hoje(), hora:agora(), lat:lat||'não disponível', lon:lon||'não disponível', hash:btoa(PORTAL.fid+'|'+ts+'|termo').replace(/=/g,'') };
+    const reg = {
+      nome:   PORTAL.nome,
+      fid:    PORTAL.fid,
+      ticket: PORTAL.ticket,
+      ts, data: hoje(), hora: agora(),
+      lat:    lat || 'não disponível',
+      lon:    lon || 'não disponível',
+      hash:   btoa(PORTAL.fid+'|'+ts+'|termo').replace(/=/g,'')
+    };
+    // Só registra APÓS obter (ou recusar) a localização
     localStorage.setItem('termo_assinado_'+PORTAL.fid, '1');
     localStorage.setItem('termo_registro_'+PORTAL.fid, JSON.stringify(reg));
     mostrarConfirmacaoTermo(reg);
   };
+
   if(navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(p=>registrar(p.coords.latitude.toFixed(6),p.coords.longitude.toFixed(6)),()=>registrar(null,null),{timeout:5000});
-  } else { registrar(null,null); }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        // Permissão concedida — registrar com coordenadas
+        registrar(
+          pos.coords.latitude.toFixed(6),
+          pos.coords.longitude.toFixed(6)
+        );
+      },
+      err => {
+        // Permissão negada ou erro — registrar sem coordenadas
+        registrar(null, null);
+      },
+      { timeout: 10000, maximumAge: 0 }
+    );
+  } else {
+    // Navegador sem suporte a geolocalização
+    registrar(null, null);
+  }
 }
 
 function mostrarConfirmacaoTermo(reg) {
