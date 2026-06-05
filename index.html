@@ -6048,11 +6048,27 @@ function iniciarProcesso(fid) {
 
 async function confirmarInicioProcesso(fid, declaracao) {
   const f = getFranqueado(fid);
+  const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+  const dataHora = hoje() + ' às ' + agora();
+
+  // ── Registro completo no histórico do franqueado ──
+  const registroInicio = {
+    tipo:        'declaracao_inicio',
+    texto:       declaracao,
+    autor:       SESSAO?.nome || 'Sistema',
+    cargo:       SESSAO?.cargo || '',
+    token:       SESSAO?.token || '',
+    hash,
+    data:        hoje(),
+    hora:        agora(),
+    dataHora,
+    timestamp:   Date.now(),
+  };
 
   const novoHist = [...(f.historico||[]), {
-    data:  new Date().toLocaleDateString('pt-BR'),
-    texto: 'Processo de implantação iniciado. COF e Pré-contrato confirmados.',
-    autor: SESSAO?.nome||'Sistema',
+    data:  hoje(),
+    texto: `Processo iniciado por ${SESSAO?.nome||'Sistema'}. COF e Pré-contrato confirmados. Hash: ${hash}`,
+    autor: SESSAO?.nome || 'Sistema',
   }];
 
   atualizarFranqueado(fid, {
@@ -6060,67 +6076,93 @@ async function confirmarInicioProcesso(fid, declaracao) {
     etapaAtual:          1,
     dataInicioProcesso:  hoje(),
     historico:           novoHist,
+    declaracaoInicio:    registroInicio,   // ← registrado no dossiê
   });
 
+  // ── Registro no evento da Etapa 1 ──
   salvarEventoEtapa(fid, 1, {
-    tipo:      'processo_iniciado',
-    texto:     `Processo de implantação iniciado. — ${f.nome} (${f.ticket})`,
-    autor:     SESSAO?.nome||'Sistema',
-    data:      hoje(), hora: agora(), timestamp: Date.now(),
+    ...registroInicio,
+    tipo:  'processo_iniciado',
+    texto: `Processo de implantação iniciado por ${SESSAO?.nome||'Sistema'} — ${f.nome} (${f.ticket}). COF e Pré-contrato confirmados.`,
   });
+
+  // ── Registrar na ficha mensal do gestor ──
+  try {
+    const mesAno = new Date().toISOString().slice(0,7); // 'YYYY-MM'
+    const chaveGestor = 'mo_ficha_mensal_' + (SESSAO?.token||'geral') + '_' + mesAno;
+    const fichaGestor = JSON.parse(localStorage.getItem(chaveGestor)||'[]');
+    fichaGestor.push({
+      tipo:           'inicio_processo',
+      franqueado:     f.nome,
+      ticket:         f.ticket,
+      data:           hoje(),
+      hora:           agora(),
+      hash,
+    });
+    localStorage.setItem(chaveGestor, JSON.stringify(fichaGestor));
+  } catch(e) {}
 
   fecharModal();
-  toast('Processo iniciado. A Etapa 1 — Onboarding foi desbloqueada.', 'gn');
+  toast('Processo iniciado. Etapa 1 — Onboarding desbloqueada.', 'gn');
 
-  // Gerar PDF da Declaração de Início e salvar no Drive
+  // ── Redirecionar para a tela de processo (Etapa 1) ──
+  setTimeout(() => {
+    renderProcessoImplantacao(fid);
+  }, 300);
+
+  // ── Gerar PDF da Declaração de Início no Drive (assíncrono) ──
   (async () => {
     try {
-      const fAtualizado = getFranqueado(fid);
-      const pastas = fAtualizado?.drivePasstas;
+      toast('☁ Salvando declaração no Drive...', 'or');
 
-      // Se pastas ainda não existem, criar agora
-      let pastaId01;
-      if(pastas?.pasta_et01_id) {
-        pastaId01 = pastas.pasta_et01_id;
-      } else {
+      // Garantir que as pastas existem
+      let fAtualizado = getFranqueado(fid);
+      let pastas = fAtualizado?.drivePasstas;
+
+      if(!pastas?.pasta_et01_id) {
         const novasPastas = await appsGet({
           action: 'criarPastas',
           fid,
-          nome: f.nome,
+          nome:   f.nome,
           ticket: f.ticket,
         });
-        if(!novasPastas.erro) {
+        if(novasPastas && !novasPastas.erro) {
           atualizarFranqueado(fid, { drivePasstas: novasPastas });
-          pastaId01 = novasPastas.pasta_et01_id;
+          // Salvar também no Firebase
+          try { db.ref('franqueados/' + fid + '/drivePasstas').set(novasPastas); } catch(e2) {}
+          pastas = novasPastas;
         }
       }
 
-      if(pastaId01) {
-        await gerarPDFNoDrive('declaracao_inicio', pastaId01, {
-          ticket:          f.ticket,
-          nomeFranqueado:  f.nome,
-          cidade:          f.cidade,
-          uf:              f.uf,
-          modelo:          f.modelo,
-          nomeGestor:      SESSAO.nome,
-          cargo:           SESSAO.cargo,
-          data:            hoje(),
-          hora:            agora(),
-          declaracao,
-          hash:            Math.abs(declaracao.split('').reduce((h,c)=>((h<<5)-h)+c.charCodeAt(0),0)).toString(16),
+      const pastaId01 = pastas?.pasta_et01_id;
+      if(!pastaId01) throw new Error('Pasta 01 não encontrada');
+
+      const pdfResult = await gerarPDFNoDrive('declaracao_inicio', pastaId01, {
+        ticket:         f.ticket,
+        nomeFranqueado: f.nome,
+        cidade:         f.cidade,
+        uf:             f.uf,
+        modelo:         f.modelo,
+        nomeGestor:     SESSAO.nome,
+        cargo:          SESSAO.cargo,
+        data:           hoje(),
+        hora:           agora(),
+        declaracao,
+        hash,
+      });
+
+      if(pdfResult?.ok) {
+        // Salvar URL do PDF na declaração de início
+        atualizarFranqueado(fid, {
+          declaracaoInicio: { ...registroInicio, driveUrl: pdfResult.arquivoUrl }
         });
-        toast('Declaração de Início salva no Drive.', 'gn');
+        toast('✓ Declaração de Início salva no Drive!', 'gn');
       }
     } catch(e) {
       console.warn('Drive declaração início:', e.message);
+      toast('Declaração registrada. Drive: ' + e.message, 'or');
     }
   })();
-
-  criarPastasFranqueado(fid);
-
-  const fAtual = getFranqueado(fid);
-  renderDrawerBody(fAtual);
-  renderDrawerFoot(fAtual);
 }
 
 /* ══════════════════════════════════════════════════════════════
