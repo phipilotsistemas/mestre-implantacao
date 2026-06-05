@@ -7610,6 +7610,47 @@ const StorageAdapter = {
     try { return JSON.parse(localStorage.getItem(key)||'[]'); }
     catch(e) { return []; }
   },
+
+  // Prazo dado pelo gestor ao FRANQUEADO (data esperada de conclusão pelo frq)
+  lerPrazoFranqueado(fid, etapaId) {
+    return localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`) || '';
+  },
+  salvarPrazoFranqueado(fid, etapaId, dataISO) {
+    localStorage.setItem(`mo_prazo_frq_${fid}_et${etapaId}`, dataISO);
+    try { db.ref(`etapas/${fid}/et${etapaId}/prazo_franqueado`).set(dataISO); } catch(e) {}
+  },
+
+  // Verificar atrasos e registrar alertas
+  verificarAtrasos(fid, etapaId, f) {
+    try {
+      const prazoFrq = localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`);
+      const prazoGes = localStorage.getItem(`mo_prazo_${fid}_et${etapaId}`);
+      const hoje2    = new Date(); hoje2.setHours(0,0,0,0);
+      const alertas  = JSON.parse(localStorage.getItem('mo_alertas_agenda')||'[]');
+      
+      [{ prazo: prazoFrq, tipo: 'prazo_franqueado' },
+       { prazo: prazoGes, tipo: 'prazo_gestora' }].forEach(({prazo, tipo}) => {
+        if(!prazo) return;
+        const dp = new Date(prazo + 'T00:00');
+        if(dp < hoje2) {
+          const jaExiste = alertas.find(a => a.fid===fid && a.etapa===etapaId && a.tipo===tipo);
+          if(!jaExiste) {
+            alertas.push({
+              id:        `alerta_${fid}_${etapaId}_${tipo}`,
+              tipo,
+              fid,
+              etapa:     etapaId,
+              franqueado:f?.nome || '',
+              ticket:    f?.ticket || '',
+              prazo,
+              criadoEm:  new Date().toLocaleDateString('pt-BR'),
+            });
+            localStorage.setItem('mo_alertas_agenda', JSON.stringify(alertas));
+          }
+        }
+      });
+    } catch(e) {}
+  },
 };
 
 /* ══════════════════════════════════════════════════════════════
