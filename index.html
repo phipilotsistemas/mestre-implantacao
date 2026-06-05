@@ -3385,26 +3385,32 @@ function responderChamado(fid, chamadoId) {
   );
 }
 
-function confirmarRespostaChamado(fid, chamadoId) {
+async function confirmarRespostaChamado(fid, chamadoId) {
   const texto = $('resp-texto')?.value?.trim();
   if(!texto) { toast('Digite a resposta.','rd'); return; }
 
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
+  try {
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
 
-  c.respostaGestor  = texto;
-  c.gestorNome      = SESSAO.nome;
-  c.gestorToken     = SESSAO.token;
-  c.dataResposta    = hoje() + ' às ' + agora();
-  c.status          = 'em_andamento';
+    ch.respostaGestor = texto;
+    ch.gestorNome     = SESSAO.nome;
+    ch.gestorToken    = SESSAO.token;
+    ch.dataResposta   = hoje() + ' às ' + agora();
+    ch.status         = 'em_andamento';
 
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+    await db.ref('chamados/' + fid).set(lista);
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
 
-  fecharModal();
-  toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
-  renderSuportePainel();
+    fecharModal();
+    toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, 'rd');
+  }
 }
 
 function definirPrazoChamado(fid, chamadoId) {
@@ -3422,43 +3428,50 @@ function definirPrazoChamado(fid, chamadoId) {
   );
 }
 
-function confirmarPrazoChamado(fid, chamadoId) {
+async function confirmarPrazoChamado(fid, chamadoId) {
   const dataISO = $('prazo-data')?.value;
   if(!dataISO) { toast('Selecione uma data.','rd'); return; }
   const [y,m,d]  = dataISO.split('-');
   const prazoFmt = d + '/' + m + '/' + y;
 
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
-
-  c.prazoGestor = prazoFmt;
-  c.prazoObs    = $('prazo-obs')?.value?.trim() || '';
-
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
-
-  // Adicionar na agenda
   try {
-    const eventos = JSON.parse(localStorage.getItem('mo_agenda_eventos') || '[]');
-    eventos.push({
-      id:     'chamado_' + chamadoId,
-      tipo:   'prazo',
-      titulo: 'Prazo: ' + (c.titulo||chamadoId),
-      data:   prazoFmt,
-      fid,
-      chamadoId,
-      franqueado: c.franqueado,
-      ticket:     c.ticket,
-      cor:        'cal-ev-prazo',
-    });
-    localStorage.setItem('mo_agenda_eventos', JSON.stringify(eventos));
-  } catch(e) {}
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
 
-  fecharModal();
-  toast('Prazo definido: ' + prazoFmt + '. Evento adicionado à agenda.', 'gn');
-  renderSuportePainel();
+    ch.prazoGestor = prazoFmt;
+    ch.prazoObs    = $('prazo-obs')?.value?.trim() || '';
+
+    await db.ref('chamados/' + fid).set(lista);
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+
+    // Adicionar na agenda
+    try {
+      const eventos = JSON.parse(localStorage.getItem('mo_agenda_eventos') || '[]');
+      eventos.push({
+        id:         'chamado_' + chamadoId,
+        tipo:       'prazo',
+        titulo:     'Prazo: ' + (ch.titulo || chamadoId),
+        data:       prazoFmt,
+        fid,
+        chamadoId,
+        franqueado: ch.franqueado,
+        ticket:     ch.ticket,
+        cor:        'cal-ev-prazo',
+      });
+      localStorage.setItem('mo_agenda_eventos', JSON.stringify(eventos));
+    } catch(e2) {}
+
+    fecharModal();
+    toast('Prazo definido: ' + prazoFmt + '. Evento adicionado à agenda.', 'gn');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao salvar prazo: ' + e.message, 'rd');
+  }
 }
+
 
 function resolverSemReuniaChamado(fid, chamadoId) {
   abrirModal('Resolver chamado',`
@@ -3476,26 +3489,36 @@ function resolverSemReuniaChamado(fid, chamadoId) {
   );
 }
 
-function confirmarResolucaoChamado(fid, chamadoId) {
+async function confirmarResolucaoChamado(fid, chamadoId) {
   const texto = $('resolv-texto')?.value?.trim();
   if(!texto) { toast('Descreva a solução.','rd'); return; }
 
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
+  try {
+    // Ler do Firebase (fonte da verdade)
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
 
-  c.respostaGestor  = texto;
-  c.gestorNome      = SESSAO.nome;
-  c.dataResposta    = hoje() + ' às ' + agora();
-  c.status          = 'em_andamento'; // concluído só após franqueado assinar
-  c.resolvidoGestor = true;
+    ch.respostaGestor  = texto;
+    ch.gestorNome      = SESSAO.nome;
+    ch.gestorToken     = SESSAO.token;
+    ch.dataResposta    = hoje() + ' às ' + agora();
+    ch.status          = 'em_andamento';
+    ch.resolvidoGestor = true;
 
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+    // Salvar no Firebase
+    await db.ref('chamados/' + fid).set(lista);
+    // Atualizar localStorage como cache
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
 
-  fecharModal();
-  toast('Chamado marcado como resolvido. Aguardando confirmação do franqueado.', 'gn');
-  renderSuportePainel();
+    fecharModal();
+    toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, 'rd');
+  }
 }
 
 function cancelarChamado(fid, chamadoId) {
@@ -3510,25 +3533,31 @@ function cancelarChamado(fid, chamadoId) {
   );
 }
 
-function confirmarCancelamentoChamado(fid, chamadoId) {
+async function confirmarCancelamentoChamado(fid, chamadoId) {
   const motivo = $('cancel-motivo')?.value?.trim();
   if(!motivo) { toast('Informe o motivo.','rd'); return; }
 
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
+  try {
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
 
-  c.status           = 'cancelado';
-  c.motivoCancelamento = motivo;
-  c.canceladoPor     = SESSAO.nome;
-  c.dataCancelamento = hoje() + ' às ' + agora();
+    ch.status            = 'cancelado';
+    ch.motivoCancelamento= motivo;
+    ch.canceladoPor      = SESSAO.nome;
+    ch.dataCancelamento  = hoje() + ' às ' + agora();
 
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+    await db.ref('chamados/' + fid).set(lista);
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
 
-  fecharModal();
-  toast('Chamado cancelado e registrado.', 'or');
-  renderSuportePainel();
+    fecharModal();
+    toast('Chamado cancelado e registrado.', 'or');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, 'rd');
+  }
 }
 
 function atualizarBadgeChamados() {
