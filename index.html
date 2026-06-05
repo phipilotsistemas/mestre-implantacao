@@ -1489,6 +1489,18 @@ function iniciarLogin() {
         PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
         localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
         iniciarApp();
+        // Listener em tempo real para novas reuniões
+        db.ref('reunioes').on('value', snap => {
+          const raw = snap.val();
+          if(!raw) return;
+          const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+          localStorage.setItem('mo_reunioes', JSON.stringify(lista));
+          atualizarBadgesAgenda();
+          atualizarBadgeReunioes();
+          // Atualizar submenu se estiver aberto
+          const subR = $('sub-reunioes');
+          if(subR && subR.style.display !== 'none') renderSubReunioes();
+        });
         return;
       }
       // Usuário Firebase autenticado mas não é da equipe do painel
@@ -3481,6 +3493,184 @@ function atualizarBadgeChamados() {
   if(badge) {
     badge.style.display = total > 0 ? 'inline-block' : 'none';
     badge.textContent   = total;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO D — TROCA DE E-MAIL DO PORTAL
+   Disponível SOMENTE quando senha ainda é provisória (123456)
+   Após troca de senha pelo franqueado, fluxo é bloqueado
+   Gestor assina documento formal de solicitação de alteração
+══════════════════════════════════════════════════════════════ */
+
+function abrirTrocaEmailPortal(fid) {
+  const f = getFranqueado(fid);
+  if(!f) return;
+
+  const senhaTrocada = localStorage.getItem('senha_trocada_' + fid) === '1';
+  if(senhaTrocada) {
+    toast('Troca de e-mail bloqueada. O franqueado já alterou a senha — somente ele pode autorizar mudanças de acesso.', 'rd');
+    return;
+  }
+
+  abrirModal('Corrigir e-mail de acesso ao portal', `
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:4px">⚠ Atenção — Operação sensível</div>
+      <div style="font-size:11px;color:#92400E;line-height:1.6">
+        Esta operação só é permitida <b>antes</b> do franqueado trocar a senha provisória.<br>
+        Após a troca, apenas o franqueado pode autorizar alterações de acesso.<br>
+        A ação gera um <b>documento formal assinado</b> que fica no dossiê.
+      </div>
+    </div>
+
+    <div style="display:grid;gap:12px;margin-bottom:14px">
+      <div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">E-mail atual (incorreto)</div>
+        <div style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:13px;font-weight:700;color:var(--red)">${f.email || '—'}</div>
+      </div>
+      <div class="field">
+        <label>Novo e-mail correto <span style="color:var(--red)">*</span></label>
+        <input class="inp" type="email" id="novo-email-portal" placeholder="novoemail@exemplo.com">
+      </div>
+      <div class="field">
+        <label>Confirmar novo e-mail <span style="color:var(--red)">*</span></label>
+        <input class="inp" type="email" id="conf-email-portal" placeholder="Repita o e-mail">
+      </div>
+    </div>
+
+    <div style="background:#FEE2E2;border-radius:8px;padding:10px 12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:#DC2626;margin-bottom:4px">🔑 Confirme sua identidade</div>
+      <div style="font-size:11px;color:#DC2626;margin-bottom:8px">Digite a senha provisória do portal (<b>123456</b>) para autorizar esta operação:</div>
+      <input class="inp" type="password" id="senha-confirm-troca" placeholder="Digite 123456">
+    </div>
+
+    <div id="troca-email-ass-container"></div>
+    <div id="troca-email-erro" style="display:none;color:var(--red);font-size:11px;margin-top:8px"></div>
+  `,
+  `<button class="btn" onclick="fecharModal()">Cancelar</button>
+   <button class="btn primary" onclick="verificarETrocaEmail('${fid}')">Verificar e prosseguir</button>`
+  );
+}
+
+function verificarETrocaEmail(fid) {
+  const novoEmail  = $('novo-email-portal')?.value?.trim().toLowerCase();
+  const confEmail  = $('conf-email-portal')?.value?.trim().toLowerCase();
+  const senha      = $('senha-confirm-troca')?.value;
+  const erroEl     = $('troca-email-erro');
+  const assContainer = $('troca-email-ass-container');
+
+  erroEl.style.display = 'none';
+
+  if(!novoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novoEmail)) {
+    erroEl.style.display='block'; erroEl.textContent='E-mail inválido.'; return;
+  }
+  if(novoEmail !== confEmail) {
+    erroEl.style.display='block'; erroEl.textContent='Os e-mails não coincidem.'; return;
+  }
+  if(senha !== '123456') {
+    erroEl.style.display='block'; erroEl.textContent='Senha provisória incorreta. Use 123456.'; return;
+  }
+
+  const f = getFranqueado(fid);
+  const declaracao = `Eu, ${SESSAO.nome}, na qualidade de ${SESSAO.cargo||'Gestor'} da ${CONFIG_EMPRESA?.nome||'Mestre da Obra Franquias Ltda'}, declaro para todos os fins legais que o e-mail de acesso ao portal do franqueado ${f.nome} (${f.ticket}) foi alterado de "${f.email||'—'}" para "${novoEmail}", em ${hoje()} às ${agora()}, com confirmação da senha provisória de acesso. Esta operação é realizada antes da primeira troca de senha pelo franqueado, conforme registro do sistema. A presente declaração possui validade jurídica nos termos da Lei n.º 14.063/2020.`;
+
+  if(assContainer) {
+    assContainer.innerHTML = '';
+    renderAssBox('troca-email-ass-container', declaracao, 'Assinar e confirmar alteração de e-mail', async () => {
+      await confirmarTrocaEmail(fid, novoEmail, declaracao);
+    });
+  }
+}
+
+async function confirmarTrocaEmail(fid, novoEmail, declaracao) {
+  const f    = getFranqueado(fid);
+  const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+  const emailAntigo = f.email;
+
+  try {
+    // 1. Buscar uid do usuário no Firebase
+    const snap = await db.ref('portal_usuarios').once('value');
+    const usuarios = snap.val() || {};
+    let uidAntigo = null;
+    Object.entries(usuarios).forEach(([uid, dados]) => {
+      if(dados.fid === fid) uidAntigo = uid;
+    });
+
+    // 2. Criar novo usuário com e-mail correto (app secundário)
+    const novaCred = await authSecundario.createUserWithEmailAndPassword(novoEmail, '123456');
+    const novoUid  = novaCred.user.uid;
+
+    // 3. Salvar mapeamento novo uid → fid
+    await db.ref('portal_usuarios/' + novoUid).set({ fid, email: novoEmail });
+
+    // 4. Remover mapeamento antigo se existir
+    if(uidAntigo) {
+      await db.ref('portal_usuarios/' + uidAntigo).remove();
+    }
+
+    // 5. Deslogar do app secundário
+    await authSecundario.signOut();
+
+    // 6. Atualizar ficha do franqueado
+    const registro = {
+      tipo:         'troca_email',
+      emailAntigo,
+      emailNovo:    novoEmail,
+      por:          SESSAO.nome,
+      cargo:        SESSAO.cargo,
+      token:        SESSAO.token,
+      declaracao,
+      hash,
+      data:         hoje(),
+      hora:         agora(),
+      timestamp:    Date.now(),
+    };
+
+    const novoHist = [...(f.historico||[]), {
+      data:  hoje(),
+      texto: `E-mail de acesso alterado de "${emailAntigo}" para "${novoEmail}" por ${SESSAO.nome}. Hash: ${hash}`,
+      autor: SESSAO.nome,
+    }];
+
+    atualizarFranqueado(fid, {
+      email:        novoEmail,
+      historico:    novoHist,
+      trocaEmail:   registro,
+    });
+
+    // 7. Gerar PDF do documento formal no Drive
+    const f2 = getFranqueado(fid);
+    const pastaId99 = f2?.drivePasstas?.pasta_et99_id;
+    if(pastaId99) {
+      gerarPDFNoDrive('arquivamento', pastaId99, {
+        ticket:         f.ticket,
+        nomeFranqueado: f.nome,
+        por:            SESSAO.nome,
+        cargo:          SESSAO.cargo,
+        justificativa:  `Alteração de e-mail de acesso de "${emailAntigo}" para "${novoEmail}".`,
+        declaracao,
+        hash,
+        data:           hoje(),
+        hora:           agora(),
+      }).catch(()=>{});
+    }
+
+    fecharModal();
+    fecharDrawer();
+    toast(`E-mail alterado para ${novoEmail}. Documento formal gerado.`, 'gn');
+    renderFranqueados();
+
+  } catch(err) {
+    const erroEl = $('troca-email-erro');
+    if(erroEl) {
+      erroEl.style.display = 'block';
+      if(err.code === 'auth/email-already-in-use') {
+        erroEl.textContent = 'Este e-mail já está cadastrado no sistema.';
+      } else {
+        erroEl.textContent = 'Erro: ' + (err.message || 'tente novamente.');
+      }
+    }
   }
 }
 
@@ -9664,6 +9854,23 @@ function buildFichaAcesso(f, ficha) {
       '</div>' +
 
       '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">' +
+        // Troca de e-mail — só aparece se senha ainda é provisória
+        (localStorage.getItem('senha_trocada_'+f.id) !== '1' ? (
+          '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+            '<div>' +
+              '<div style="font-size:12px;font-weight:700;color:#92400E">⚠ E-mail de acesso incorreto?</div>' +
+              '<div style="font-size:11px;color:#92400E;margin-top:2px">Esta opção só está disponível enquanto a senha for provisória.</div>' +
+            '</div>' +
+            '<button onclick="abrirTrocaEmailPortal(\'' + f.id + '\')" ' +
+              'style="padding:7px 14px;border-radius:8px;background:#92400E;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700;flex-shrink:0">' +
+              'Corrigir e-mail' +
+            '</button>' +
+          '</div>'
+        ) : (
+          '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#166534;font-weight:700">' +
+            '🔒 Troca de e-mail bloqueada — franqueado já alterou a senha.' +
+          '</div>'
+        )) +
         '<div class="field"><label>Observações gerais</label>' +
           '<textarea class="inp" id="ficha-obs_acesso" rows="3" placeholder="Outras informações relevantes sobre acesso ou documentação...">' + (ficha.obs_acesso||'') + '</textarea>' +
         '</div>' +
@@ -10284,12 +10491,23 @@ function atualizarBadgesAgenda() {
     const dias = Math.floor((d-hoje2)/(864e5));
     return !p.concluido && dias >= 0 && dias <= 2;
   });
+  // Reuniões novas agendadas pelos franqueados
+  let reunioesNovas = 0;
+  try {
+    const reunioes = JSON.parse(localStorage.getItem('mo_reunioes') || '[]');
+    reunioesNovas = reunioes.filter(r => r.status === 'agendada' && !r.vistoPeloGestor).length;
+  } catch(e) {}
+
+  const totalAgenda = prazosAlert.length + reunioesNovas;
   const badgeAg = $('badge-agenda');
   if(badgeAg) {
-    badgeAg.textContent = prazosAlert.length||'0';
-    badgeAg.style.background = prazosAlert.length ? 'var(--red)' : 'var(--accent)';
-    badgeAg.style.color = prazosAlert.length ? '#fff' : 'var(--primary-dark)';
+    badgeAg.textContent = totalAgenda || '0';
+    badgeAg.style.background = reunioesNovas > 0 ? '#F5A623' : prazosAlert.length ? 'var(--red)' : 'var(--accent)';
+    badgeAg.style.color = reunioesNovas > 0 ? '#1B3F8B' : prazosAlert.length ? '#fff' : 'var(--primary-dark)';
   }
+
+  // Atualizar badge do submenu Reuniões
+  atualizarBadgeReunioes();
 
   // Badge alertas — tarefas sem ciência > 12h
   const tarefasSemCiencia = getTarefas().filter(t => {
@@ -10319,10 +10537,393 @@ function atualizarBadgesAgenda() {
 }
 
 // ── RENDER AGENDA COM SUBMENUS ──
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO C — AGENDA DE REUNIÕES VIRTUAIS
+   Gestor configura disponibilidade recorrente
+   Franqueado agenda com mínimo 24h de antecedência
+   Sistema registra, notifica e controla todo o ciclo
+══════════════════════════════════════════════════════════════ */
+
+// ── DADOS DE DISPONIBILIDADE ──────────────────────────────────
+function getDisponibilidade(token) {
+  try {
+    const t = token || SESSAO?.token || '';
+    return JSON.parse(localStorage.getItem('agenda_disp_' + t) || '{}');
+  } catch(e) { return {}; }
+}
+
+function salvarDisponibilidade(disp, token) {
+  const t = token || SESSAO?.token || '';
+  localStorage.setItem('agenda_disp_' + t, JSON.stringify(disp));
+  // Sincronizar no Firebase para o portal ler
+  try { db.ref('disponibilidade/' + t).set(disp); } catch(e) {}
+}
+
+// ── DADOS DE REUNIÕES ─────────────────────────────────────────
+function getReunioes() {
+  try { return JSON.parse(localStorage.getItem('mo_reunioes') || '[]'); } catch(e) { return []; }
+}
+
+function salvarReunioes(lista) {
+  localStorage.setItem('mo_reunioes', JSON.stringify(lista));
+  try { db.ref('reunioes').set(lista); } catch(e) {}
+}
+
+function gerarIdReuniao() {
+  const seq = parseInt(localStorage.getItem('reuniao_seq') || '0') + 1;
+  localStorage.setItem('reuniao_seq', String(seq));
+  return 'REU-' + String(seq).padStart(4,'0');
+}
+
+// ── CONFIGURAR DISPONIBILIDADE ────────────────────────────────
+function abrirConfigurarDisponibilidade() {
+  const disp = getDisponibilidade();
+  const dias  = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const vals  = ['seg','ter','qua','qui','sex','sab'];
+
+  abrirModal('⚙ Configurar disponibilidade para reuniões',`
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">
+      Defina os dias e horários em que você aceita reuniões virtuais.<br>
+      Os franqueados verão essas vagas com no mínimo 24h de antecedência.
+    </div>
+
+    <!-- Link da reunião -->
+    <div class="field" style="margin-bottom:16px">
+      <label>Link fixo da sala de reunião</label>
+      <input class="inp" id="disp-link" value="${disp.link||''}"
+        placeholder="https://meet.google.com/xxx-xxxx-xxx ou https://zoom.us/j/...">
+      <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Cole o link da sua sala fixa do Google Meet, Zoom ou Teams.</div>
+    </div>
+
+    <!-- Duração padrão -->
+    <div class="field" style="margin-bottom:16px">
+      <label>Duração padrão das reuniões</label>
+      <select class="inp" id="disp-duracao">
+        ${['30','45','60','90'].map(d=>`<option value="${d}" ${(disp.duracao||'60')===d?'selected':''}>${d} minutos</option>`).join('')}
+      </select>
+    </div>
+
+    <!-- Dias e horários -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Dias disponíveis e horários</div>
+    ${dias.map((dia,i) => {
+      const val   = vals[i];
+      const ativo = disp.dias?.[val]?.ativo || false;
+      const hors  = (disp.dias?.[val]?.horarios || []).join(', ');
+      return `
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;min-width:80px">
+          <input type="checkbox" id="disp-dia-${val}" ${ativo?'checked':''} style="accent-color:var(--primary)">
+          <span style="font-size:13px;font-weight:600">${dia}</span>
+        </label>
+        <input class="inp" id="disp-hor-${val}" value="${hors}"
+          placeholder="09:00, 14:00, 16:30"
+          style="flex:1;font-size:12px;padding:6px 10px"
+          ${ativo?'':'disabled'}>
+      </div>`;
+    }).join('')}
+
+    <div style="font-size:10px;color:var(--text-muted);margin-top:10px">
+      Horários: separe por vírgula. Ex: <b>09:00, 14:00, 16:30</b>
+    </div>
+
+
+  `,
+  `<button class="btn" onclick="fecharModal()">Cancelar</button>
+   <button class="btn primary" onclick="salvarConfiguracaoDisponibilidade()">Salvar disponibilidade</button>`
+  );
+  // Ativar/desabilitar inputs de horário conforme checkbox
+  setTimeout(() => {
+    document.querySelectorAll('[id^="disp-dia-"]').forEach(chk => {
+      chk.addEventListener('change', function() {
+        const val = this.id.replace('disp-dia-','');
+        const inp = document.getElementById('disp-hor-'+val);
+        if(inp) inp.disabled = !this.checked;
+      });
+    });
+  }, 50);
+}
+
+function salvarConfiguracaoDisponibilidade() {
+  const link    = $('disp-link')?.value?.trim() || '';
+  const duracao = $('disp-duracao')?.value || '60';
+  const vals    = ['seg','ter','qua','qui','sex','sab'];
+  const dias    = {};
+
+  vals.forEach(val => {
+    const chk = document.getElementById('disp-dia-'+val);
+    const inp = document.getElementById('disp-hor-'+val);
+    if(chk?.checked) {
+      const horarios = (inp?.value||'').split(',')
+        .map(h=>h.trim())
+        .filter(h=>/^\d{2}:\d{2}$/.test(h));
+      dias[val] = { ativo: true, horarios };
+    } else {
+      dias[val] = { ativo: false, horarios: [] };
+    }
+  });
+
+  const disp = { link, duracao, dias, atualizadoEm: hoje() + ' às ' + agora() };
+  salvarDisponibilidade(disp);
+  fecharModal();
+  toast('Disponibilidade salva. Franqueados já podem ver as vagas.', 'gn');
+  renderSubReunioes();
+}
+
+// ── SUB-ABA REUNIÕES (PAINEL) ─────────────────────────────────
+function renderSubReunioes() {
+  const el = $('sub-reunioes');
+  if(!el) return;
+
+  const reunioes = getReunioes();
+  const disp     = getDisponibilidade();
+
+  // Separar por status
+  const pendentes  = reunioes.filter(r => r.status === 'agendada');
+  const historico  = reunioes.filter(r => ['realizada','cancelada','reagendada'].includes(r.status));
+
+  atualizarBadgeReunioes();
+
+  el.innerHTML = `
+    <!-- Status da disponibilidade -->
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${disp.link?'#F0FDF4':'#FEF3C7'};border-radius:10px;margin-bottom:16px;border:1px solid ${disp.link?'#BBF7D0':'#FDE68A'}">
+      <div style="font-size:20px">${disp.link?'✅':'⚙'}</div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:${disp.link?'var(--green)':'#92400E'}">
+          ${disp.link?'Disponibilidade configurada':'Disponibilidade não configurada'}
+        </div>
+        <div style="font-size:11px;color:var(--text-dim)">
+          ${disp.link
+            ? `Link: ${disp.link.slice(0,40)}... · Duração: ${disp.duracao||60}min`
+            : 'Clique na engrenagem ⚙ para configurar seus horários disponíveis.'}
+        </div>
+      </div>
+      <button onclick="abrirConfigurarDisponibilidade()" style="margin-left:auto;padding:6px 12px;border-radius:8px;background:${disp.link?'var(--primary)':'#F5A623'};color:${disp.link?'#fff':'#1B3F8B'};border:none;cursor:pointer;font-size:11px;font-weight:700">
+        ${disp.link?'Editar':'Configurar'}
+      </button>
+    </div>
+
+    <!-- Reuniões agendadas -->
+    ${pendentes.length > 0 ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);margin-bottom:8px">
+        🟡 Reuniões agendadas (${pendentes.length})
+      </div>
+      ${pendentes.map(r => cardReuniaoPainel(r)).join('')}
+    </div>` : `
+    <div style="text-align:center;padding:32px 20px;color:var(--text-dim);background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:16px">
+      <div style="font-size:28px;margin-bottom:8px">📅</div>
+      <div style="font-size:13px;font-weight:700">Nenhuma reunião agendada</div>
+      <div style="font-size:11px;margin-top:4px">Os franqueados agendam pelo portal quando há vagas disponíveis.</div>
+    </div>`}
+
+    <!-- Histórico -->
+    ${historico.length > 0 ? `
+    <details>
+      <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none;margin-bottom:8px">
+        Ver histórico de reuniões (${historico.length})
+      </summary>
+      ${historico.map(r => cardReuniaoPainel(r)).join('')}
+    </details>` : ''}
+  `;
+}
+
+function cardReuniaoPainel(r) {
+  const cor = {agendada:'#D97706',realizada:'#16A34A',cancelada:'#DC2626',reagendada:'#7C3AED'};
+  const lbl = {agendada:'Agendada',realizada:'Realizada',cancelada:'Cancelada',reagendada:'Reagendada'};
+  return `
+    <div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--border);border-left:4px solid ${cor[r.status]||'var(--border)'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:var(--text)">${r.id} · ${r.franqueado} (${r.ticket})</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+            📅 ${r.data} às ${r.hora} · ⏱ ${r.duracao||60}min · Etapa ${r.etapa||'—'}
+          </div>
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:${cor[r.status]||'var(--border)'}22;color:${cor[r.status]||'var(--text-muted)'}">
+          ${lbl[r.status]||r.status}
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:6px"><b>Motivo:</b> ${r.motivo}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">${r.descricao}</div>
+      ${r.link ? `<a href="${r.link}" target="_blank" style="font-size:11px;color:var(--primary);font-weight:700">🔗 Entrar na reunião</a>` : ''}
+      ${r.status === 'agendada' ? `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <button onclick="resolverSemReuniao('${r.id}')"
+          style="padding:6px 12px;border-radius:8px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;cursor:pointer;font-size:11px;font-weight:700">
+          ✓ Resolver sem reunião
+        </button>
+        <button onclick="reagendarReuniao('${r.id}')"
+          style="padding:6px 12px;border-radius:8px;background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;cursor:pointer;font-size:11px;font-weight:700">
+          📅 Reagendar
+        </button>
+        <button onclick="cancelarReuniao('${r.id}')"
+          style="padding:6px 12px;border-radius:8px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;cursor:pointer;font-size:11px;font-weight:700">
+          ✕ Cancelar
+        </button>
+      </div>` : ''}
+      ${r.justificativaCancelamento ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic">Motivo: ${r.justificativaCancelamento}</div>` : ''}
+    </div>`;
+}
+
+// ── AÇÕES DO GESTOR ───────────────────────────────────────────
+function resolverSemReuniao(reuId) {
+  abrirModal('Resolver sem reunião',`
+    <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--green)">✓ Encerrar sem realizar reunião</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">O franqueado será notificado. Informe como o assunto foi resolvido.</div>
+    </div>
+    <div class="field">
+      <label>Como foi resolvido <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="rsm-resolucao" rows="3" placeholder="Ex: Assunto esclarecido via MO Talk. Documentação orientada pelo gestor."></textarea>
+    </div>
+    <div id="rsm-ass-container"></div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>`);
+
+  setTimeout(() => {
+    const ta = $('rsm-resolucao');
+    let rendered = false;
+    ta?.addEventListener('input', () => {
+      if(ta.value.trim().length >= 10 && !rendered) {
+        rendered = true;
+        const decl = `Eu, ${SESSAO.nome}, declaro que a reunião solicitada foi encerrada sem realização em ${hoje()} às ${agora()}. Resolução: ${ta.value.trim()}.`;
+        renderAssBox('rsm-ass-container', decl, 'Assinar e confirmar resolução', () => {
+          confirmarResolucaoSemReuniao(reuId, ta.value.trim(), decl);
+        });
+      }
+    });
+  }, 100);
+}
+
+function confirmarResolucaoSemReuniao(reuId, resolucao, declaracao) {
+  const hash  = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+  const lista = getReunioes();
+  const r     = lista.find(x => x.id === reuId);
+  if(!r) return;
+  r.status               = 'realizada';
+  r.resolvidaSemReuniao  = true;
+  r.resolucao            = resolucao;
+  r.declaracaoGestor     = declaracao;
+  r.hashGestor           = hash;
+  r.dataResolucao        = hoje() + ' às ' + agora();
+  r.gestorNome           = SESSAO.nome;
+  salvarReunioes(lista);
+  // Notificar no Firebase para o portal ver
+  try { db.ref('reunioes_notif/' + r.fid).set({ tipo:'resolvida_sem_reuniao', reuId, resolucao, data: hoje() }); } catch(e) {}
+  fecharModal();
+  toast('Reunião encerrada sem realização. Franqueado notificado.', 'gn');
+  renderSubReunioes();
+}
+
+function reagendarReuniao(reuId) {
+  abrirModal('Reagendar reunião',`
+    <div class="field" style="margin-bottom:12px">
+      <label>Nova data <span style="color:var(--red)">*</span></label>
+      <input class="inp" type="date" id="reag-data">
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Novo horário <span style="color:var(--red)">*</span></label>
+      <input class="inp" type="time" id="reag-hora">
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Justificativa <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="reag-just" rows="2" placeholder="Motivo do reagendamento..."></textarea>
+    </div>
+    <div id="reag-ass-container"></div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>`);
+
+  setTimeout(() => {
+    const ta = $('reag-just');
+    let rendered = false;
+    ta?.addEventListener('input', () => {
+      if(ta.value.trim().length >= 10 && !rendered) {
+        rendered = true;
+        const decl = `Eu, ${SESSAO.nome}, declaro que a reunião ${reuId} foi reagendada em ${hoje()} às ${agora()}. Justificativa: ${ta.value.trim()}.`;
+        renderAssBox('reag-ass-container', decl, 'Assinar reagendamento', () => {
+          const dataV = $('reag-data')?.value;
+          const horaV = $('reag-hora')?.value;
+          if(!dataV || !horaV) { toast('Preencha data e horário.','rd'); return; }
+          const [y,m,d] = dataV.split('-');
+          const novaData = d+'/'+m+'/'+y;
+          const hash = Math.abs(decl.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+          const lista = getReunioes();
+          const r = lista.find(x => x.id === reuId);
+          if(!r) return;
+          const dataAnt = r.data; const horaAnt = r.hora;
+          r.dataAnterior = dataAnt; r.horaAnterior = horaAnt;
+          r.data = novaData; r.hora = horaV;
+          r.status = 'reagendada';
+          r.justificativaCancelamento = ta.value.trim();
+          r.declaracaoGestor = decl; r.hashGestor = hash;
+          r.gestorNome = SESSAO.nome;
+          salvarReunioes(lista);
+          try { db.ref('reunioes_notif/'+r.fid).set({tipo:'reagendada',reuId,novaData,horaV,data:hoje()}); } catch(e){}
+          fecharModal();
+          toast('Reunião reagendada para '+novaData+' às '+horaV+'.','gn');
+          renderSubReunioes();
+        });
+      }
+    });
+  }, 100);
+}
+
+function cancelarReuniao(reuId) {
+  abrirModal('Cancelar reunião',`
+    <div class="field" style="margin-bottom:12px">
+      <label>Justificativa <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="canc-just" rows="3" placeholder="Motivo do cancelamento..."></textarea>
+    </div>
+    <div id="canc-ass-container"></div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>`);
+
+  setTimeout(() => {
+    const ta = $('canc-just');
+    let rendered = false;
+    ta?.addEventListener('input', () => {
+      if(ta.value.trim().length >= 10 && !rendered) {
+        rendered = true;
+        const decl = `Eu, ${SESSAO.nome}, declaro que cancelei a reunião ${reuId} em ${hoje()} às ${agora()}. Justificativa: ${ta.value.trim()}.`;
+        renderAssBox('canc-ass-container', decl, 'Assinar cancelamento', () => {
+          const hash = Math.abs(decl.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+          const lista = getReunioes();
+          const r = lista.find(x => x.id === reuId);
+          if(!r) return;
+          r.status = 'cancelada';
+          r.justificativaCancelamento = ta.value.trim();
+          r.declaracaoGestor = decl; r.hashGestor = hash;
+          r.gestorNome = SESSAO.nome;
+          r.dataCancelamento = hoje() + ' às ' + agora();
+          salvarReunioes(lista);
+          try { db.ref('reunioes_notif/'+r.fid).set({tipo:'cancelada',reuId,motivo:ta.value.trim(),data:hoje()}); } catch(e){}
+          fecharModal();
+          toast('Reunião cancelada e registrada.','or');
+          renderSubReunioes();
+        });
+      }
+    });
+  }, 100);
+}
+
+function atualizarBadgeReunioes() {
+  const reunioes = getReunioes();
+  const n = reunioes.filter(r => r.status === 'agendada').length;
+  const badge = $('badge-reunioes-sub');
+  if(badge) {
+    badge.style.display = n > 0 ? 'inline-block' : 'none';
+    badge.textContent   = n;
+  }
+}
+
 function renderAgenda() {
   $('content').innerHTML =
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
-      '<div style="font-size:15px;font-weight:800;color:var(--text)">Agenda</div>' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<div style="font-size:15px;font-weight:800;color:var(--text)">Agenda</div>' +
+        '<button onclick="abrirConfigurarDisponibilidade()" title="Configurar disponibilidade para reuniões"' +
+          'style="width:30px;height:30px;border-radius:8px;background:var(--bg);border:1.5px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
+        '</button>' +
+      '</div>' +
       '<div style="position:relative">' +
         '<button id="btn-novo-agenda" onclick="toggleMenuNovoAgenda()" ' +
           'style="width:40px;height:40px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(245,166,35,.3);transition:all .18s cubic-bezier(.34,1.56,.64,1)">' +
@@ -10338,27 +10939,45 @@ function renderAgenda() {
     '</div>' +
     '<div class="agenda-submenu">' +
       '<button class="agenda-sub-btn ativo" data-sub="calendario" onclick="trocarSubAgenda(\'calendario\',this)">Calendário</button>' +
+      '<button class="agenda-sub-btn" data-sub="reunioes" onclick="trocarSubAgenda(\'reunioes\',this)">Reuniões <span id="badge-reunioes-sub" style="display:none;background:#F5A623;color:#1B3F8B;padding:1px 6px;border-radius:10px;font-size:10px;margin-left:4px">0</span></button>' +
       '<button class="agenda-sub-btn" data-sub="prazos"     onclick="trocarSubAgenda(\'prazos\',this)">Prazos <span id="badge-prazos-sub" style="background:var(--accent);color:var(--primary-dark);padding:1px 6px;border-radius:10px;font-size:10px;margin-left:4px">0</span></button>' +
       '<button class="agenda-sub-btn" data-sub="tarefas"    onclick="trocarSubAgenda(\'tarefas\',this)">Minhas tarefas <span id="badge-tarefas" style="background:var(--accent);color:var(--primary-dark);padding:1px 6px;border-radius:10px;font-size:10px;margin-left:4px">0</span></button>' +
       '<button class="agenda-sub-btn" data-sub="delegadas"  onclick="trocarSubAgenda(\'delegadas\',this)">Delegadas</button>' +
     '</div>' +
     '<div id="sub-calendario"></div>' +
+    '<div id="sub-reunioes"  style="display:none"></div>' +
     '<div id="sub-prazos"    style="display:none"></div>' +
     '<div id="sub-tarefas"   style="display:none"></div>' +
     '<div id="sub-delegadas" style="display:none"></div>';
 
   renderSubCalendario();
+  renderSubReunioes();
   renderSubPrazos();
   renderSubTarefas();
   renderSubDelegadas();
   atualizarBadgesAgenda();
+  atualizarBadgeReunioes();
 }
 
 function trocarSubAgenda(sub, btn) {
   document.querySelectorAll('.agenda-sub-btn').forEach(b=>b.classList.remove('ativo'));
-  ['calendario','prazos','tarefas','delegadas'].forEach(s=>{
+  ['calendario','reunioes','prazos','tarefas','delegadas'].forEach(s=>{
     const el=$('sub-'+s); if(el) el.style.display = s===sub?'block':'none';
   });
+  if(sub === 'reunioes') {
+    renderSubReunioes();
+    // Marcar reuniões como vistas pelo gestor
+    try {
+      const lista = JSON.parse(localStorage.getItem('mo_reunioes') || '[]');
+      let mudou = false;
+      lista.forEach(r => { if(!r.vistoPeloGestor) { r.vistoPeloGestor = true; mudou = true; } });
+      if(mudou) {
+        localStorage.setItem('mo_reunioes', JSON.stringify(lista));
+        db.ref('reunioes').set(lista).catch(()=>{});
+        atualizarBadgesAgenda();
+      }
+    } catch(e) {}
+  }
   btn.classList.add('ativo');
 }
 
