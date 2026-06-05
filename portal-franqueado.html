@@ -1571,7 +1571,7 @@ function entrarNoPortal() {
   $('topbar-ticket').textContent = PORTAL.ticket || PORTAL.fid || '';
   irAba('inicio', document.querySelector('[data-aba=inicio]'));
   atualizarBadges();
-  // Listener em tempo real: atualizar dados do franqueado se o painel salvar algo novo
+  // Listener em tempo real: atualizar dados do franqueado
   try {
     db.ref('franqueados/' + PORTAL.fid).on('value', snap => {
       const f = snap.val();
@@ -1579,8 +1579,49 @@ function entrarNoPortal() {
       PORTAL.etapaAtual       = f.etapaAtual       ?? PORTAL.etapaAtual;
       PORTAL.processoIniciado = f.processoIniciado  ?? PORTAL.processoIniciado;
       PORTAL.portalLiberado   = f.portalLiberado    ?? PORTAL.portalLiberado;
-      // Atualizar pastas do Drive sempre que chegarem do painel
       if(f.drivePasstas) PORTAL.drivePasstas = f.drivePasstas;
+    });
+  } catch(e) {}
+
+  // Listener para chamados — atualiza badge e tela quando gestor responde
+  try {
+    db.ref('chamados/' + PORTAL.fid).on('value', snap => {
+      const raw = snap.val();
+      if(!raw) return;
+      const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+
+      // Atualizar cache local
+      try { localStorage.setItem('suporte_' + PORTAL.fid, JSON.stringify(lista)); } catch(e) {}
+
+      // Atualizar badge
+      const n = lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
+      const badge = document.getElementById('badge-suporte-p');
+      if(badge) {
+        badge.style.display = n > 0 ? 'block' : 'none';
+        badge.textContent   = n;
+      }
+
+      // Verificar se há resposta nova do gestor (notificação visual)
+      const comResposta = lista.filter(c =>
+        c.respostaGestor && c.status === 'em_andamento' && !c._vistoPeloFranqueado
+      );
+      if(comResposta.length > 0) {
+        // Toast de notificação
+        const ch = comResposta[0];
+        if(document.getElementById('badge-suporte-p')) {
+          // Só notifica se não estiver na aba suporte
+          if(_aba !== 'suporte') {
+            const badge2 = document.getElementById('badge-suporte-p');
+            if(badge2) {
+              badge2.style.background = '#F5A623';
+              badge2.style.color      = '#1B3F8B';
+            }
+          }
+        }
+      }
+
+      // Se estiver na aba suporte, re-renderizar
+      if(_aba === 'suporte') renderSuporte();
     });
   } catch(e) {}
 }
@@ -1762,7 +1803,7 @@ function irAba(aba, btn) {
   _aba = aba;
   document.querySelectorAll('.portal-nav-btn').forEach(b=>b.classList.remove('ativo'));
   if(btn) btn.classList.add('ativo');
-  ({inicio:renderInicio, etapas:renderEtapas, agenda:renderAgenda, chat:renderChat, suporte:renderSuporte})[aba]?.();
+  ({inicio:renderInicio, etapas:renderEtapas, agenda:renderAgenda, chat:renderChat, suporte:()=>renderSuporte()})[aba]?.();
 }
 
 /* ══ INÍCIO ══ */
@@ -1780,23 +1821,39 @@ function gerarIdChamado() {
   return 'SUP-' + String(seq).padStart(4, '0');
 }
 
-function getChamados() {
+// getChamados agora é async — lê do Firebase (fonte da verdade)
+async function getChamados() {
   try {
-    const snap = localStorage.getItem('suporte_' + PORTAL.fid);
-    return snap ? JSON.parse(snap) : [];
-  } catch(e) { return []; }
+    const snap = await db.ref('chamados/' + PORTAL.fid).once('value');
+    const raw  = snap.val();
+    if(!raw) return [];
+    return Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+  } catch(e) {
+    // Fallback localStorage
+    try {
+      const snap = localStorage.getItem('suporte_' + PORTAL.fid);
+      return snap ? JSON.parse(snap) : [];
+    } catch(e2) { return []; }
+  }
 }
 
 function salvarChamados(lista) {
-  localStorage.setItem('suporte_' + PORTAL.fid, JSON.stringify(lista));
-  // Sincronizar com Firebase para o painel do gestor ver
-  try {
-    db.ref('chamados/' + PORTAL.fid).set(lista);
-  } catch(e) {}
+  // Salvar no Firebase (fonte da verdade)
+  db.ref('chamados/' + PORTAL.fid).set(lista)
+    .catch(e => console.warn('salvarChamados Firebase:', e.message));
+  // Cache local
+  try { localStorage.setItem('suporte_' + PORTAL.fid, JSON.stringify(lista)); } catch(e) {}
 }
 
-function renderSuporte() {
-  const chamados = getChamados();
+async function renderSuporte() {
+  // Mostrar loading
+  $('portal-content').innerHTML = `
+    <div style="text-align:center;padding:40px 20px;color:var(--text-dim)">
+      <div style="font-size:24px;margin-bottom:8px">⏳</div>
+      <div style="font-size:12px">Carregando chamados...</div>
+    </div>`;
+
+  const chamados = await getChamados();
   const abertos  = chamados.filter(c => c.status === 'aberto');
   const andamento= chamados.filter(c => c.status === 'em_andamento');
   const concluidos= chamados.filter(c => c.status === 'concluido');
@@ -1960,8 +2017,8 @@ function confirmarAbrirChamado() {
   renderSuporte();
 }
 
-function assinarConclusaoChamado(chamadoId) {
-  const lista   = getChamados();
+async function assinarConclusaoChamado(chamadoId) {
+  const lista   = await getChamados();
   const chamado = lista.find(c => c.id === chamadoId);
   if(!chamado) return;
 
@@ -1978,7 +2035,7 @@ function assinarConclusaoChamado(chamadoId) {
   setTimeout(() => {
     renderAssBox('ass-conclusao-container', declaracao, 'Assinar e confirmar atendimento', async () => {
       const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
-      const lista2 = getChamados();
+      const lista2 = await getChamados();
       const c2 = lista2.find(c => c.id === chamadoId);
       if(c2) {
         c2.status              = 'concluido';
