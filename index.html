@@ -1611,7 +1611,19 @@ function ir(aba, btn, fid) {
 function getDados() {
   try {
     const s = localStorage.getItem('mo_franqueados');
-    if(s) return JSON.parse(s);
+    if(s) {
+      const dados = JSON.parse(s);
+      // Migrar: franqueados com processoIniciado:true mas etapaAtual:0 → etapaAtual:1
+      let migrou = false;
+      dados.forEach(f => {
+        if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) {
+          f.etapaAtual = 1;
+          migrou = true;
+        }
+      });
+      if(migrou) localStorage.setItem('mo_franqueados', JSON.stringify(dados));
+      return dados;
+    }
   } catch(e) {}
   return [];
 }
@@ -2782,7 +2794,7 @@ function abrirCadastroFranqueado() {
        <div class="grid-2" style="margin-bottom:12px">
          <div class="field"><label>Telefone / WhatsApp *</label><input class="inp" id="nf-tel" placeholder="(11) 99999-0000"></div>
          <div class="field"><label>E-mail *</label><input class="inp" id="nf-email" placeholder="email@email.com"></div>
-         <div class="field"><label>Senha inicial do portal *</label><input class="inp" id="nf-senha" value="1234" placeholder="Senha para o portal"></div>
+         <div class="field"><label>Senha inicial do portal *</label><input class="inp" id="nf-senha" value="123456" placeholder="Senha para o portal"></div>
        </div>
        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Localização da unidade</div>
        <div class="grid-2" style="margin-bottom:12px">
