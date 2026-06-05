@@ -1671,7 +1671,18 @@ function atualizarFranqueado(id, updates) {
 
 function atualizarBadges() {
   const dados = getDados();
-  $('badge-frq').textContent = dados.filter(f=>f.etapaAtual<ETAPAS.length).length;
+  $('badge-frq').textContent = dados.filter(f=>f.etapaAtual<ETAPAS.length && f.status!=='arquivado').length;
+  // Badge de arquivados na aba
+  const nArq = dados.filter(f=>f.status==='arquivado').length;
+  const tabArq = document.querySelector('[data-aba="arquivados"]');
+  if(tabArq) {
+    if(nArq > 0) {
+      tabArq.innerHTML = '🗄 Arquivados <span style="background:#94A3B8;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:4px">' + nArq + '</span>';
+    } else {
+      tabArq.textContent = '🗄 Arquivados';
+    }
+    tabArq.setAttribute('onclick', "trocarAbaEsteira('arquivados',this)");
+  }
   // Alertas: etapas com prazo vencido (simulado)
   const alertas = dados.filter(f=>f.etapaAtual>=3&&f.etapaAtual<10&&!f.portalLiberado).length;
   if(alertas>0){$('badge-alertas').textContent=alertas;$('badge-alertas').style.display='';}
@@ -1687,11 +1698,12 @@ function renderFranqueados() {
     <div class="esteira-tabs">
       <button class="esteira-tab ativa" data-aba="painel"      onclick="trocarAbaEsteira('painel',this)">Painel</button>
       <button class="esteira-tab"       data-aba="lista"       onclick="trocarAbaEsteira('lista',this)">Franqueados</button>
-
+      <button class="esteira-tab"       data-aba="arquivados"  onclick="trocarAbaEsteira('arquivados',this)" style="color:var(--text-muted)">🗄 Arquivados</button>
     </div>
     <div id="esteira-aba-painel"     class="esteira-aba ativa"></div>
     <div id="esteira-aba-onboarding" class="esteira-aba"></div>
     <div id="esteira-aba-lista"      class="esteira-aba"></div>
+    <div id="esteira-aba-arquivados" class="esteira-aba"></div>
   `;
   // Aguardar o browser processar o DOM antes de injetar o conteúdo
   requestAnimationFrame(() => renderEsteiraPainel());
@@ -1705,9 +1717,10 @@ function trocarAbaEsteira(aba, btn) {
   const elAba = $('esteira-aba-'+aba);
   if(elAba) elAba.classList.add('ativa');
   const fns = {
-    onboarding: renderEsteiraOnboarding,
-    painel:     renderEsteiraPainel,
-    lista:      renderEsteiraLista,
+    onboarding:  renderEsteiraOnboarding,
+    painel:      renderEsteiraPainel,
+    lista:       renderEsteiraLista,
+    arquivados:  renderEsteiraArquivados,
   };
   // Sempre re-renderiza para garantir dados atualizados
   if(fns[aba]) requestAnimationFrame(() => fns[aba]());
@@ -1716,10 +1729,10 @@ function trocarAbaEsteira(aba, btn) {
 /* ══ ABA 1: PAINEL ══ */
 function renderEsteiraPainel() {
   const dados      = getDados();
-  const concluidos = dados.filter(f => f.etapaAtual > ETAPAS.length && f.dataInauguracao);
-  const ativos     = dados.filter(f => f.processoIniciado && f.etapaAtual >= 1 && f.etapaAtual <= ETAPAS.length);
+  const concluidos = dados.filter(f => f.etapaAtual > ETAPAS.length && f.dataInauguracao && f.status !== 'arquivado');
+  const ativos     = dados.filter(f => f.processoIniciado && f.etapaAtual >= 1 && f.etapaAtual <= ETAPAS.length && f.status !== 'arquivado');
   const desist     = dados.filter(f => f.status === 'desistencia');
-  const aguardando = dados.filter(f => !f.processoIniciado);
+  const aguardando = dados.filter(f => !f.processoIniciado && f.status !== 'arquivado');
   console.log('[RENDER] Total dados:', dados.length, '| Aguardando:', aguardando.length, '| Ativos:', ativos.length);
   const hoje_ts    = Date.now();
 
@@ -2157,11 +2170,11 @@ function renderEsteiraPainel() {
 /* ══ ABA 2: LISTA DE FRANQUEADOS ══ */
 function renderEsteiraLista() {
   const dados = getDados();
-  // Franqueados = TODOS os cadastrados (processo iniciado ou não)
-  const ativos = dados.filter(f => f.processoIniciado && f.etapaAtual >= 1 && f.etapaAtual <= ETAPAS.length && f.status !== 'desistencia');
-  const aguard  = dados.filter(f => !f.processoIniciado);
-  const desist  = dados.filter(f => f.status === 'desistencia');
-  const todos   = dados; // todos os cadastrados
+  // Franqueados = todos exceto arquivados (arquivados têm aba própria)
+  const ativos = dados.filter(f => f.processoIniciado && f.etapaAtual >= 1 && f.etapaAtual <= ETAPAS.length && f.status !== 'desistencia' && f.status !== 'arquivado');
+  const aguard  = dados.filter(f => !f.processoIniciado && f.status !== 'arquivado');
+  const desist  = dados.filter(f => f.status === 'desistencia' && f.status !== 'arquivado');
+  const todos   = dados.filter(f => f.status !== 'arquivado'); // todos exceto arquivados
   const hoje_ts = Date.now();
 
   const fmtData = d => {
@@ -2430,8 +2443,16 @@ function abrirFicha(id) {
 
 function renderDrawerBody(f) {
   const etAtual = ETAPAS.find(e=>e.id===f.etapaAtual);
+  const bannerArquivado = f.status === 'arquivado' ? `
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:18px">🗄</span>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#92400E">Cadastro arquivado</div>
+        <div style="font-size:11px;color:#92400E">Arquivado por <b>${(f.arquivamento||{}).por||'—'}</b> em ${(f.arquivamento||{}).data||'—'}. Use "Desarquivar" para reativar.</div>
+      </div>
+    </div>` : '';
 
-  $('drawer-body').innerHTML = `
+  $('drawer-body').innerHTML = bannerArquivado + `
     <!-- DADOS GERAIS -->
     <div class="ficha-secao">
       <div class="ficha-label">Dados gerais</div>
@@ -2540,10 +2561,17 @@ function renderDrawerFoot(f) {
   const btnEncerrar = PERM.assinar
     ? `<button class="btn red" style="margin-left:auto" onclick="encerrarFranquia('${f.id}')">⚠ Encerrar franquia</button>`
     : '';
+  const isArquivado = f.status === 'arquivado';
+  const btnArquivar = PERM.assinar && !isArquivado
+    ? `<button class="btn" style="margin-left:auto;border-color:#94A3B8;color:#64748B" onclick="abrirModalArquivar('${f.id}')">🗄 Arquivar</button>`
+    : '';
+  const btnDesarquivar = PERM.assinar && isArquivado
+    ? `<button class="btn primary" style="margin-left:auto" onclick="abrirModalDesarquivar('${f.id}')">↩ Desarquivar</button>`
+    : '';
   $('drawer-foot').innerHTML =
     `<button class="btn" onclick="fecharDrawer()">Fechar</button>` +
-    (f.processoIniciado ? `<button class="btn" onclick="abrirChatFranqueado('${f.id}')">💬 Chat</button>` : '') +
-    btnIniciar + btnPortal + btnEncerrar;
+    (f.processoIniciado && !isArquivado ? `<button class="btn" onclick="abrirChatFranqueado('${f.id}')">💬 Chat</button>` : '') +
+    (isArquivado ? btnDesarquivar : (btnIniciar + btnPortal + btnEncerrar + btnArquivar));
 }
 
 /* ══════════════════════════════════════════════════
@@ -2732,6 +2760,314 @@ function liberarPortal(fid) {
       renderDrawerFoot(fAtual);
     });
   },100);
+}
+
+
+/* ══════════════════════════════════════════════════
+   ARQUIVAMENTO DE FRANQUEADOS
+   Segurança: nunca exclui — apenas arquiva com
+   assinatura obrigatória e justificativa registrada.
+   Desarquivamento também exige assinatura.
+══════════════════════════════════════════════════ */
+
+function abrirModalArquivar(fid) {
+  if(!PERM.assinar){ toast('Sem permissão para arquivar.','rd'); return; }
+  const f = getFranqueado(fid);
+  if(!f) return;
+
+  const declaracao = `Eu, ${SESSAO.nome}, declaro para todos os fins legais que o cadastro do franqueado ${f.nome} (${f.ticket}) está sendo arquivado neste sistema. O arquivamento não implica exclusão dos dados — todas as informações permanecem íntegras e auditáveis. Esta ação é registrada com validade jurídica. Data: ${hoje()} às ${agora()}.`;
+
+  abrirModal('Arquivar franqueado',
+    `<!-- AVISO -->
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-weight:700;color:#92400E;font-size:12px;margin-bottom:4px">⚠ O que significa arquivar?</div>
+      <div style="font-size:11px;color:#92400E;line-height:1.6">
+        O franqueado sai das listas operacionais mas <b>nenhum dado é apagado</b>. O cadastro fica acessível na aba <b>Arquivados</b>, com todo o histórico preservado e a identidade de quem arquivou registrada. É possível desarquivar posteriormente.
+      </div>
+    </div>
+    <!-- FRANQUEADO -->
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:#F8FAFC;border-radius:8px;margin-bottom:14px">
+      <div style="width:36px;height:36px;border-radius:50%;background:#64748B;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;flex-shrink:0">
+        ${(f.nome||'').split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')}
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:13px">${f.nome}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${f.ticket} · ${f.cidade||'—'}/${f.uf||'—'} · ${f.modelo||'—'}</div>
+      </div>
+    </div>
+    <!-- JUSTIFICATIVA -->
+    <div class="field" style="margin-bottom:12px">
+      <label style="font-weight:700">Justificativa <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="arq-justificativa" rows="3"
+        placeholder="Descreva o motivo do arquivamento (mínimo 20 caracteres)..."
+        style="resize:vertical"></textarea>
+      <div id="arq-justificativa-erro" style="display:none;color:var(--red);font-size:11px;margin-top:4px">Justificativa obrigatória — mínimo 20 caracteres.</div>
+    </div>
+    <!-- ASSINATURA -->
+    <div id="arq-ass-container"></div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>`
+  );
+
+  setTimeout(()=>{
+    const txtArea = $('arq-justificativa');
+    const assContainer = $('arq-ass-container');
+    let assBoxRenderizada = false;
+
+    const verificar = () => {
+      const txt = txtArea?.value?.trim() || '';
+      const erroEl = $('arq-justificativa-erro');
+      if(txt.length >= 20 && !assBoxRenderizada) {
+        if(erroEl) erroEl.style.display = 'none';
+        assBoxRenderizada = true;
+        renderAssBox('arq-ass-container', declaracao, 'Confirmar arquivamento e assinar', async () => {
+          const justificativa = $('arq-justificativa')?.value?.trim();
+          if(!justificativa || justificativa.length < 20){
+            toast('Justificativa muito curta.','rd'); return;
+          }
+          await confirmarArquivamento(fid, justificativa, declaracao);
+        });
+      } else if(txt.length < 20) {
+        assBoxRenderizada = false;
+        if(assContainer) assContainer.innerHTML = '';
+      }
+    };
+    txtArea?.addEventListener('input', verificar);
+  }, 100);
+}
+
+async function confirmarArquivamento(fid, justificativa, declaracao) {
+  const f = getFranqueado(fid);
+  const hash = Math.abs((declaracao + justificativa).split('').reduce((h,c)=>((h<<5)-h)+c.charCodeAt(0),0)).toString(16);
+
+  const registro = {
+    acao:          'arquivado',
+    por:           SESSAO.nome,
+    token:         SESSAO.token,
+    cargo:         SESSAO.cargo,
+    justificativa,
+    declaracao,
+    hash,
+    data:          hoje(),
+    hora:          agora(),
+    timestamp:     Date.now(),
+  };
+
+  const novoHist = [...(f.historico||[]), {
+    data:  new Date().toLocaleDateString('pt-BR'),
+    texto: `Franqueado arquivado por ${SESSAO.nome}. Motivo: ${justificativa}`,
+    autor: SESSAO.nome,
+  }];
+
+  atualizarFranqueado(fid, {
+    status:          'arquivado',
+    arquivamento:    registro,
+    historico:       novoHist,
+  });
+
+  fecharModal();
+  fecharDrawer();
+  toast(`${f.nome} arquivado. Cadastro preservado na aba Arquivados.`, 'gn');
+  renderFranqueados();
+  atualizarBadges();
+}
+
+function abrirModalDesarquivar(fid) {
+  if(!PERM.assinar){ toast('Sem permissão para desarquivar.','rd'); return; }
+  const f = getFranqueado(fid);
+  if(!f || f.status !== 'arquivado') return;
+  const arq = f.arquivamento || {};
+
+  const declaracao = `Eu, ${SESSAO.nome}, declaro que o franqueado ${f.nome} (${f.ticket}) está sendo reativado neste sistema. O arquivamento anterior (${arq.data||'—'}) realizado por ${arq.por||'—'} é encerrado. O cadastro retorna ao fluxo operacional normal. Data: ${hoje()} às ${agora()}.`;
+
+  abrirModal('Desarquivar franqueado',
+    `<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-weight:700;color:#166534;font-size:12px;margin-bottom:4px">↩ Reativar cadastro</div>
+      <div style="font-size:11px;color:#166534;line-height:1.6">
+        O franqueado voltará a aparecer nas listas operacionais normais. O registro do arquivamento anterior permanece no histórico.
+      </div>
+    </div>
+    <div style="background:#F8FAFC;border-radius:8px;padding:10px;margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px">Arquivamento original</div>
+      <div style="font-size:12px;color:var(--text)"><b>${arq.por||'—'}</b> · ${arq.data||'—'} às ${arq.hora||'—'}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;font-style:italic">"${arq.justificativa||'—'}"</div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label style="font-weight:700">Motivo do desarquivamento <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="desarq-justificativa" rows="3"
+        placeholder="Descreva o motivo da reativação (mínimo 20 caracteres)..."
+        style="resize:vertical"></textarea>
+    </div>
+    <div id="desarq-ass-container"></div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>`
+  );
+
+  setTimeout(()=>{
+    const txtArea = $('desarq-justificativa');
+    let assBoxRenderizada = false;
+    const verificar = () => {
+      const txt = txtArea?.value?.trim() || '';
+      if(txt.length >= 20 && !assBoxRenderizada) {
+        assBoxRenderizada = true;
+        renderAssBox('desarq-ass-container', declaracao, 'Confirmar desarquivamento e assinar', async () => {
+          const justificativa = $('desarq-justificativa')?.value?.trim();
+          if(!justificativa || justificativa.length < 20){ toast('Justificativa muito curta.','rd'); return; }
+          await confirmarDesarquivamento(fid, justificativa, declaracao);
+        });
+      } else if(txt.length < 20) {
+        assBoxRenderizada = false;
+        const ac = $('desarq-ass-container');
+        if(ac) ac.innerHTML = '';
+      }
+    };
+    txtArea?.addEventListener('input', verificar);
+  }, 100);
+}
+
+async function confirmarDesarquivamento(fid, justificativa, declaracao) {
+  const f = getFranqueado(fid);
+  const hash = Math.abs((declaracao + justificativa).split('').reduce((h,c)=>((h<<5)-h)+c.charCodeAt(0),0)).toString(16);
+
+  const registroDesarq = {
+    acao:          'desarquivado',
+    por:           SESSAO.nome,
+    token:         SESSAO.token,
+    cargo:         SESSAO.cargo,
+    justificativa,
+    declaracao,
+    hash,
+    data:          hoje(),
+    hora:          agora(),
+    timestamp:     Date.now(),
+  };
+
+  const novoHist = [...(f.historico||[]), {
+    data:  new Date().toLocaleDateString('pt-BR'),
+    texto: `Franqueado desarquivado por ${SESSAO.nome}. Motivo: ${justificativa}`,
+    autor: SESSAO.nome,
+  }];
+
+  // Preservar histórico de arquivamentos anteriores
+  const historicoArquivamentos = [...(f.historicoArquivamentos||[])];
+  if(f.arquivamento) historicoArquivamentos.push(f.arquivamento);
+  historicoArquivamentos.push(registroDesarq);
+
+  // Restaurar status anterior (se havia processo iniciado, volta para em_implantacao)
+  const statusAnterior = f.processoIniciado ? 'em_implantacao' : 'aguardando';
+
+  atualizarFranqueado(fid, {
+    status:                  statusAnterior,
+    arquivamento:            null,
+    historicoArquivamentos,
+    historico:               novoHist,
+  });
+
+  fecharModal();
+  fecharDrawer();
+  toast(`${f.nome} reativado com sucesso.`, 'gn');
+  renderFranqueados();
+  atualizarBadges();
+}
+
+/* ── RENDER: ABA ARQUIVADOS ── */
+function renderEsteiraArquivados() {
+  const dados      = getDados();
+  const arquivados = dados.filter(f => f.status === 'arquivado');
+  const el         = $('esteira-aba-arquivados');
+  if(!el) return;
+
+  el.innerHTML = `
+  <!-- CABEÇALHO -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--text)">Franqueados Arquivados</div>
+      <div style="font-size:11px;color:var(--text-dim)">${arquivados.length} registro${arquivados.length!==1?'s':''} · cadastros preservados e auditáveis</div>
+    </div>
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:8px 12px;font-size:11px;color:#92400E;font-weight:600">
+      🔒 Nenhum dado pode ser excluído
+    </div>
+  </div>
+
+  ${arquivados.length === 0 ? `
+  <div class="card" style="text-align:center;padding:48px 32px">
+    <div style="font-size:32px;margin-bottom:12px">🗄</div>
+    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Nenhum franqueado arquivado</div>
+    <div style="font-size:12px;color:var(--text-dim)">Cadastros arquivados aparecerão aqui com todo o histórico preservado.</div>
+  </div>` : arquivados.map(f => {
+    const arq = f.arquivamento || {};
+    const hist = f.historicoArquivamentos || [];
+    const total_arq = hist.filter(h=>h.acao==='arquivado').length + 1;
+    return `
+    <div class="card" style="margin-bottom:12px;border-left:4px solid #94A3B8;opacity:.92">
+      <div class="card-head">
+        <!-- Dados do franqueado -->
+        <div style="display:flex;align-items:center;gap:12px;flex:1">
+          <div style="width:40px;height:40px;border-radius:50%;background:#94A3B8;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff;flex-shrink:0">
+            ${(f.nome||'').split(' ').map(x=>x[0]).filter(Boolean).slice(0,2).join('')}
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">${f.nome}</div>
+            <div style="font-size:11px;color:var(--text-dim)">${f.ticket} · ${f.cidade||'—'}/${f.uf||'—'} · ${f.modelo||'—'}</div>
+          </div>
+        </div>
+        <span style="background:#F1F5F9;color:#64748B;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;flex-shrink:0">🗄 Arquivado</span>
+      </div>
+      <div class="card-body">
+        <!-- Registro de arquivamento -->
+        <div style="background:#F8FAFC;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px">
+            Registro de arquivamento${total_arq > 1 ? ' · '+total_arq+'x arquivado' : ''}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Arquivado por</div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">${arq.por||'—'}</div>
+              <div style="font-size:10px;color:var(--text-dim)">${arq.cargo||'—'}</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">Data e hora</div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">${arq.data||'—'} às ${arq.hora||'—'}</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Justificativa</div>
+            <div style="font-size:12px;color:var(--text);font-style:italic;line-height:1.6;background:#fff;border-radius:6px;padding:8px 10px;border:1px solid var(--border)">
+              "${arq.justificativa||'—'}"
+            </div>
+          </div>
+          ${arq.hash ? `<div style="font-size:9px;font-family:monospace;color:var(--text-muted);margin-top:6px">hash: ${arq.hash}</div>` : ''}
+        </div>
+
+        <!-- Histórico de arquivamentos anteriores -->
+        ${hist.length > 0 ? `
+        <details style="margin-bottom:12px">
+          <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none">
+            Ver histórico completo de arquivamentos (${hist.length} registro${hist.length!==1?'s':''})
+          </summary>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+            ${hist.map(h=>`
+            <div style="background:#F8FAFC;border-radius:6px;padding:8px 10px;border:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+                <span style="font-size:11px;font-weight:700;color:${h.acao==='arquivado'?'#64748B':'var(--green)'}">${h.acao==='arquivado'?'🗄 Arquivado':'↩ Desarquivado'} por ${h.por||'—'}</span>
+                <span style="font-size:10px;color:var(--text-muted)">${h.data||'—'}</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-dim);font-style:italic">"${h.justificativa||'—'}"</div>
+            </div>`).join('')}
+          </div>
+        </details>` : ''}
+
+        <!-- Ações -->
+        <div style="display:flex;gap:8px">
+          <button class="btn sm" onclick="abrirFicha('${f.id}')">
+            👁 Ver ficha completa
+          </button>
+          ${PERM.assinar ? `
+          <button class="btn sm primary" onclick="abrirModalDesarquivar('${f.id}')" style="background:var(--green);border-color:var(--green)">
+            ↩ Desarquivar
+          </button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('')}`;
 }
 
 function encerrarFranquia(fid) {
@@ -10193,28 +10529,52 @@ function abrirProcessoFranqueado(fid) {
 
 
 function toggleKpiDropdown(id, card) {
-  // Fechar outros dropdowns abertos
-  document.querySelectorAll('.kpi-dropdown').forEach(d => {
-    if(d.id !== id) d.style.display = 'none';
-  });
+  // Extrair título do card
+  const titulo = card.querySelector('.stat-label')?.textContent?.trim() || 'Detalhe';
+  const val    = card.querySelector('.stat-val')?.textContent?.trim() || '';
+  const sub    = card.querySelector('.stat-sub')?.textContent?.trim() || '';
 
+  // Pegar o dropdown já renderizado no DOM (hidden, mas com conteúdo)
   const dd = $(id);
   if(!dd) return;
-  const aberto = dd.style.display !== 'none';
-  dd.style.display = aberto ? 'none' : 'block';
 
-  if(!aberto) {
-    // Fechar ao clicar fora
-    setTimeout(() => {
-      const fechar = (e) => {
-        if(!card.contains(e.target)) {
-          dd.style.display = 'none';
-          document.removeEventListener('click', fechar);
-        }
-      };
-      document.addEventListener('click', fechar);
-    }, 10);
+  const items = dd.querySelectorAll('.kpi-item, [style*="padding:10px"]');
+  let corpo = '';
+
+  if(items.length === 0) {
+    // Conteúdo de texto simples (vazio/nenhum)
+    corpo = `<div style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:13px">${dd.textContent?.trim() || 'Nenhum item'}</div>`;
+  } else {
+    // Montar lista limpa para o modal
+    corpo = `<div style="display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow-y:auto;margin:0 -4px">`;
+    items.forEach(item => {
+      const onclick = item.getAttribute('onclick') || '';
+      const ticket  = item.querySelector('.kpi-item-ticket')?.textContent || '';
+      const nome    = item.querySelector('.kpi-item-nome')?.textContent || '';
+      const etapa   = item.querySelector('.kpi-item-etapa')?.textContent || '';
+      const etapaColor = item.querySelector('.kpi-item-etapa')?.style?.color || 'var(--text-dim)';
+      if(ticket || nome) {
+        corpo += `<div onclick="${onclick.replace(/"/g,"'")};fecharModal()" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:10px;cursor:pointer;background:var(--bg);border:1px solid var(--border);transition:all .12s" onmouseover="this.style.background='var(--primary-soft)'" onmouseout="this.style.background='var(--bg)'">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">${nome}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${ticket}</div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${etapaColor}">${etapa}</span>
+        </div>`;
+      } else {
+        // Fallback para item sem estrutura kpi-item
+        const txt = item.textContent?.trim();
+        if(txt) corpo += `<div style="padding:12px 16px;font-size:12px;color:var(--text-muted);text-align:center">${txt}</div>`;
+      }
+    });
+    corpo += `</div>`;
   }
+
+  abrirModal(
+    `${titulo} <span style="font-size:22px;font-weight:800;color:var(--accent);margin-left:8px">${val}</span>`,
+    corpo,
+    `<button class="btn primary" onclick="fecharModal()">Fechar</button>`
+  );
 }
 
 
