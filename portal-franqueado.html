@@ -2888,7 +2888,78 @@ function anexarDoc(input, docId, etId) {
 
 function solicitarValidacao(etId) {
   fecharModal();
-  toast(`Solicitação enviada para ${PORTAL.gestor.nome.split(' ')[0]}!`,'gn');
+
+  const declaracao = `Eu, ${PORTAL.nome} (${PORTAL.ticket}), confirmo que cumpri todos os requisitos da Etapa ${etId} do processo de implantação e solicito a validação formal pelo gestor. Data: ${hoje()} às ${agora()}.`;
+
+  abrirModal('Solicitar validação da etapa', `
+    <div style="background:#EFF6FF;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:4px">Etapa ${etId} — Solicitação de conclusão</div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+        Ao assinar, você declara que cumpriu todos os requisitos desta etapa.<br>
+        O gestor será notificado e validará a conclusão.
+      </div>
+    </div>
+    <div id="sol-ass-container"></div>
+    <button onclick="fecharModal()"
+      style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">
+      Cancelar
+    </button>
+  `, '');
+
+  setTimeout(() => {
+    renderAssBox('sol-ass-container', declaracao, 'Assinar e solicitar validação', async () => {
+      const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+      const ts   = Date.now();
+
+      try {
+        // 1. Salvar solicitação no Firebase — gestor vai ver via listener
+        await db.ref(`validacoes/${PORTAL.fid}/et${etId}`).set({
+          fid:         PORTAL.fid,
+          franqueado:  PORTAL.nome,
+          ticket:      PORTAL.ticket,
+          etapa:       etId,
+          status:      'aguardando',
+          declaracao,
+          hash,
+          data:        hoje(),
+          hora:        agora(),
+          timestamp:   ts,
+        });
+
+        // 2. Registrar evento na etapa
+        await db.ref(`etapas/${PORTAL.fid}/et${etId}/eventos/${ts}`).set({
+          tipo:   'solicitacao_validacao',
+          texto:  `Franqueado solicitou validação da Etapa ${etId}. Aguardando confirmação do gestor.`,
+          autor:  PORTAL.nome,
+          data:   hoje(),
+          hora:   agora(),
+          hash,
+        });
+
+        // 3. Notificar o gestor via Firebase
+        await db.ref(`notif_gestor/${PORTAL.fid}`).set({
+          tipo:      'validacao_etapa',
+          etapa:     etId,
+          franqueado:PORTAL.nome,
+          ticket:    PORTAL.ticket,
+          fid:       PORTAL.fid,
+          data:      hoje(),
+          hora:      agora(),
+          lido:      false,
+          timestamp: ts,
+        });
+
+        fecharModal();
+        toast('✓ Solicitação enviada! Aguardando validação do gestor.', 'gn');
+
+        // Atualizar tela de etapas
+        renderEtapas();
+
+      } catch(e) {
+        toast('Erro ao enviar solicitação: ' + e.message, 'rd');
+      }
+    }, '#F5A623', '#1B3F8B');
+  }, 150);
 }
 
 /* ══ AGENDA ══ */
