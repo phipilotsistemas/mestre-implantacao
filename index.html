@@ -888,6 +888,10 @@ select.inp{cursor:pointer}
 
       <!-- GESTÃO INTERNA -->
       <div class="sb-group" id="sb-group-admin" style="display:none">GESTÃO INTERNA</div>
+      <!-- DEV — só ADM-PHILLIPE -->
+      <button class="sb-item" id="sb-dev" style="display:none" onclick="ir('dev',this)">
+        <div class="dot" style="background:#DC2626"></div><span style="color:#DC2626">⚙ Dev Tools</span>
+      </button>
       <button class="sb-item" id="sb-equipe" onclick="ir('equipe',this)" style="display:none">
         <div class="dot"></div><span>Equipe</span>
       </button>
@@ -1566,6 +1570,9 @@ function sair() {
 }
 
 function iniciarApp() {
+  // Mostrar Dev Tools só para o administrador principal
+  const btnDev = $('sb-dev');
+  if(btnDev) btnDev.style.display = SESSAO?.token === 'ADM-PHILLIPE' ? 'flex' : 'none';
   $('tela-login').style.display = 'none';
   // Salvar equipe no Firebase para consulta do login
   try {
@@ -1632,6 +1639,7 @@ const RENDERS = {
   relatorios:      renderRelatorios,
   contatos:        renderContatosExternos,
   suporte:         renderSuportePainel,
+  dev:             renderDevTools,
 }
 // Armazena o fid do processo em visualização
 let _processoAtual = null;;
@@ -3672,6 +3680,277 @@ async function confirmarTrocaEmail(fid, novoEmail, declaracao) {
       }
     }
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   DEV TOOLS — Painel de desenvolvedor
+   Visível APENAS para ADM-PHILLIPE
+   Operações destrutivas com confirmação de senha
+══════════════════════════════════════════════════════════════ */
+function renderDevTools() {
+  if(SESSAO?.token !== 'ADM-PHILLIPE') {
+    toast('Acesso negado.', 'rd');
+    return;
+  }
+
+  const dados    = getDados();
+  const equipe   = getEquipe();
+  const chamados = dados.reduce((acc,f) => {
+    try { return acc + JSON.parse(localStorage.getItem('suporte_'+f.id)||'[]').length; } catch(e) { return acc; }
+  }, 0);
+  const reunioes = getReunioes().length;
+
+  $('content').innerHTML = `
+    <div style="max-width:720px">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
+        <div style="width:44px;height:44px;border-radius:12px;background:#DC2626;display:flex;align-items:center;justify-content:center;font-size:20px">⚙</div>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--text)">Dev Tools</div>
+          <div style="font-size:11px;color:var(--text-dim)">Acesso restrito · ${SESSAO.nome} · ${hoje()} às ${agora()}</div>
+        </div>
+      </div>
+
+      <!-- Estado atual -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px">Estado atual do sistema</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          ${[
+            {label:'Franqueados', valor: dados.length, cor:'var(--primary)'},
+            {label:'Equipe', valor: equipe.length, cor:'var(--green)'},
+            {label:'Chamados', valor: chamados, cor:'var(--amber)'},
+            {label:'Reuniões', valor: reunioes, cor:'#7C3AED'},
+          ].map(s=>`
+            <div style="text-align:center;padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+              <div style="font-size:24px;font-weight:800;color:${s.cor}">${s.valor}</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${s.label}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+
+      <!-- Operações por franqueado -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px">Franqueados cadastrados</div>
+        ${dados.length === 0
+          ? '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px">Nenhum franqueado cadastrado.</div>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="border-bottom:2px solid var(--border)">
+                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">Ticket</th>
+                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">Nome</th>
+                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">Status</th>
+                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">E-mail</th>
+                  <th style="padding:6px 8px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${dados.map(f=>`
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:8px;font-weight:700;color:var(--primary)">${f.ticket}</td>
+                  <td style="padding:8px">${f.nome}</td>
+                  <td style="padding:8px"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${f.status==='arquivado'?'#F1F5F9':f.processoIniciado?'#DBEAFE':'#FEF3C7'};color:${f.status==='arquivado'?'#64748B':f.processoIniciado?'#1E40AF':'#92400E'}">${f.status==='arquivado'?'Arquivado':f.processoIniciado?'Em implantação':'Aguardando'}</span></td>
+                  <td style="padding:8px;color:var(--text-dim)">${f.email||'—'}</td>
+                  <td style="padding:8px">
+                    <button onclick="devExcluirFranqueado('${f.id}','${f.nome}')"
+                      style="padding:4px 10px;border-radius:6px;background:#FEE2E2;color:#DC2626;border:1px solid #FECACA;cursor:pointer;font-size:11px;font-weight:700">
+                      Excluir
+                    </button>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>`}
+      </div>
+
+      <!-- Operações em lote -->
+      <div class="card" style="margin-bottom:16px;border:1.5px solid #FECACA">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#DC2626;margin-bottom:14px">⚠ Operações destrutivas</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#FEF2F2;border-radius:8px">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">Limpar todos os franqueados</div>
+              <div style="font-size:10.5px;color:var(--text-dim)">Remove todos os ${dados.length} franqueados do localStorage</div>
+            </div>
+            <button onclick="devLimparTodos('franqueados')"
+              style="padding:6px 14px;border-radius:8px;background:#DC2626;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+              Limpar
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#FEF2F2;border-radius:8px">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">Limpar chamados de suporte</div>
+              <div style="font-size:10.5px;color:var(--text-dim)">Remove todos os registros de chamados</div>
+            </div>
+            <button onclick="devLimparTodos('chamados')"
+              style="padding:6px 14px;border-radius:8px;background:#DC2626;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+              Limpar
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#FEF2F2;border-radius:8px">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--text)">Limpar reuniões</div>
+              <div style="font-size:10.5px;color:var(--text-dim)">Remove todos os agendamentos</div>
+            </div>
+            <button onclick="devLimparTodos('reunioes')"
+              style="padding:6px 14px;border-radius:8px;background:#DC2626;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+              Limpar
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#7C0000;border-radius:8px">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#fff">Reset completo do sistema</div>
+              <div style="font-size:10.5px;color:#FCA5A5">Apaga TODOS os dados do localStorage</div>
+            </div>
+            <button onclick="devResetCompleto()"
+              style="padding:6px 14px;border-radius:8px;background:#fff;color:#7C0000;border:none;cursor:pointer;font-size:12px;font-weight:800">
+              RESET
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export/Import -->
+      <div class="card">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px">Backup e exportação</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="devExportarDados()"
+            style="padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+            📥 Exportar JSON completo
+          </button>
+          <button onclick="devVerLocalStorage()"
+            style="padding:8px 16px;border-radius:8px;background:var(--bg);color:var(--text);border:1.5px solid var(--border);cursor:pointer;font-size:12px;font-weight:700">
+            🔍 Inspecionar localStorage
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function devExcluirFranqueado(fid, nome) {
+  abrirModal('Excluir franqueado', `
+    <div style="background:#FEE2E2;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#DC2626">⚠ Excluir permanentemente</div>
+      <div style="font-size:11px;color:#DC2626;margin-top:4px">Esta ação não pode ser desfeita. Todos os dados de <b>${nome}</b> serão removidos.</div>
+    </div>
+    <div class="field">
+      <label>Digite <b>EXCLUIR</b> para confirmar</label>
+      <input class="inp" id="dev-confirm-excluir" placeholder="EXCLUIR">
+    </div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn" style="background:#DC2626;color:#fff;border:none" onclick="devConfirmarExclusao('${fid}','${nome}')">Excluir definitivamente</button>`
+  );
+}
+
+function devConfirmarExclusao(fid, nome) {
+  const conf = $('dev-confirm-excluir')?.value?.trim();
+  if(conf !== 'EXCLUIR') { toast('Digite EXCLUIR para confirmar.', 'rd'); return; }
+
+  // Remover do localStorage
+  const lista = getDados().filter(f => f.id !== fid);
+  salvarDados(lista);
+
+  // Remover dados associados
+  localStorage.removeItem('suporte_' + fid);
+  localStorage.removeItem('mo_ficha_' + fid);
+  localStorage.removeItem('senha_trocada_' + fid);
+  localStorage.removeItem('senha_trocada_data_' + fid);
+  localStorage.removeItem('termo_assinado_' + fid);
+  localStorage.removeItem('portal_t_' + fid);
+
+  // Remover do Firebase
+  try {
+    db.ref('franqueados/' + fid).remove();
+    db.ref('chamados/' + fid).remove();
+    db.ref('reunioes_notif/' + fid).remove();
+  } catch(e) {}
+
+  fecharModal();
+  toast(nome + ' excluído definitivamente.', 'or');
+  renderDevTools();
+}
+
+function devLimparTodos(tipo) {
+  const confirmMsg = {
+    franqueados: 'Limpar TODOS os franqueados? Esta ação é irreversível.',
+    chamados:    'Limpar TODOS os chamados de suporte?',
+    reunioes:    'Limpar TODOS os agendamentos de reunião?',
+  };
+  if(!confirm(confirmMsg[tipo])) return;
+
+  if(tipo === 'franqueados') {
+    getDados().forEach(f => {
+      localStorage.removeItem('suporte_' + f.id);
+      localStorage.removeItem('mo_ficha_' + f.id);
+      localStorage.removeItem('senha_trocada_' + f.id);
+      localStorage.removeItem('termo_assinado_' + f.id);
+    });
+    localStorage.removeItem('mo_franqueados');
+    try { db.ref('franqueados').remove(); db.ref('chamados').remove(); } catch(e) {}
+  }
+  if(tipo === 'chamados') {
+    getDados().forEach(f => localStorage.removeItem('suporte_' + f.id));
+    try { db.ref('chamados').remove(); } catch(e) {}
+  }
+  if(tipo === 'reunioes') {
+    localStorage.removeItem('mo_reunioes');
+    try { db.ref('reunioes').remove(); } catch(e) {}
+  }
+
+  toast('Dados limpos com sucesso.', 'gn');
+  renderDevTools();
+}
+
+function devResetCompleto() {
+  if(!confirm('ATENÇÃO: Reset completo apaga TODOS os dados. Tem certeza absoluta?')) return;
+  if(!confirm('Segunda confirmação: isso apagará franqueados, equipe, agenda, chamados e reuniões. Continuar?')) return;
+
+  const chavesManter = ['mo_impl_sessao']; // manter só a sessão atual
+  const chaves = Object.keys(localStorage);
+  chaves.forEach(k => {
+    if(!chavesManter.includes(k)) localStorage.removeItem(k);
+  });
+
+  try {
+    db.ref('franqueados').remove();
+    db.ref('chamados').remove();
+    db.ref('reunioes').remove();
+    db.ref('portal_usuarios').remove();
+  } catch(e) {}
+
+  toast('Reset completo realizado.', 'or');
+  setTimeout(() => location.reload(), 1500);
+}
+
+function devExportarDados() {
+  const backup = {
+    exportadoEm:  hoje() + ' às ' + agora(),
+    exportadoPor: SESSAO.nome,
+    franqueados:  getDados(),
+    equipe:       getEquipe(),
+    reunioes:     getReunioes(),
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'backup_mestre_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup exportado!', 'gn');
+}
+
+function devVerLocalStorage() {
+  const dados = {};
+  Object.keys(localStorage).forEach(k => {
+    try { dados[k] = JSON.parse(localStorage.getItem(k)); }
+    catch(e) { dados[k] = localStorage.getItem(k); }
+  });
+  abrirModal('localStorage atual',`
+    <pre style="font-size:10px;max-height:400px;overflow:auto;background:#0F172A;color:#E2E8F0;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-all">
+${JSON.stringify(dados, null, 2).slice(0, 8000)}${JSON.stringify(dados).length > 8000 ? '\n... (truncado)' : ''}
+    </pre>
+  `, `<button class="btn primary" onclick="fecharModal()">Fechar</button>`);
 }
 
 function encerrarFranquia(fid) {
