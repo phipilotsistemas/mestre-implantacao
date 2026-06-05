@@ -1578,6 +1578,16 @@ function iniciarApp() {
   // Mostrar Dev Tools só para o administrador principal
   const btnDev = $('sb-dev');
   if(btnDev) btnDev.style.display = SESSAO?.token === 'ADM-PHILLIPE' ? 'flex' : 'none';
+
+  // Carregar dados do Firebase (sincroniza cache local)
+  Promise.all([
+    carregarFranqueadosDoFirebase(),
+    carregarEquipeDoFirebase(),
+  ]).then(() => {
+    atualizarBadges();
+    if(_abaAtual === 'franqueados') renderFranqueados();
+    if(_abaAtual === 'equipe')      renderEquipe();
+  }).catch(() => {});
   $('tela-login').style.display = 'none';
   // Salvar equipe no Firebase para consulta do login
   try {
@@ -1613,11 +1623,44 @@ function iniciarApp() {
   ir('franqueados');
   atualizarBadges();
   setTimeout(atualizarBadgeChamados, 800);
+  // Listener Firebase para equipe em tempo real
+  try {
+    db.ref('equipe').on('value', snap => {
+      const raw = snap.val();
+      if(!raw) return;
+      const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+      localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
+      lista.forEach(col => {
+        if(col.token) EQUIPE[col.token] = {
+          nome: col.nome, cargo: col.cargo,
+          tipo: col.tipo, cor: col.cor, email: col.email,
+        };
+      });
+      if(_abaAtual === 'equipe') renderEquipe();
+    });
+  } catch(e) {}
+
   // Listener Firebase para chamados em tempo real
   try {
     db.ref('chamados').on('value', () => {
       atualizarBadgeChamados();
       if(_abaAtual === 'suporte') { renderSuportePainel(); }
+    });
+  } catch(e) {}
+
+  // Listener para agenda (tarefas e prazos) em tempo real
+  try {
+    db.ref('agenda').on('value', snap => {
+      const raw = snap.val() || {};
+      if(raw.tarefas) {
+        const lista = Array.isArray(raw.tarefas) ? raw.tarefas : Object.values(raw.tarefas);
+        localStorage.setItem('mo_tarefas', JSON.stringify(lista.filter(Boolean)));
+      }
+      if(raw.prazos) {
+        const lista = Array.isArray(raw.prazos) ? raw.prazos : Object.values(raw.prazos);
+        localStorage.setItem('mo_prazos', JSON.stringify(lista.filter(Boolean)));
+      }
+      if(_abaAtual === 'agenda') renderAgenda();
     });
   } catch(e) {}
 }
@@ -1681,11 +1724,12 @@ function ir(aba, btn, fid) {
    DADOS SIMULADOS
 ══════════════════════════════════════════════════ */
 function getDados() {
+  // Lê do localStorage (cache) — Firebase atualiza via listener
   try {
     const s = localStorage.getItem('mo_franqueados');
     if(s) {
       const dados = JSON.parse(s);
-      // Migrar: franqueados com processoIniciado:true mas etapaAtual:0 → etapaAtual:1
+      // Migrar: processoIniciado:true mas etapaAtual:0 → etapaAtual:1
       let migrou = false;
       dados.forEach(f => {
         if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) {
@@ -1700,14 +1744,35 @@ function getDados() {
   return [];
 }
 
+// Carregar franqueados do Firebase e popular o cache local
+async function carregarFranqueadosDoFirebase() {
+  try {
+    const snap = await db.ref('franqueados').once('value');
+    const raw  = snap.val();
+    if(!raw) return;
+    const lista = Object.values(raw).filter(Boolean);
+    // Aplicar migração
+    lista.forEach(f => {
+      if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) f.etapaAtual = 1;
+    });
+    localStorage.setItem('mo_franqueados', JSON.stringify(lista));
+    return lista;
+  } catch(e) {
+    console.warn('carregarFranqueadosDoFirebase:', e.message);
+  }
+}
+
 function salvarDados(dados) {
+  // 1. Atualizar cache local imediatamente (UI não trava)
   localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-  // Sincronizar com Firebase — usar objeto indexado por posição
+  // 2. Persistir no Firebase (fonte da verdade)
   try {
     const obj = {};
-    dados.forEach((f,i) => { obj[f.id || ('f'+i)] = f; });
-    db.ref('franqueados').set(obj);
-  } catch(e) { console.warn('Firebase sync:', e); }
+    dados.forEach(f => { if(f.id) obj[f.id] = f; });
+    db.ref('franqueados').set(obj).catch(e =>
+      console.warn('salvarDados Firebase:', e.message)
+    );
+  } catch(e) { console.warn('salvarDados:', e.message); }
 }
 
 function getFranqueado(id) {
@@ -1715,10 +1780,25 @@ function getFranqueado(id) {
 }
 
 function atualizarFranqueado(id, updates) {
+  // Atualizar cache local
   const dados = getDados();
-  const idx = dados.findIndex(f=>f.id===id);
-  if(idx>=0) { Object.assign(dados[idx], updates); salvarDados(dados); }
-  return dados[idx];
+  const idx   = dados.findIndex(f => f.id === id);
+  if(idx >= 0) {
+    Object.assign(dados[idx], updates);
+    localStorage.setItem('mo_franqueados', JSON.stringify(dados));
+    // Atualizar só o franqueado específico no Firebase (mais eficiente)
+    try {
+      db.ref('franqueados/' + id).update(updates).catch(e =>
+        console.warn('atualizarFranqueado Firebase:', e.message)
+      );
+    } catch(e) {}
+    return dados[idx];
+  }
+  return null;
+}
+
+function getFranqueado(id) {
+  return getDados().find(f => f.id === id) || null;
 }
 
 function atualizarBadges() {
@@ -5213,86 +5293,40 @@ function getEquipe() {
     const s = localStorage.getItem('mo_equipe_rh');
     if(s) return JSON.parse(s);
   } catch(e) {}
-    // Dados demo completos para visualização da ficha de registro
-  return [
-    {
-      id:'GES-001', token:'GES-001',
-      nome:'Maria Cláudia Souza Ferreira',
-      cargo:'Gestora de Implantação',
-      tipo:'gestor', cor:'#EA580C', modalidade:'CLT', status:'ativo',
-      cpf:'321.654.987-10', rg:'12.345.678-9', nasc:'1985-03-22',
-      email:'maria.claudia@mestradeobra.com.br',
-      tel:'(11) 98765-4321', ramal:'201',
-      admissao:'2022-03-01', salario:'R$ 8.500,00',
-      cargaHoraria:'44h semanais',
-      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'17:48', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'01310-100', logradouro:'Av. Paulista', numero:'1578', complemento:'Conj. 42', bairro:'Bela Vista', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Nubank', agencia:'0001', conta:'12345678-9', tipoConta:'Corrente', pix:'321.654.987-10' },
-      emergencia:{ nome:'Roberto Souza Ferreira', parentesco:'Cônjuge', tel:'(11) 97654-3210' },
-      obs:'Responsável pela implantação de todas as unidades da região Sudeste. Experiência em gestão de redes de franquias desde 2018. Coordena equipe de consultores e estagiários.',
-      foto:'',
-    },
-    {
-      id:'GES-002', token:'GES-002',
-      nome:'Rafael Torres Mendonça',
-      cargo:'Consultor de Implantação',
-      tipo:'gestor', cor:'#1E40AF', modalidade:'CLT', status:'ativo',
-      cpf:'123.456.789-00', rg:'98.765.432-1', nasc:'1990-07-15',
-      email:'rafael.torres@mestradeobra.com.br',
-      tel:'(11) 97777-8888', ramal:'202',
-      admissao:'2023-06-15', salario:'R$ 6.200,00',
-      cargaHoraria:'44h semanais',
-      horario:{ entrada:'08:30', saidaAlmoco:'12:30', retornoAlmoco:'13:30', saida:'18:18', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'04038-001', logradouro:'Rua Domingos de Morais', numero:'2187', complemento:'Apto 54', bairro:'Vila Mariana', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Itaú', agencia:'3456', conta:'87654-3', tipoConta:'Corrente', pix:'rafael.torres@mestradeobra.com.br' },
-      emergencia:{ nome:'Carla Torres Mendonça', parentesco:'Cônjuge', tel:'(11) 96666-5555' },
-      obs:'Carteira de franqueados nas regiões Sul e Centro-Oeste. Formação em Administração pela USP. Especialização em gestão de franquias pelo IBF.',
-      foto:'',
-    },
-    {
-      id:'EST-001', token:'EST-001',
-      nome:'Beatriz Oliveira Santos',
-      cargo:'Estagiária Administrativa',
-      tipo:'estagiario', cor:'#16A34A', modalidade:'Estágio', status:'ativo',
-      cpf:'456.789.123-55', rg:'23.456.789-0', nasc:'2002-11-08',
-      email:'beatriz.oliveira@mestradeobra.com.br',
-      tel:'(11) 94444-3333', ramal:'',
-      admissao:'2025-08-01', salario:'R$ 1.320,00',
-      cargaHoraria:'30h semanais (estágio)',
-      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'14:00', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'05407-002', logradouro:'Rua Teodoro Sampaio', numero:'744', complemento:'Apto 12', bairro:'Pinheiros', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Bradesco', agencia:'2222', conta:'56789-1', tipoConta:'Poupança', pix:'456.789.123-55' },
-      emergencia:{ nome:'Fernanda Oliveira Santos', parentesco:'Mãe', tel:'(11) 93333-2222' },
-      obs:'Cursando 4° ano de Administração na FGV-SP. Estágio supervisionado — carga horária 30h semanais. Benefícios: bolsa R$ 1.320,00 + vale-transporte. Previsão de encerramento: 31/07/2026.',
-      foto:'',
-    },
-    {
-      id:'AUX-001', token:'AUX-001',
-      nome:'Lucas Pereira Carvalho',
-      cargo:'Auxiliar Administrativo',
-      tipo:'auxiliar', cor:'#7C3AED', modalidade:'CLT', status:'ativo',
-      cpf:'789.123.456-88', rg:'34.567.890-1', nasc:'1997-04-20',
-      email:'lucas.pereira@mestradeobra.com.br',
-      tel:'(11) 92222-1111', ramal:'203',
-      admissao:'2024-02-12', salario:'R$ 2.800,00',
-      cargaHoraria:'44h semanais',
-      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'17:48', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'03301-000', logradouro:'Av. Radial Leste', numero:'1203', complemento:'Casa 2', bairro:'Tatuapé', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Banco do Brasil', agencia:'1111', conta:'23456-7', tipoConta:'Corrente', pix:'lucas.pereira@mestradeobra.com.br' },
-      emergencia:{ nome:'Ana Pereira Carvalho', parentesco:'Mãe', tel:'(11) 91111-0000' },
-      obs:'Responsável pelo suporte administrativo, arquivo físico e digital de documentos e controle de correspondências. Ensino médio completo. Em processo de qualificação interna.',
-      foto:'',
-    },
-  ];
+  return [];
+}
+
+async function carregarEquipeDoFirebase() {
+  try {
+    const snap = await db.ref('equipe').once('value');
+    const raw  = snap.val();
+    if(!raw) return;
+    const lista = Array.isArray(raw)
+      ? raw.filter(Boolean)
+      : Object.values(raw).filter(Boolean);
+    if(lista.length > 0) {
+      localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
+      // Atualizar EQUIPE em memória
+      lista.forEach(col => {
+        if(col.token) EQUIPE[col.token] = {
+          nome: col.nome, cargo: col.cargo,
+          tipo: col.tipo, cor: col.cor, email: col.email,
+        };
+      });
+    }
+    return lista;
+  } catch(e) {
+    console.warn('carregarEquipeDoFirebase:', e.message);
+  }
 }
 
 function salvarEquipe(lista) {
   localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
-  if(db){ try{ db.ref('equipe').set(lista); }catch(e){} }
+  try {
+    const obj = {};
+    lista.forEach(col => { if(col.id) obj[col.id] = col; });
+    db.ref('equipe').set(obj).catch(e => console.warn('salvarEquipe:', e.message));
+  } catch(e) {}
 }
 
 function getColaborador(id) {
@@ -6003,22 +6037,28 @@ function adicionarArquivoPasta(fid, pasta) {
 
 function getEventosEtapa(fid, etapaId) {
   const key = `mo_eventos_${fid}_etapa${etapaId}`;
-  try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch(e) { return []; }
+  try { return JSON.parse(localStorage.getItem(key)||'[]'); }
+  catch(e) { return []; }
 }
 
 function salvarEventoEtapa(fid, etapaId, evento) {
-  const key = `mo_eventos_${fid}_etapa${etapaId}`;
+  const key    = `mo_eventos_${fid}_etapa${etapaId}`;
   const eventos = getEventosEtapa(fid, etapaId);
-  const ev = {
-    ...evento,
-    id:        `ev_${Date.now()}`,
-    timestamp:  Date.now(),
-    dataHora:  `${hoje()} ${agora()}`,
-  };
-  eventos.push(ev);
+  eventos.push({ ...evento, timestamp: evento.timestamp || Date.now() });
   localStorage.setItem(key, JSON.stringify(eventos));
-  if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/eventos`).push(ev); }catch(e){} }
-  return ev;
+  // Firebase — histórico por etapa
+  try {
+    db.ref(`etapas/${fid}/et${etapaId}/eventos`).set(eventos).catch(() => {});
+  } catch(e) {}
+  // Também registrar no histórico geral do franqueado
+  try {
+    db.ref(`historico/${fid}/${Date.now()}`).set({
+      ...evento,
+      etapa: etapaId,
+      fid,
+      timestamp: evento.timestamp || Date.now(),
+    }).catch(() => {});
+  } catch(e) {}
 }
 
 function abrirDetalheEtapa(fid, etapaId) {
@@ -7041,7 +7081,12 @@ async function confirmarInicioProcesso(fid, declaracao) {
     declaracaoInicio:    registroInicio,   // ← registrado no dossiê
   });
 
-  // ── Registro no evento da Etapa 1 ──
+  // ── Registro central de auditoria ──
+  registrarEvento(fid, 'processo_iniciado', {
+    texto:   `Processo de implantação iniciado. COF e Pré-contrato confirmados.`,
+    ticket:  f.ticket,
+    hash,
+  });
   salvarEventoEtapa(fid, 1, {
     ...registroInicio,
     tipo:  'processo_iniciado',
@@ -7142,6 +7187,64 @@ async function confirmarInicioProcesso(fid, declaracao) {
 ══════════════════════════════════════════════════════════════ */
 
 // Chamada GET ao Apps Script
+async 
+/* ══════════════════════════════════════════════════════════════
+   FUNÇÃO CENTRAL DE AUDITORIA
+   Todo evento do sistema passa por aqui
+   Grava em Firebase: historico/{fid}/{timestamp}
+   Formato padronizado para dossiê e histórico funcional
+══════════════════════════════════════════════════════════════ */
+function registrarEvento(fid, tipo, dados) {
+  if(!fid || !tipo) return;
+  const ts    = Date.now();
+  const evento = {
+    tipo,
+    fid,
+    data:      hoje(),
+    hora:      agora(),
+    timestamp: ts,
+    autor:     SESSAO?.nome      || dados.autor      || 'Sistema',
+    cargo:     SESSAO?.cargo     || dados.cargo      || '',
+    token:     SESSAO?.token     || dados.token      || '',
+    ...dados,
+  };
+  // 1. Firebase — histórico do franqueado
+  try {
+    db.ref(`historico/${fid}/${ts}`).set(evento).catch(() => {});
+  } catch(e) {}
+
+  // 2. Ficha mensal do gestor
+  try {
+    const mesAno = new Date().toISOString().slice(0,7);
+    const chave  = `mo_ficha_mensal_${SESSAO?.token||'geral'}_${mesAno}`;
+    const ficha  = JSON.parse(localStorage.getItem(chave) || '[]');
+    ficha.push({ tipo, fid, data: hoje(), hora: agora(), ...dados });
+    localStorage.setItem(chave, JSON.stringify(ficha));
+    db.ref(`ficha_mensal/${SESSAO?.token||'geral'}/${mesAno}/${ts}`).set(
+      { tipo, fid, data: hoje(), hora: agora(), ...dados }
+    ).catch(() => {});
+  } catch(e) {}
+
+  // 3. Atualizar historico[] no objeto do franqueado (para exibição na ficha)
+  try {
+    const dados2 = getDados();
+    const f = dados2.find(x => x.id === fid);
+    if(f) {
+      if(!f.historico) f.historico = [];
+      f.historico.push({
+        tipo,
+        data:   hoje(),
+        hora:   agora(),
+        texto:  dados.texto || `${tipo} registrado por ${SESSAO?.nome||'Sistema'}`,
+        autor:  SESSAO?.nome || 'Sistema',
+        hash:   dados.hash  || '',
+      });
+      localStorage.setItem('mo_franqueados', JSON.stringify(dados2));
+      db.ref(`franqueados/${fid}/historico`).set(f.historico).catch(() => {});
+    }
+  } catch(e) {}
+}
+
 async function appsGet(params) {
   const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
   const resp = await fetch(url, { redirect: 'follow' });
@@ -7430,137 +7533,52 @@ function seedProcessoFernando() {
    Hoje: localStorage  |  Produção: Apps Script + Google Drive
 ══════════════════════════════════════════════════════════════ */
 const StorageAdapter = {
-  // Salvar documento em uma pasta de etapa
-  // Em produção: POST para Apps Script → salva no Drive
+  // ── Documentos das etapas ──
   salvarDocumento(fid, etapaId, nomeDoc, base64, tipo) {
-    const key = `mo_docs_${fid}_et${etapaId}`;
+    const key  = `mo_docs_${fid}_et${etapaId}`;
     const docs = JSON.parse(localStorage.getItem(key)||'[]');
-    const doc = {
+    const doc  = {
       id:        `doc_${Date.now()}`,
       nome:      nomeDoc,
       tipo:      tipo || 'application/pdf',
-      base64,              // Em produção: Drive fileId (não base64)
-      tamanho:   Math.round(base64.length * 0.75),
+      base64,
+      tamanho:   Math.round((base64||'').length * 0.75),
       enviadoEm: new Date().toLocaleDateString('pt-BR'),
-      enviadoPor: 'sistema',
-      status:    'pendente', // pendente | validado | rejeitado
-      // driveFileId: '',   // Produção: ID do arquivo no Drive
-      // driveFolderPath: `Franqueados/${fid}/Implantação/Etapa ${etapaId}/`
+      enviadoPor:'sistema',
+      status:    'pendente',
     };
     docs.push(doc);
     localStorage.setItem(key, JSON.stringify(docs));
+    // Firebase
+    try { db.ref(`etapas/${fid}/et${etapaId}/docs`).set(docs); } catch(e) {}
     return doc;
   },
 
-  // Listar documentos de uma etapa
-  // Em produção: GET Apps Script → lista arquivos da pasta Drive
   listarDocumentos(fid, etapaId) {
     const key = `mo_docs_${fid}_et${etapaId}`;
     return JSON.parse(localStorage.getItem(key)||'[]');
   },
 
-  // Validar documento (gestora confirma recebimento)
-  // Em produção: PATCH Apps Script → move arquivo para subpasta /Validados/
   validarDocumento(fid, etapaId, docId, acao) {
     const key  = `mo_docs_${fid}_et${etapaId}`;
     const docs = JSON.parse(localStorage.getItem(key)||'[]');
-    const doc  = docs.find(d=>d.id===docId);
+    const doc  = docs.find(d => d.id === docId);
     if(doc) {
-      doc.status     = acao; // 'validado' | 'rejeitado'
+      doc.status     = acao;
       doc.validadoEm = new Date().toLocaleDateString('pt-BR');
-      doc.validadoPor = SESSAO?.nome || '—';
+      doc.validadoPor= SESSAO?.nome || '—';
       localStorage.setItem(key, JSON.stringify(docs));
+      try { db.ref(`etapas/${fid}/et${etapaId}/docs`).set(docs); } catch(e) {}
     }
     return doc;
   },
 
-  // Salvar prazo da GESTORA (para concluir a validação)
   salvarPrazo(fid, etapaId, dataISO) {
     localStorage.setItem(`mo_prazo_${fid}_et${etapaId}`, dataISO);
+    try { db.ref(`etapas/${fid}/et${etapaId}/prazo`).set(dataISO); } catch(e) {}
   },
   lerPrazo(fid, etapaId) {
     return localStorage.getItem(`mo_prazo_${fid}_et${etapaId}`) || '';
-  },
-
-  // Salvar prazo do FRANQUEADO (para entregar documentos e assinar)
-  salvarPrazoFranqueado(fid, etapaId, dataISO) {
-    localStorage.setItem(`mo_prazo_frq_${fid}_et${etapaId}`, dataISO);
-  },
-  lerPrazoFranqueado(fid, etapaId) {
-    return localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`) || '';
-  },
-
-  // Verificar e registrar atrasos automaticamente
-  verificarAtrasos(fid, etapaId, f) {
-    const prazoGest = this.lerPrazo(fid, etapaId);
-    const prazoFrq  = this.lerPrazoFranqueado(fid, etapaId);
-    const hoje_d    = new Date(); hoje_d.setHours(0,0,0,0);
-    const eventos   = getEventosEtapa(fid, etapaId) || [];
-    const concluida = etapaId < (f?.etapaAtual||1);
-
-    // Verificar prazo do franqueado
-    if(prazoFrq && !concluida) {
-      const dtFrq = new Date(prazoFrq+'T00:00');
-      if(dtFrq < hoje_d) {
-        const jaRegistrado = eventos.find(e=>e.tipo==='prazo_extrapolado_franqueado');
-        if(!jaRegistrado) {
-          const dias = Math.floor((hoje_d - dtFrq)/(864e5));
-          salvarEventoEtapa(fid, etapaId, {
-            tipo:      'prazo_extrapolado_franqueado',
-            texto:     `PRAZO EXTRAPOLADO — RESPONSABILIDADE DO FRANQUEADO. O prazo para cumprimento das obrigações da Etapa ${etapaId} pelo franqueado venceu em ${dtFrq.toLocaleDateString('pt-BR')}. Atraso acumulado: ${dias} dia(s). Registro automático gerado pelo sistema PhiPilot.`,
-            autor:     'Sistema (automático)',
-            data:      hoje(), hora: agora(),
-            hash:      Math.abs(Math.imul(etapaId*31, fid.length*17)).toString(16).slice(0,8),
-            timestamp: Date.now(),
-            diasAtraso: dias,
-            responsavel: 'franqueado',
-          });
-        }
-      }
-    }
-
-    // Verificar prazo da gestora
-    if(prazoGest && !concluida) {
-      const dtGest = new Date(prazoGest+'T00:00');
-      if(dtGest < hoje_d) {
-        const jaRegistrado = eventos.find(e=>e.tipo==='prazo_extrapolado_gestora');
-        if(!jaRegistrado) {
-          const dias = Math.floor((hoje_d - dtGest)/(864e5));
-          salvarEventoEtapa(fid, etapaId, {
-            tipo:      'prazo_extrapolado_gestora',
-            texto:     `PRAZO EXTRAPOLADO — RESPONSABILIDADE DA FRANQUEADORA. O prazo para conclusão da validação da Etapa ${etapaId} pela equipe de implantação venceu em ${dtGest.toLocaleDateString('pt-BR')}. Atraso acumulado: ${dias} dia(s). Registro automático gerado pelo sistema PhiPilot.`,
-            autor:     'Sistema (automático)',
-            data:      hoje(), hora: agora(),
-            hash:      Math.abs(Math.imul(etapaId*37, fid.length*13)).toString(16).slice(0,8),
-            timestamp: Date.now(),
-            diasAtraso: dias,
-            responsavel: 'gestora',
-          });
-        }
-      }
-    }
-  },
-
-  // Salvar mensagem do subchat
-  salvarMensagemSubchat(fid, etapaId, msg) {
-    const key  = `mo_subchat_${fid}_et${etapaId}`;
-    const msgs = JSON.parse(localStorage.getItem(key)||'[]');
-    msgs.push({
-      id:        `msg_${Date.now()}`,
-      tipo:      msg.tipo,   // 'solicitacao'|'aprovacao'|'pendencia'|'prazo'|'livre'
-      texto:     msg.texto,
-      autor:     msg.autor,
-      data:      new Date().toLocaleDateString('pt-BR'),
-      hora:      new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-      timestamp: Date.now(),
-      lido:      false,
-    });
-    localStorage.setItem(key, JSON.stringify(msgs));
-    return msgs[msgs.length-1];
-  },
-
-  listarSubchat(fid, etapaId) {
-    return JSON.parse(localStorage.getItem(`mo_subchat_${fid}_et${etapaId}`)||'[]');
   },
 };
 
@@ -10891,8 +10909,20 @@ function toggleConcluirEvento(evId) {
 ══════════════════════════════════════════════════════════════ */
 
 // ── Storage ──
-function getPrazos()    { try{ return JSON.parse(localStorage.getItem('mo_prazos')||'[]'); }catch(e){ return []; } }
-function getTarefas()   { try{ return JSON.parse(localStorage.getItem('mo_tarefas')||'[]'); }catch(e){ return []; } }
+function getPrazos() {
+  try { return JSON.parse(localStorage.getItem('mo_prazos')||'[]'); } catch(e) { return []; }
+}
+function salvarPrazosDB(lista) {
+  localStorage.setItem('mo_prazos', JSON.stringify(lista));
+  try { db.ref('agenda/prazos').set(lista).catch(()=>{}); } catch(e) {}
+}
+function getTarefas() {
+  try { return JSON.parse(localStorage.getItem('mo_tarefas')||'[]'); } catch(e) { return []; }
+}
+function salvarTarefasDB(lista) {
+  localStorage.setItem('mo_tarefas', JSON.stringify(lista));
+  try { db.ref('agenda/tarefas').set(lista).catch(()=>{}); } catch(e) {}
+}
 function salvarPrazos(l)  {
   localStorage.setItem('mo_prazos', JSON.stringify(l));
   atualizarBadgesAgenda();
@@ -13430,17 +13460,18 @@ window.addEventListener('DOMContentLoaded', ()=>{
   db.ref('franqueados').on('value', snap => {
     const raw = snap.val();
     if(!raw) return;
-    const dados = Array.isArray(raw) 
-      ? raw.filter(Boolean) 
-      : Object.values(raw).filter(Boolean);
+    const dados = Object.values(raw).filter(Boolean);
+    // Aplicar migração automaticamente
+    dados.forEach(f => {
+      if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) f.etapaAtual = 1;
+    });
     if(dados.length > 0) {
       localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-      // Re-renderizar se estiver na tela de franqueados
-      const esteiraVisivel = document.querySelector('.esteira-tab');
-      if(esteiraVisivel) {
-        renderFranqueados();
-        atualizarBadges();
-      }
+      // Re-renderizar a tela atual se for de franqueados
+      atualizarBadges();
+      if(_abaAtual === 'franqueados') { renderFranqueados(); }
+      if(_abaAtual === 'candidatos')  { renderCandidatos(); }
+      if(_abaAtual === 'inaugurados') { renderInaugurados(); }
     }
   });
   setTimeout(atualizarBadgeAlertas, 500);
