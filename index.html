@@ -9335,9 +9335,9 @@ function buildFichaAcesso(f, ficha) {
       '</div>' +
       '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">' +
         '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:12px">Pastas de documentos (Google Drive)</div>' +
-        '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;line-height:1.6">' +
-          'Cole abaixo os links das pastas do Google Drive quando criadas pelo sistema ou manualmente. ' +
-          'Os botões de acesso rápido aparecerão automaticamente.' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;display:flex;align-items:center;gap:6px">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+          'Os links são gerados automaticamente pelo sistema ao cadastrar o franqueado.' +
         '</div>' +
         buildCamposPastas(ficha) +
       '</div>' +
@@ -9372,27 +9372,29 @@ function buildCamposPastas(ficha) {
   ];
 
   return pastas.map(p => {
-    const url = (ficha && ficha[p.id]) || '';
-    const path = (ficha && ficha[p.id+'_path']) || '';
+    const url    = (ficha && ficha[p.id]) || '';
     const temUrl = url.trim().length > 0 && url.startsWith('http');
+    // Input oculto mantém a URL salva sem exibi-la
     return (
-      '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
-        '<div style="display:flex;align-items:center;flex-shrink:0"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="pgF" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#F57C00"/></linearGradient></defs><path d="M1 5.5C1 4.67 1.67 4 2.5 4H8L9.5 6H17.5C18.33 6 19 6.67 19 7.5V15.5C19 16.33 18.33 17 17.5 17H2.5C1.67 17 1 16.33 1 15.5V5.5Z" fill="url(#pgF)"/><path d="M1 5.5C1 4.67 1.67 4 2.5 4H7.5L9 5.5H1Z" fill="#FFA000" opacity="0.7"/></svg></div>' +
+      '<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border)">' +
+        // Ícone pasta Drive
+        '<div style="flex-shrink:0"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="pg' + p.id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#F57C00"/></linearGradient></defs><path d="M1 5.5C1 4.67 1.67 4 2.5 4H8L9.5 6H17.5C18.33 6 19 6.67 19 7.5V15.5C19 16.33 18.33 17 17.5 17H2.5C1.67 17 1 16.33 1 15.5V5.5Z" fill="url(#pg' + p.id + ')"/><path d="M1 5.5C1 4.67 1.67 4 2.5 4H7.5L9 5.5H1Z" fill="#FFA000" opacity="0.7"/></svg></div>' +
+        // Label + descrição
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">' + p.label + '</div>' +
-          '<div style="font-size:10.5px;color:var(--text-dim);margin-bottom:5px">' + p.desc + '</div>' +
-          '<input class="inp" id="ficha-' + p.id + '" value="' + url + '" ' +
-            'placeholder="' + (path ? path : 'Cole aqui o link do Google Drive...') + '" ' +
-            'style="font-size:11px;padding:5px 8px;height:auto" ' +
-            'oninput="atualizarBotaoPasta(\'' + p.id + '\', this.value)">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text)">' + p.label + '</div>' +
+          '<div style="font-size:10.5px;color:var(--text-dim);margin-top:1px">' + p.desc + '</div>' +
         '</div>' +
+        // Input oculto preserva URL (não exibido, só usado para salvar)
+        '<input type="hidden" id="ficha-' + p.id + '" value="' + url + '">' +
+        // Botão abrir
         '<div style="flex-shrink:0">' +
-          '<a id="btn-pasta-' + p.id + '" href="' + (temUrl?url:'#') + '" target="_blank" ' +
-            'style="display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;font-size:11.5px;font-weight:600;text-decoration:none;transition:all .15s;' +
+          '<a id="btn-pasta-' + p.id + '" href="' + (temUrl ? url : '#') + '" target="_blank" ' +
+            'style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:11.5px;font-weight:700;text-decoration:none;transition:all .15s;' +
             (temUrl
-              ? 'background:var(--primary);color:#fff;cursor:pointer'
-              : 'background:var(--border);color:var(--text-muted);pointer-events:none') + '">' +
-            '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="pgS" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#F57C00"/></linearGradient></defs><path d="M1 5.5C1 4.67 1.67 4 2.5 4H8L9.5 6H17.5C18.33 6 19 6.67 19 7.5V15.5C19 16.33 18.33 17 17.5 17H2.5C1.67 17 1 16.33 1 15.5V5.5Z" fill="url(#pgS)"/><path d="M1 5.5C1 4.67 1.67 4 2.5 4H7.5L9 5.5H1Z" fill="#FFA000" opacity="0.7"/></svg> Abrir' +
+              ? 'background:var(--primary);color:#fff;cursor:pointer;box-shadow:0 2px 6px rgba(27,63,139,.2)'
+              : 'background:var(--bg);color:var(--text-muted);border:1.5px dashed var(--border);pointer-events:none') + '">' +
+            '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="pgs' + p.id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#F57C00"/></linearGradient></defs><path d="M1 5.5C1 4.67 1.67 4 2.5 4H8L9.5 6H17.5C18.33 6 19 6.67 19 7.5V15.5C19 16.33 18.33 17 17.5 17H2.5C1.67 17 1 16.33 1 15.5V5.5Z" fill="url(#pgs' + p.id + ')"/><path d="M1 5.5C1 4.67 1.67 4 2.5 4H7.5L9 5.5H1Z" fill="#FFA000" opacity="0.7"/></svg>' +
+            (temUrl ? '📂 Abrir' : '⏳ Pendente') +
           '</a>' +
         '</div>' +
       '</div>'
@@ -9402,12 +9404,21 @@ function buildCamposPastas(ficha) {
 
 function atualizarBotaoPasta(id, url) {
   const btn = document.getElementById('btn-pasta-'+id);
+  const inp = document.getElementById('ficha-'+id);
   if(!btn) return;
-  const temUrl = url.trim().length > 0 && url.startsWith('http');
+  const temUrl = url && url.trim().length > 0 && url.startsWith('http');
+  // Atualizar input hidden
+  if(inp) inp.value = url || '';
+  // Atualizar botão
   btn.href = temUrl ? url : '#';
-  btn.style.background = temUrl ? 'var(--primary)' : 'var(--border)';
-  btn.style.color       = temUrl ? '#fff' : 'var(--text-muted)';
+  btn.style.background    = temUrl ? 'var(--primary)' : 'var(--bg)';
+  btn.style.color         = temUrl ? '#fff' : 'var(--text-muted)';
+  btn.style.border        = temUrl ? 'none' : '1.5px dashed var(--border)';
   btn.style.pointerEvents = temUrl ? 'auto' : 'none';
+  btn.style.boxShadow     = temUrl ? '0 2px 6px rgba(27,63,139,.2)' : 'none';
+  btn.innerHTML = temUrl
+    ? '<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><defs><linearGradient id="pgu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#F57C00"/></linearGradient></defs><path d="M1 5.5C1 4.67 1.67 4 2.5 4H8L9.5 6H17.5C18.33 6 19 6.67 19 7.5V15.5C19 16.33 18.33 17 17.5 17H2.5C1.67 17 1 16.33 1 15.5V5.5Z" fill="url(#pgu)"/><path d="M1 5.5C1 4.67 1.67 4 2.5 4H7.5L9 5.5H1Z" fill="#FFA000" opacity="0.7"/></svg> 📂 Abrir'
+    : '⏳ Pendente';
 }
 
 
