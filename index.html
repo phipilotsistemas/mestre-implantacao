@@ -3347,7 +3347,13 @@ function cardChamadoPainel(c) {
         ${c.descricao}
       </div>
       ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:8px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
-      ${c.respostaGestor ? `<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ Resposta enviada em ${c.dataResposta}</div>` : ''}
+      ${c.totalRetornos > 0 ? `<div style="font-size:11px;color:var(--amber);font-weight:700;margin-bottom:4px">↩ Reaberto ${c.totalRetornos}x pelo franqueado</div>` : ''}
+      ${c.retornoFranqueado && c.status === 'aberto' ? `
+      <div style="background:#FEF3C7;border-radius:6px;padding:8px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:2px">⚠ Retorno do franqueado · ${c.dataRetorno||''}</div>
+        <div style="font-size:11px;color:#92400E">${c.retornoFranqueado}</div>
+      </div>` : ''}
+      ${c.respostaGestor && c.status !== 'aberto' ? `<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ Resposta enviada em ${c.dataResposta}</div>` : ''}
       ${c.assinaturaFranqueado ? `<div style="font-size:11px;color:var(--green);font-weight:700">✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}</div>` : ''}
       <!-- Ações do gestor -->
       ${c.status !== 'concluido' && c.status !== 'cancelado' ? `
