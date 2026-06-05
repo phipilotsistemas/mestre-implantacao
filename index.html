@@ -2480,17 +2480,30 @@ function renderDrawerBody(f) {
           <div style="width:8px;height:8px;border-radius:50%;background:var(--green)"></div>
         </div></div>
         <div class="dado-item"><div class="dado-l">Entrada no sistema</div><div class="dado-v">${fmtData(f.dataEntrada)}</div></div>
-        ${f.drivePasstas?.pasta_raiz ? `
         <div class="dado-item">
-          <div class="dado-l">Pasta no Drive</div>
-          <div class="dado-v">
-            <a href="${f.drivePasstas.pasta_raiz}" target="_blank"
-               style="display:inline-flex;align-items:center;gap:6px;color:var(--primary);font-weight:600;font-size:12px;text-decoration:none;padding:4px 10px;border:1.5px solid var(--primary-border);border-radius:8px;background:var(--primary-soft)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              Abrir pasta
-            </a>
+          <div class="dado-l">Pastas no Drive</div>
+          <div class="dado-v" id="drive-links-${f.id}">
+            ${f.drivePasstas?.pasta_raiz ? `
+              <div style="display:flex;flex-direction:column;gap:4px">
+                ${[
+                  {label:'📁 Pasta principal',  url: f.drivePasstas.pasta_raiz},
+                  {label:'00 Cadastro',          url: f.drivePasstas.pasta_et00},
+                  {label:'01 Onboarding',        url: f.drivePasstas.pasta_et01},
+                  {label:'99 Registros',         url: f.drivePasstas.pasta_et99},
+                ].filter(x=>x.url).map(x=>`
+                  <a href="${x.url}" target="_blank"
+                     style="display:inline-flex;align-items:center;gap:5px;color:var(--primary);font-size:11px;font-weight:600;text-decoration:none;padding:3px 8px;border:1px solid var(--primary-border);border-radius:6px;background:var(--primary-soft);white-space:nowrap">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    ${x.label}
+                  </a>`).join('')}
+              </div>` : `
+              <button onclick="criarPastasAgora('${f.id}', this)"
+                style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1.5px dashed var(--border);background:none;cursor:pointer;font-size:11px;color:var(--text-dim)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Criar pastas no Drive
+              </button>`}
           </div>
-        </div>` : ''}
+        </div>
         <div class="dado-item"><div class="dado-l">Senha do portal</div><div class="dado-v">${
           (() => {
             const trocada = localStorage.getItem('senha_trocada_'+f.id)==='1';
@@ -3390,6 +3403,9 @@ function confirmarCadastroFranqueado() {
 
       // Salvar também no Firebase para o portal ler
       try { db.ref('franqueados/' + _fid + '/drivePasstas').set(pastas); } catch(e2) {}
+
+      // Sincronizar links automaticamente na aba "Acesso e documentos"
+      sincronizarPastasDriveNaFicha(_fid, pastas);
 
       toast('📄 Gerando Ficha Cadastral...', 'or');
 
@@ -4453,14 +4469,29 @@ function abrirFichaColaborador(id) {
     <!-- ABA PESSOAL -->
     <div id="aba-pessoal">
       <!-- Link pasta Drive se disponível -->
-      ${col.drivePasstas?.pasta_raiz ? `
       <div style="margin-bottom:10px">
-        <a href="${col.drivePasstas.pasta_raiz}" target="_blank"
-           style="display:inline-flex;align-items:center;gap:6px;color:var(--primary);font-weight:600;font-size:12px;text-decoration:none;padding:5px 12px;border:1.5px solid var(--primary-border);border-radius:8px;background:var(--primary-soft)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          Abrir pasta no Drive
-        </a>
-      </div>` : ''}
+        ${col.drivePasstas?.pasta_raiz ? `
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">Pastas no Drive</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            ${[
+              {label:'📁 Principal',       url: col.drivePasstas.pasta_raiz},
+              {label:'01 Docs Pessoais',   url: col.drivePasstas.pasta_docs},
+              {label:'02 Contratos',       url: col.drivePasstas.pasta_contratos},
+              {label:'03 Jornada',         url: col.drivePasstas.pasta_jornada},
+              {label:'04 Advertências',    url: col.drivePasstas.pasta_advert},
+            ].filter(x=>x.url).map(x=>`
+              <a href="${x.url}" target="_blank"
+                 style="display:inline-flex;align-items:center;gap:4px;color:var(--primary);font-size:10px;font-weight:600;text-decoration:none;padding:3px 8px;border:1px solid var(--primary-border);border-radius:6px;background:var(--primary-soft);white-space:nowrap">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                ${x.label}
+              </a>`).join('')}
+          </div>` : `
+          <button onclick="criarPastasColaboradorAgora('${col.id}', this)"
+            style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;border:1.5px dashed var(--border);background:none;cursor:pointer;font-size:11px;color:var(--text-dim)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Criar pastas no Drive
+          </button>`}
+      </div>
       <div style="display:flex;align-items:center;gap:16px;padding:12px;background:#F8FAFC;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
       <!-- Avatar / foto -->
       <div style="position:relative;flex-shrink:0">
@@ -6130,6 +6161,8 @@ async function confirmarInicioProcesso(fid, declaracao) {
           atualizarFranqueado(fid, { drivePasstas: novasPastas });
           // Salvar também no Firebase
           try { db.ref('franqueados/' + fid + '/drivePasstas').set(novasPastas); } catch(e2) {}
+          // Sincronizar links na ficha
+          sincronizarPastasDriveNaFicha(fid, novasPastas);
           pastas = novasPastas;
         }
       }
@@ -6225,6 +6258,62 @@ async function salvarArquivoNoDrive(pastaId, nomeArquivo, base64, mimeType) {
   } catch(e) {
     console.warn('salvarArquivo falhou:', e.message);
     return null;
+  }
+}
+
+
+/* Cria pastas no Drive para um franqueado que ainda não as tem
+   Chamada pelo botão "Criar pastas" na ficha */
+async function criarPastasAgora(fid, btnEl) {
+  const f = getFranqueado(fid);
+  if(!f) return;
+  if(btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Criando...'; }
+  try {
+    const pastas = await appsGet({
+      action: 'criarPastas',
+      fid,
+      nome:   f.nome,
+      ticket: f.ticket,
+    });
+    if(!pastas || pastas.erro) throw new Error(pastas?.erro || 'Sem resposta');
+    atualizarFranqueado(fid, { drivePasstas: pastas });
+    try { db.ref('franqueados/' + fid + '/drivePasstas').set(pastas); } catch(e2) {}
+    // Sincronizar links na aba "Acesso e documentos"
+    sincronizarPastasDriveNaFicha(fid, pastas);
+    toast('✓ Pastas criadas e links salvos automaticamente!', 'gn');
+    // Recarregar a ficha para mostrar os links
+    const fAtual = getFranqueado(fid);
+    if($('drawer').classList.contains('open')) {
+      renderDrawerBody(fAtual);
+      renderDrawerFoot(fAtual);
+    }
+  } catch(e) {
+    toast('Erro ao criar pastas: ' + e.message, 'rd');
+    if(btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Criar pastas no Drive'; }
+  }
+}
+
+/* Cria pastas no Drive para um colaborador que ainda não as tem */
+async function criarPastasColaboradorAgora(colId, btnEl) {
+  const lista = getEquipe();
+  const col   = lista.find(c=>c.id===colId);
+  if(!col) return;
+  if(btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Criando...'; }
+  try {
+    const pastas = await appsGet({
+      action: 'criarPastasEquipe',
+      id:     col.id,
+      nome:   col.nome,
+      cargo:  col.cargo,
+    });
+    if(!pastas || pastas.erro) throw new Error(pastas?.erro || 'Sem resposta');
+    const col2 = lista.find(c=>c.id===colId);
+    if(col2) { col2.drivePasstas = pastas; salvarEquipe(lista); }
+    toast('✓ Pastas criadas no Drive!', 'gn');
+    abrirFichaColaborador(colId);
+  } catch(e) {
+    toast('Erro ao criar pastas: ' + e.message, 'rd');
+    if(btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Criar pastas no Drive'; }
   }
 }
 
@@ -9184,6 +9273,44 @@ function buildFichaContatos(f, ficha) {
       ) +
     '</div></div>'
   );
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   SINCRONIZAR LINKS DAS PASTAS DO DRIVE NA FICHA DO FRANQUEADO
+   Chamada automaticamente após criarPastas no Apps Script
+══════════════════════════════════════════════════════════════ */
+function sincronizarPastasDriveNaFicha(fid, pastas) {
+  if(!fid || !pastas) return;
+
+  // Mapeamento: retorno do Apps Script → campo da ficha
+  const mapa = {
+    pasta_raiz:  pastas.pasta_raiz  || '',
+    pasta_contratos:  pastas.pasta_et01 || '',  // 01_Onboarding_e_Contratos
+    pasta_juridico:   pastas.pasta_et03 || '',  // 03_Formalizacao_Legal
+    pasta_obra:       pastas.pasta_et04 || '',  // 04_Arquitetura_e_Obra
+    pasta_financeiro: pastas.pasta_et05 || '',  // 05_Compras_Infraestrutura
+    pasta_equipe:     pastas.pasta_et07 || '',  // 07_Selecao_Equipe
+    pasta_marketing:  pastas.pasta_et08 || '',  // 08_Marketing_Comunicacao
+    pasta_treinamento:pastas.pasta_et10 || '',  // 10_Treinamento_Presencial
+    pasta_inauguracao:pastas.pasta_et11 || '',  // 11_Inauguracao
+  };
+
+  // Carregar ficha atual e mesclar os links
+  const ficha = JSON.parse(localStorage.getItem('mo_ficha_'+fid) || '{}');
+  Object.entries(mapa).forEach(([chave, url]) => {
+    if(url) ficha[chave] = url;
+  });
+  localStorage.setItem('mo_ficha_'+fid, JSON.stringify(ficha));
+
+  // Se a aba acesso estiver aberta, atualizar os campos e botões na tela
+  Object.entries(mapa).forEach(([chave, url]) => {
+    const inp = document.getElementById('ficha-' + chave);
+    if(inp && url) {
+      inp.value = url;
+      atualizarBotaoPasta(chave, url);
+    }
+  });
 }
 
 function buildFichaAcesso(f, ficha) {
