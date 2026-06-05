@@ -1645,43 +1645,86 @@ function confirmarTrocaSenha() {
     return;
   }
 
-  // Registrar troca de senha
-  const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
-  localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
-
-  // Atualizar a senha no USUARIOS (em memória e localStorage)
-  const emailKey = Object.keys(USUARIOS).find(k => USUARIOS[k].fid === PORTAL.fid);
-  if(emailKey) {
-    USUARIOS[emailKey].senha = nova;
-    // Persistir atualização de senha para a sessão atual
-    try {
-      const dados = JSON.parse(localStorage.getItem('portal_usuarios_senha') || '{}');
-      dados[PORTAL.fid] = nova;
-      localStorage.setItem('portal_usuarios_senha', JSON.stringify(dados));
-    } catch(e) {}
+  // Desabilitar botão para evitar duplo clique
+  const btnConfirmar = document.querySelector('#tela-troca-senha button');
+  if(btnConfirmar) {
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = '⏳ Salvando...';
   }
 
-  // Notificar o painel gestor via localStorage (o painel lê ao abrir a ficha)
-  try {
-    const reg = {
-      fid:     PORTAL.fid,
-      ticket:  PORTAL.ticket,
-      nome:    PORTAL.nome,
-      data:    agora_str,
-      acao:    'senha_alterada_primeiro_acesso',
-    };
-    const hist = JSON.parse(localStorage.getItem('portal_eventos') || '[]');
-    hist.push(reg);
-    localStorage.setItem('portal_eventos', JSON.stringify(hist));
-  } catch(e) {}
+  // PASSO 1 — Atualizar senha no Firebase Auth (fonte da verdade)
+  const user = auth.currentUser;
+  if(!user) {
+    erroEl.style.display='block';
+    erroEl.textContent='Sessão expirada. Faça login novamente.';
+    if(btnConfirmar) { btnConfirmar.disabled=false; btnConfirmar.textContent='Confirmar minha senha'; }
+    return;
+  }
 
-  // Remover overlay
-  const overlay = $('tela-troca-senha');
-  if(overlay) overlay.remove();
+  user.updatePassword(nova)
+    .then(() => {
+      // PASSO 2 — Registrar localmente
+      const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
+      localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
 
-  // Prosseguir para o portal (próximo passo: termo)
-  entrarNoPortal();
+      // PASSO 3 — Registrar no Firebase DB para o painel ver
+      try {
+        db.ref('franqueados/' + PORTAL.fid + '/senhaTrocada').set({
+          trocada:   true,
+          data:      agora_str,
+          timestamp: Date.now(),
+        });
+      } catch(e) {}
+
+      // PASSO 4 — Notificar painel via localStorage
+      try {
+        const reg = {
+          fid:    PORTAL.fid,
+          ticket: PORTAL.ticket,
+          nome:   PORTAL.nome,
+          data:   agora_str,
+          acao:   'senha_alterada_primeiro_acesso',
+        };
+        const hist = JSON.parse(localStorage.getItem('portal_eventos') || '[]');
+        hist.push(reg);
+        localStorage.setItem('portal_eventos', JSON.stringify(hist));
+      } catch(e) {}
+
+      // PASSO 5 — Remover overlay e seguir
+      const overlay = $('tela-troca-senha');
+      if(overlay) overlay.remove();
+      entrarNoPortal();
+    })
+    .catch(err => {
+      // auth/requires-recent-login — precisa reautenticar antes de trocar senha
+      if(err.code === 'auth/requires-recent-login') {
+        // Reautenticar com a senha provisória e tentar novamente
+        const credential = firebase.auth.EmailAuthProvider.credential(
+          user.email, PORTAL._senhaAtual || '123456'
+        );
+        user.reauthenticateWithCredential(credential)
+          .then(() => user.updatePassword(nova))
+          .then(() => {
+            const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+            localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
+            localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
+            try { db.ref('franqueados/' + PORTAL.fid + '/senhaTrocada').set({ trocada:true, data:agora_str, timestamp:Date.now() }); } catch(e) {}
+            const overlay = $('tela-troca-senha');
+            if(overlay) overlay.remove();
+            entrarNoPortal();
+          })
+          .catch(e2 => {
+            erroEl.style.display='block';
+            erroEl.textContent='Erro ao salvar senha: ' + (e2.message || 'tente novamente.');
+            if(btnConfirmar) { btnConfirmar.disabled=false; btnConfirmar.textContent='Confirmar minha senha'; }
+          });
+      } else {
+        erroEl.style.display='block';
+        erroEl.textContent='Erro ao salvar senha: ' + (err.message || 'tente novamente.');
+        if(btnConfirmar) { btnConfirmar.disabled=false; btnConfirmar.textContent='Confirmar minha senha'; }
+      }
+    });
 }
 
 /* ══ NAVEGAÇÃO ══ */
