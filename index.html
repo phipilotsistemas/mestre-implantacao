@@ -1013,7 +1013,7 @@ function gasPost(body) {
    Perfis, acessos e cores
 ══════════════════════════════════════════════════ */
 const EQUIPE = {
-  'ADM-PHILLIPE': { nome:'Phillipe de Paula',    cargo:'Administrador',           tipo:'gestor',    cor:'#1B3F8B', email:'phillipe@mestrework.com' },
+  'ADM-PHILLIPE': { nome:'Phillipe de Paula',    cargo:'Administrador',           tipo:'gestor',    cor:'#1B3F8B', email:'phillipedpaula@gmail.com' },
   'GES-001':      { nome:'Maria Cláudia Souza',  cargo:'Gestora de Implantação',  tipo:'gestor',    cor:'#EA580C', email:'claudia@mestrework.com'  },
   'GES-002':      { nome:'Rafael Torres',         cargo:'Consultor de Implantação',tipo:'gestor',    cor:'#1E40AF', email:'rafael@mestrework.com'   },
   'EST-001':      { nome:'Beatriz Oliveira',       cargo:'Estagiária',             tipo:'estagiario',cor:'#16A34A', email:'beatriz@mestrework.com'  },
@@ -1539,8 +1539,26 @@ function logarFirebase() {
         erro.style.display='block';
         erro.style.color='#DC2626';
         erro.style.background='#FEE2E2';
-        if(err.code==='auth/user-not-found'||err.code==='auth/wrong-password'||err.code==='auth/invalid-login-credentials') {
-          erro.textContent='E-mail ou senha incorretos.';
+        if(err.code==='auth/user-not-found'||err.code==='auth/invalid-login-credentials') {
+          // Tentar criar o usuário automaticamente se não existir
+          auth.createUserWithEmailAndPassword(email, senha)
+            .then(cred => {
+              const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
+              if(!entrada) { erro.textContent='Perfil não cadastrado na equipe.'; return; }
+              const [token, membro] = entrada;
+              SESSAO = { token, uid: cred.user.uid, ...membro };
+              PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
+              localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
+              if(erro) erro.style.display='none';
+              iniciarApp();
+            })
+            .catch(e2 => {
+              erro.textContent = e2.code === 'auth/email-already-in-use'
+                ? 'Senha incorreta. Tente novamente.'
+                : 'Erro: ' + (e2.message || e2.code);
+            });
+        } else if(err.code==='auth/wrong-password') {
+          erro.textContent='Senha incorreta.';
         } else {
           erro.textContent = err.message || 'Erro ao conectar.';
         }
@@ -1597,13 +1615,21 @@ function iniciarApp() {
   atualizarBadges();
   setTimeout(atualizarBadgeChamados, 800);
 
-  // Listener para solicitações de validação de etapa
+  // Listener para notificações do franqueado → gestor
   try {
     db.ref('notif_gestor').on('value', snap => {
       const raw = snap.val();
       if(!raw) return;
       let pendentes = 0;
-      Object.values(raw).forEach(n => { if(!n.lido) pendentes++; });
+      Object.values(raw).forEach(n => {
+        if(!n.lido) {
+          pendentes++;
+          // Se fechou o ciclo, mostrar resumo da etapa
+          if(n.tipo === 'etapa_concluida_ciclo' && !n._visto) {
+            mostrarResumoCicloEtapa(n);
+          }
+        }
+      });
       const badgeAlt = $('badge-alertas');
       if(badgeAlt && pendentes > 0) {
         badgeAlt.textContent = pendentes;
@@ -2720,67 +2746,302 @@ function renderDrawerFoot(f) {
 /* ══════════════════════════════════════════════════
    AVANÇAR ETAPA — COM ASSINATURA E VALIDAÇÃO
 ══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   CICLO DE ETAPAS — FLUXO CORRETO
+
+   PASSO 1: Gestor abre etapa → define prazo (opcional) → assina
+            → Franqueado recebe notificação com instruções + prazo
+   PASSO 2: Franqueado cumpre requisitos, tira dúvidas via chamados
+            → Franqueado clica "Concluí" → assina
+            → Gestor recebe notificação
+   PASSO 3: Gestor confere → valida e assina
+            → Franqueado recebe "Etapa aprovada!" → assina ciência
+            → Próxima etapa inicia automaticamente
+            → Gestor recebe resumo (início, dias, término, itens)
+══════════════════════════════════════════════════════════════ */
+
+// PASSO 1A: Gestor abre modal para iniciar etapa com franqueado
 function abrirEtapa(fid, etapaId) {
   if(!PERM.assinar){ toast('Sem permissão para assinar etapas.','rd'); return; }
   const f  = getFranqueado(fid);
-  const et = ETAPAS.find(e=>e.id===etapaId);
+  const et = ETAPAS.find(e=>e.id===Number(etapaId));
   if(!f||!et) return;
 
-  // Checklist da etapa
-  const checklistItems = gerarChecklistEtapa(et);
-
-  const corpo = `
-    <div class="mb-8">
-      <div class="badge badge-orange" style="margin-bottom:8px">Etapa ${etapaId} de ${ETAPAS.length}</div>
-      <div style="font-size:15px;font-weight:800;margin-bottom:4px">${et.nome}</div>
-      <div style="font-size:12px;color:var(--text-dim)">${et.desc}</div>
-      ${et.legal?'<span class="badge badge-purple" style="margin-top:6px;display:inline-block">Etapa com validade jurídica</span>':''}
-    ${et.instrucoes?`<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:12px;margin:12px 0">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#16A34A;margin-bottom:6px">O que fazer nesta etapa</div>
-      <div style="font-size:12px;color:#166534;white-space:pre-line;line-height:1.7">${et.instrucoes}</div>
-    </div>`:''}
-    ${et.docs&&et.docs.length?`<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px;margin-bottom:12px">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1E40AF;margin-bottom:6px">Documentos desta etapa</div>
-      ${et.docs.map(d=>'<div style="font-size:12px;color:#1E3A8A;padding:2px 0">· '+d+'</div>').join('')}
-    </div>`:''}
+  abrirModal(`Iniciar Etapa ${etapaId} — ${et.nome}`, `
+    <div style="background:#EFF6FF;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px">
+        📋 O franqueado receberá as instruções desta etapa
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.7;white-space:pre-line">${et.instrucoes||et.desc}</div>
     </div>
 
-    <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:8px">⚠ Antes de confirmar, verifique:</div>
-      ${checklistItems.map((item,i)=>`
-        <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;cursor:pointer">
-          <input type="checkbox" id="chk_${i}" style="margin-top:2px;accent-color:var(--orange)">
-          <span style="font-size:12px;color:#92400E">${item}</span>
-        </label>`).join('')}
+    ${et.docs&&et.docs.length?`
+    <div style="background:#F0FDF4;border-radius:8px;padding:10px;margin-bottom:12px">
+      <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Documentos exigidos</div>
+      ${et.docs.map(d=>`<div style="font-size:12px;color:#166534;padding:2px 0">· ${d}</div>`).join('')}
+    </div>`:''}
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--text-dim);display:block;margin-bottom:6px">
+        📅 Prazo para o franqueado <span style="color:var(--text-muted);font-weight:400">(opcional)</span>
+      </label>
+      <input type="date" id="et-prazo-input" class="inp"
+        min="${new Date().toISOString().slice(0,10)}"
+        style="max-width:200px">
+      <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+        Se definido, será lançado automaticamente na sua agenda.
+      </div>
     </div>
 
-    <div id="ass-container"></div>`;
+    <div id="et-ass-container"></div>
+    <button onclick="fecharModal()" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">Cancelar</button>
+  `, '');
 
-  const declaracao = `Eu, ${SESSAO.nome}, declaro para todos os fins legais que:
-1. Certifiquei o cumprimento de todos os requisitos da Etapa ${etapaId} — "${et.nome}";
-2. Os documentos necessários foram conferidos e estão arquivados nas pastas correspondentes;
-3. Assumo responsabilidade civil pela veracidade desta declaração.
-Assinatura registrada em ${hoje()} às ${agora()}.`;
-
-  abrirModal(
-    `Avançar para a Etapa ${etapaId+1}`,
-    corpo,
-    `<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" id="btn-confirmar-etapa" onclick="confirmarEtapa('${fid}',${etapaId})" disabled>Confirmar e assinar</button>`
-  );
-
-  // Habilitar botão quando todos os checks estão marcados
-  setTimeout(()=>{
-    const checks = document.querySelectorAll('[id^="chk_"]');
-    const btn = $('btn-confirmar-etapa');
-    const verificar = () => {
-      const todos = Array.from(checks).every(c=>c.checked);
-      btn.disabled = !todos;
-      if(todos) renderAssBox('ass-container', declaracao, 'Assinar minha declaração e notificar franqueado', ()=>confirmarEtapa(fid, etapaId));
-    };
-    checks.forEach(c=>c.addEventListener('change', verificar));
-  },100);
+  setTimeout(() => {
+    const declaracao = `Eu, ${SESSAO.nome}, declaro que a Etapa ${etapaId} — "${et.nome}" — foi formalmente iniciada para o franqueado ${f.nome} (${f.ticket}), com ciência das obrigações e documentação exigida. Data: ${hoje()} às ${agora()}.`;
+    renderAssBox('et-ass-container', declaracao, '✍ Assinar e notificar franqueado', () => confirmarInicioEtapa(fid, etapaId, declaracao));
+  }, 150);
 }
+
+// PASSO 1B: Confirmar início — notifica franqueado + lança prazo na agenda
+async function confirmarInicioEtapa(fid, etapaId, declaracao) {
+  const f    = getFranqueado(fid);
+  const et   = ETAPAS.find(e=>e.id===Number(etapaId));
+  const prazo = $('et-prazo-input')?.value || '';
+  const hash  = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+  const ts    = Date.now();
+
+  // 1. Registrar evento na etapa
+  salvarEventoEtapa(fid, etapaId, {
+    tipo:  'etapa_iniciada',
+    texto: `Etapa ${etapaId} iniciada pelo gestor ${SESSAO.nome}. Franqueado notificado.${prazo?' Prazo: '+prazo.split('-').reverse().join('/'):' Sem prazo definido.'}`,
+    autor: SESSAO.nome,
+    hash,
+    data:  hoje(), hora: agora(), timestamp: ts,
+  });
+
+  // 2. Salvar prazo do franqueado se definido
+  if(prazo) {
+    StorageAdapter.salvarPrazoFranqueado(fid, etapaId, prazo);
+    // Lançar na agenda do gestor
+    const prazos = getPrazos();
+    const [y,m,d] = prazo.split('-');
+    prazos.push({
+      id:       `prazo_et${etapaId}_${fid}_${ts}`,
+      titulo:   `Prazo Etapa ${etapaId} — ${f.ticket} ${f.nome.split(' ')[0]}`,
+      desc:     `Prazo final da Etapa ${etapaId} (${et?.nome}) para o franqueado ${f.nome}.`,
+      data:     `${d}/${m}/${y}`,
+      dataISO:  prazo,
+      fid,
+      etapa:    etapaId,
+      tipo:     'etapa',
+      concluido:false,
+      criadoEm: hoje(),
+    });
+    salvarPrazosDB(prazos);
+  }
+
+  // 3. Notificar franqueado via Firebase
+  try {
+    await db.ref(`notif_franqueado/${fid}`).set({
+      tipo:        'etapa_iniciada',
+      etapa:       etapaId,
+      nomeEtapa:   et?.nome,
+      instrucoes:  et?.instrucoes || et?.desc,
+      docs:        et?.docs || [],
+      prazo:       prazo || null,
+      gestor:      SESSAO.nome,
+      data:        hoje(), hora: agora(), timestamp: ts,
+      lido:        false,
+    });
+  } catch(e) {}
+
+  // 4. Registrar no histórico central
+  registrarEvento(fid, 'etapa_iniciada', {
+    texto: `Etapa ${etapaId} iniciada. Franqueado notificado.`,
+    etapa: etapaId, hash,
+  });
+
+  fecharModal();
+  toast(`Etapa ${etapaId} iniciada! ${f.nome.split(' ')[0]} foi notificado.${prazo?' Prazo lançado na agenda.':''}`, 'gn');
+  abrirEtapaProcesso(fid, etapaId);
+}
+
+// PASSO 3A: Gestor valida após receber notificação de conclusão do franqueado
+
+// Resumo mostrado ao gestor quando franqueado fecha o ciclo da etapa
+async function mostrarResumoCicloEtapa(notif) {
+  // Marcar como visto para não mostrar de novo
+  try { db.ref('notif_gestor/' + notif.fid).update({ _visto: true }); } catch(e) {}
+
+  const f  = getFranqueado(notif.fid);
+  const et = ETAPAS.find(e => e.id === Number(notif.etapa));
+
+  // Buscar eventos da etapa para calcular duração
+  let diasTranscorridos = '—';
+  let dataInicio = '—';
+  let dataFim    = notif.data;
+  try {
+    const snap = await db.ref(`etapas/${notif.fid}/et${notif.etapa}/eventos`).once('value');
+    const raw  = snap.val();
+    if(raw) {
+      const evs = Array.isArray(raw) ? raw : Object.values(raw);
+      const inicio = evs.find(e => e.tipo === 'etapa_iniciada');
+      if(inicio?.data) {
+        dataInicio = inicio.data;
+        const [di,mi,ai] = inicio.data.split('/').map(Number);
+        const [df,mf,af] = notif.data.split('/').map(Number);
+        const d1 = new Date(ai,mi-1,di);
+        const d2 = new Date(af,mf-1,df);
+        diasTranscorridos = Math.max(0, Math.round((d2-d1)/(864e5)));
+      }
+    }
+  } catch(e) {}
+
+  abrirModal(`✅ Etapa ${notif.etapa} concluída — ${notif.franqueado}`, `
+    <div style="background:linear-gradient(135deg,#1E40AF,#3B82F6);border-radius:12px;padding:16px;margin-bottom:16px;color:#fff">
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px">🎉 Ciclo concluído!</div>
+      <div style="font-size:13px;opacity:.85">${notif.ticket} · ${notif.franqueado}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      ${[
+        {label:'Início', valor: dataInicio},
+        {label:'Conclusão', valor: dataFim},
+        {label:'Dias', valor: diasTranscorridos + (diasTranscorridos!=='—'?' dia(s)':'')},
+      ].map(s=>`
+      <div style="text-align:center;background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
+        <div style="font-size:18px;font-weight:800;color:var(--primary)">${s.valor}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${s.label}</div>
+      </div>`).join('')}
+    </div>
+
+    <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px">Etapa ${notif.etapa} — ${et?.nome||''}</div>
+      <div style="font-size:11px;color:var(--text-dim)">${et?.desc||''}</div>
+    </div>
+
+    <div style="font-size:12px;color:var(--text-dim);text-align:center">
+      A próxima etapa (${Number(notif.etapa)+1}) já está disponível para o franqueado.
+    </div>
+  `,
+  `<button class="btn primary" onclick="fecharModal()">Ciente — continuar</button>`
+  );
+}
+
+function confirmarValidacaoEtapa(fid, etapaId) {
+  const f  = getFranqueado(fid);
+  const et = ETAPAS.find(e=>e.id===Number(etapaId));
+
+  abrirModal(`Validar conclusão — Etapa ${etapaId}`, `
+    <div style="background:#F0FDF4;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;color:var(--green);margin-bottom:4px">
+        ✓ Confirmar que ${f?.nome?.split(' ')[0]} cumpriu todos os requisitos
+      </div>
+      <div style="font-size:11px;color:var(--text-dim)">Etapa ${etapaId} — ${et?.nome}</div>
+    </div>
+    <div style="background:#FEF3C7;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#92400E">
+      ⚠ Ao assinar, você confirma que conferiu os documentos e requisitos. O franqueado receberá a aprovação e assinará o fechamento da etapa.
+    </div>
+    <div id="val-ass-container"></div>
+    <button onclick="fecharModal()" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">Cancelar</button>
+  `, '');
+
+  setTimeout(() => {
+    const declaracao = `Eu, ${SESSAO.nome}, valido a conclusão da Etapa ${etapaId} — "${et?.nome}" — pelo franqueado ${f?.nome} (${f?.ticket}), confirmando que todos os requisitos e documentos foram devidamente cumpridos e conferidos. Data: ${hoje()} às ${agora()}.`;
+    renderAssBox('val-ass-container', declaracao, '✍ Assinar validação e notificar franqueado', () => executarValidacaoEtapa(fid, etapaId, declaracao));
+  }, 150);
+}
+
+async function executarValidacaoEtapa(fid, etapaId, declaracao) {
+  const f   = getFranqueado(fid);
+  const et  = ETAPAS.find(e=>e.id===Number(etapaId));
+  const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+  const ts   = Date.now();
+
+  // 1. Registrar evento de validação
+  salvarEventoEtapa(fid, etapaId, {
+    tipo:  'validacao_gestor',
+    texto: `Etapa ${etapaId} validada pelo gestor ${SESSAO.nome}. Franqueado notificado para assinar o fechamento.`,
+    autor: SESSAO.nome,
+    hash,
+    data:  hoje(), hora: agora(), timestamp: ts,
+  });
+
+  // 2. Notificar franqueado — etapa aprovada, assine para fechar
+  try {
+    await db.ref(`notif_franqueado/${fid}`).set({
+      tipo:      'etapa_aprovada',
+      etapa:     etapaId,
+      nomeEtapa: et?.nome,
+      gestor:    SESSAO.nome,
+      declaracao,
+      hash,
+      data:      hoje(), hora: agora(), timestamp: ts,
+      lido:      false,
+    });
+    // Marcar solicitação de validação como aprovada
+    await db.ref(`validacoes/${fid}/et${etapaId}`).update({
+      status: 'aprovada', validadoPor: SESSAO.nome,
+      dataValidacao: hoje(), hashGestor: hash,
+    });
+    await db.ref(`notif_gestor/${fid}`).update({ lido: true });
+  } catch(e) {}
+
+  fecharModal();
+  toast(`Validação registrada! ${f?.nome?.split(' ')[0]} receberá a notificação de aprovação.`, 'gn');
+  abrirEtapaProcesso(fid, etapaId);
+}
+
+// PASSO 3C: Rejeitar — franqueado precisa corrigir
+async function rejeitarValidacaoEtapa(fid, etapaId) {
+  abrirModal('Rejeitar e solicitar correção', `
+    <div style="background:#FEE2E2;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#DC2626;margin-bottom:4px">✗ Solicitar correções ao franqueado</div>
+      <div style="font-size:11px;color:#DC2626">O franqueado será notificado com o motivo e precisará reenviar a solicitação.</div>
+    </div>
+    <div class="field">
+      <label>O que precisa ser corrigido <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="rej-motivo" rows="3"
+        placeholder="Descreva o que está faltando ou incorreto..."></textarea>
+    </div>
+  `, `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn" style="background:#DC2626;color:#fff;border:none" onclick="executarRejeicaoEtapa('${fid}',${etapaId})">Rejeitar e notificar</button>`);
+}
+
+async function executarRejeicaoEtapa(fid, etapaId) {
+  const motivo = $('rej-motivo')?.value?.trim();
+  if(!motivo) { toast('Informe o motivo.','rd'); return; }
+  const f = getFranqueado(fid);
+
+  salvarEventoEtapa(fid, etapaId, {
+    tipo:  'validacao_rejeitada',
+    texto: `Validação rejeitada pelo gestor ${SESSAO.nome}. Motivo: ${motivo}`,
+    autor: SESSAO.nome,
+    data:  hoje(), hora: agora(),
+  });
+
+  try {
+    await db.ref(`validacoes/${fid}/et${etapaId}`).update({
+      status: 'rejeitada', motivoRejeicao: motivo,
+      rejeitadoPor: SESSAO.nome, dataRejeicao: hoje(),
+    });
+    await db.ref(`notif_franqueado/${fid}`).set({
+      tipo:    'etapa_rejeitada',
+      etapa:   etapaId,
+      motivo,
+      gestor:  SESSAO.nome,
+      data:    hoje(), hora: agora(), lido: false,
+    });
+    await db.ref(`notif_gestor/${fid}`).update({ lido: true });
+  } catch(e) {}
+
+  fecharModal();
+  toast('Rejeição registrada. Franqueado notificado para corrigir.', 'or');
+  abrirEtapaProcesso(fid, etapaId);
+}
+
+
 
 function gerarChecklistEtapa(et) {
   const tarefas = (et.tarefas||[]).map(t=>`${t}`);
@@ -8372,7 +8633,7 @@ function abrirEtapaProcesso(fid, etapaId) {
     </div>
     <button onclick="abrirEtapa('${fid}',${etapaId})"
       style="padding:10px 20px;border-radius:10px;background:#fff;color:var(--primary);border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
-      ✍ Concluir etapa
+      ✍ Iniciar etapa
     </button>
   </div>` : ''}
 
