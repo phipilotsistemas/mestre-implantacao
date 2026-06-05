@@ -3361,6 +3361,8 @@ function confirmarCadastroFranqueado() {
   // (assíncrono — não bloqueia o fluxo)
   (async () => {
     try {
+      toast('☁ Criando pastas no Drive...', 'or');
+
       // 1. Criar estrutura de pastas
       const pastas = await appsGet({
         action: 'criarPastas',
@@ -3368,27 +3370,30 @@ function confirmarCadastroFranqueado() {
         nome:   _fichaData.nome,
         ticket: _fichaData.ticket,
       });
-      if(pastas.erro) throw new Error(pastas.erro);
+
+      if(!pastas || pastas.erro) throw new Error(pastas?.erro || 'Sem resposta do Apps Script');
+      if(!pastas.pasta_et00_id)  throw new Error('Pasta 00_Cadastro não retornada');
 
       // Salvar IDs das pastas na ficha do franqueado
       atualizarFranqueado(_fid, { drivePasstas: pastas });
 
       // Salvar também no Firebase para o portal ler
-      try {
-        db.ref('franqueados/' + _fid + '/drivePasstas').set(pastas);
-      } catch(e2) {}
+      try { db.ref('franqueados/' + _fid + '/drivePasstas').set(pastas); } catch(e2) {}
+
+      toast('📄 Gerando Ficha Cadastral...', 'or');
 
       // 2. Gerar Ficha Cadastral na pasta 00_Cadastro
       const pdfResult = await gerarPDFNoDrive('ficha_cadastral', pastas.pasta_et00_id, _fichaData);
 
       if(pdfResult?.ok) {
-        toast(`✓ Pastas e Ficha Cadastral criadas no Drive para ${_fichaData.nome.split(' ')[0]}!`, 'gn');
+        toast('✓ Drive: pastas e Ficha Cadastral criadas!', 'gn');
       } else {
-        toast(`Pastas criadas. Ficha Cadastral pendente.`, 'or');
+        console.warn('PDF não gerado:', pdfResult);
+        toast('Pastas criadas. Ficha Cadastral falhou — veja o console.', 'or');
       }
     } catch(e) {
-      console.warn('Drive/PDF:', e.message);
-      toast('Cadastro salvo. Drive pendente: ' + e.message, 'or');
+      console.error('Drive/PDF erro:', e.message);
+      toast('Drive: ' + e.message, 'rd');
     }
   })();
 
@@ -6073,19 +6078,24 @@ async function confirmarInicioProcesso(fid, declaracao) {
 // Chamada GET ao Apps Script
 async function appsGet(params) {
   const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
-  const resp = await fetch(url);
-  if(!resp.ok) throw new Error('Apps Script retornou HTTP ' + resp.status);
-  return await resp.json();
+  const resp = await fetch(url, { redirect: 'follow' });
+  if(!resp.ok) throw new Error('Apps Script HTTP ' + resp.status);
+  const txt = await resp.text();
+  try { return JSON.parse(txt); }
+  catch(e) { throw new Error('Resposta inválida: ' + txt.slice(0,100)); }
 }
 
 // Chamada POST ao Apps Script
 async function appsPost(body) {
   const resp = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
+    redirect: 'follow',
     body: JSON.stringify(body),
   });
-  if(!resp.ok) throw new Error('Apps Script retornou HTTP ' + resp.status);
-  return await resp.json();
+  if(!resp.ok) throw new Error('Apps Script HTTP ' + resp.status);
+  const txt = await resp.text();
+  try { return JSON.parse(txt); }
+  catch(e) { throw new Error('Resposta inválida: ' + txt.slice(0,100)); }
 }
 
 // Gerar PDF no Drive via Apps Script
