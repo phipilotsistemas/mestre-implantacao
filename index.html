@@ -3351,15 +3351,52 @@ function cardChamadoPainel(c) {
       <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:10px;padding:8px;background:var(--bg);border-radius:6px">
         ${c.descricao}
       </div>
-      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:8px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
-      ${c.totalRetornos > 0 ? `<div style="font-size:11px;color:var(--amber);font-weight:700;margin-bottom:4px">↩ Reaberto ${c.totalRetornos}x pelo franqueado</div>` : ''}
-      ${c.retornoFranqueado && c.status === 'aberto' ? `
-      <div style="background:#FEF3C7;border-radius:6px;padding:8px;margin-bottom:8px">
-        <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:2px">⚠ Retorno do franqueado · ${c.dataRetorno||''}</div>
-        <div style="font-size:11px;color:#92400E">${c.retornoFranqueado}</div>
+      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
+
+      <!-- Histórico completo de trocas -->
+      ${(c.historico||[]).length > 0 ? `
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none;font-weight:600">
+          ↩ ${c.historico.length} troca${c.historico.length>1?'s':''} anteriores
+        </summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+          ${(c.historico||[]).map((h,i) => `
+          <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+            <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
+              Rodada ${i+1} — Resposta do gestor · ${h.dataResposta||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:var(--text);background:#fff">${h.respostaGestor||'—'}</div>
+            ${h.retornoFranqueado ? `
+            <div style="background:#FEF9C3;padding:6px 10px;font-size:10px;font-weight:700;color:#92400E">
+              Retorno do franqueado · ${h.dataRetorno||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${h.retornoFranqueado}</div>` : ''}
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+
+      <!-- Última resposta atual -->
+      ${c.respostaGestor ? `
+      <div style="border-radius:8px;overflow:hidden;border:1px solid #BBF7D0;margin-bottom:8px">
+        <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
+          ${c.assinaturaFranqueado ? '✓ Resposta final' : 'Última resposta'} · ${c.dataResposta||''}
+        </div>
+        <div style="padding:8px 10px;font-size:12px;color:var(--text);background:#fff">${c.respostaGestor}</div>
       </div>` : ''}
-      ${c.respostaGestor && c.status !== 'aberto' ? `<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ Resposta enviada em ${c.dataResposta}</div>` : ''}
-      ${c.assinaturaFranqueado ? `<div style="font-size:11px;color:var(--green);font-weight:700">✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}</div>` : ''}
+
+      <!-- Retorno pendente do franqueado -->
+      ${c.retornoFranqueado && c.status === 'aberto' ? `
+      <div style="border-radius:8px;overflow:hidden;border:1px solid #FDE68A;margin-bottom:8px">
+        <div style="background:#FEF3C7;padding:6px 10px;font-size:10px;font-weight:700;color:#92400E">
+          ⚠ Retorno do franqueado · ${c.dataRetorno||''}
+        </div>
+        <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${c.retornoFranqueado}</div>
+      </div>` : ''}
+
+      ${c.assinaturaFranqueado ? `
+      <div style="font-size:11px;color:var(--green);font-weight:700;padding:6px 0">
+        ✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo total: ${c.tempAtendimento}
+      </div>` : ''}
       <!-- Ações do gestor -->
       ${c.status !== 'concluido' && c.status !== 'cancelado' ? `
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
