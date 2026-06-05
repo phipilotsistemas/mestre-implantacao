@@ -1458,6 +1458,32 @@ async function enviarRecuperacaoSenha() {
   }
 }
 
+function renderAssBox(containerId, texto, labelBtn, onConfirm, corFundo, corTexto) {
+  const el = $(containerId); if(!el) return;
+  const uid  = 'ass_'+Date.now();
+  const bg   = corFundo  || '';
+  const fg   = corTexto  || '';
+  el.innerHTML = `
+    <div class="ass-box">
+      <div class="ass-texto" id="scroll_${uid}">${texto.replace(/\n/g,'<br>')}</div>
+      <div class="ass-aviso">
+        Ao confirmar, você declara para todos os fins legais que leu, entendeu e concorda com o conteúdo acima.
+        Esta ação será registrada com sua identificação, localização e horário.
+      </div>
+      <button class="ass-btn" id="btn_${uid}"
+        ${bg ? `style="background:${bg};color:${fg||'#fff'};border-color:${bg}"` : ''}>
+        ${labelBtn||'Confirmar e assinar'}
+      </button>
+    </div>`;
+  const sc = $(`scroll_${uid}`);
+  const bn = $(`btn_${uid}`);
+  sc.addEventListener('scroll',()=>{
+    if(sc.scrollTop+sc.clientHeight>=sc.scrollHeight-20){ bn.classList.add('pronto'); }
+  });
+  setTimeout(()=>{ if(sc.scrollHeight<=sc.clientHeight) bn.classList.add('pronto'); },100);
+  bn.onclick = onConfirm;
+}
+
 function fazerLogin() {
   const email = $('login-email')?.value?.trim().toLowerCase();
   const senha  = $('login-senha')?.value;
@@ -2115,21 +2141,42 @@ async function assinarConclusaoChamado(chamadoId) {
 
   const declaracao = `Eu, ${PORTAL.nome}, confirmo que o chamado ${chamadoId} foi atendido satisfatoriamente pelo gestor ${chamado.gestorNome||'—'} em ${hoje()} às ${agora()}. Assunto: ${chamado.titulo}.`;
 
-  abrirModal('Confirmar atendimento',`
+  // Mostrar histórico de trocas se houver
+  const histHTML = (chamado.historico||[]).map((h,i) => `
+    <div style="border-left:3px solid #FDE68A;padding:6px 10px;margin-bottom:6px;background:#FFFBEB;border-radius:4px">
+      <div style="font-size:10px;font-weight:700;color:#92400E">Rodada ${i+1}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Resposta: ${h.respostaGestor||'—'}</div>
+      <div style="font-size:11px;color:#92400E;margin-top:2px">Retorno: ${h.retornoFranqueado||'—'}</div>
+    </div>`).join('');
+
+  abrirModal('Confirmar atendimento', `
     <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:4px">✓ Confirmar que o chamado foi resolvido</div>
-      <div style="font-size:11px;color:var(--text);line-height:1.6">${chamado.titulo}<br>Resposta: ${chamado.respostaGestor}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">✓ Confirmar que o chamado foi resolvido</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:4px"><b>Assunto:</b> ${chamado.titulo}</div>
+      <div style="font-size:12px;color:var(--text-dim)"><b>Última resposta:</b> ${chamado.respostaGestor}</div>
+    </div>
+    ${histHTML ? `
+    <details style="margin-bottom:12px">
+      <summary style="font-size:11px;color:var(--text-dim);cursor:pointer">Ver histórico de trocas (${chamado.historico.length})</summary>
+      <div style="margin-top:8px">${histHTML}</div>
+    </details>` : ''}
+    <div style="background:#FEF3C7;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:#92400E">
+      ⚠ Ao assinar, você confirma que o problema foi resolvido. Esta ação é irreversível.
     </div>
     <div id="ass-conclusao-container"></div>
-  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>`);
+    <button onclick="fecharModal()"
+      style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">
+      Cancelar
+    </button>
+  `, '');
 
   setTimeout(() => {
     renderAssBox('ass-conclusao-container', declaracao, 'Assinar e confirmar atendimento', async () => {
       const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
       const lista2 = await getChamados();
-      const c2 = lista2.find(c => c.id === chamadoId);
+      const c2     = lista2.find(c => c.id === chamadoId);
       if(c2) {
-        c2.status              = 'concluido';
+        c2.status               = 'concluido';
         c2.assinaturaFranqueado = true;
         c2.declaracaoConclusao  = declaracao;
         c2.hashConclusao        = hash;
@@ -2140,8 +2187,8 @@ async function assinarConclusaoChamado(chamadoId) {
       fecharModal();
       toast('Atendimento confirmado. Chamado ' + chamadoId + ' encerrado.', 'gn');
       renderSuporte();
-    });
-  }, 100);
+    }, '#F5A623', '#1B3F8B'); // botão amarelo com texto azul
+  }, 150);
 }
 
 
