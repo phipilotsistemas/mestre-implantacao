@@ -7126,21 +7126,41 @@ function renderProcessoImplantacao(fid) {
 
     <!-- ÁREA DE TRABALHO -->
     <div id="proc-area" style="flex:1;overflow-y:auto;padding:24px 28px;background:var(--bg)">
+      ${!f.processoIniciado ? `
+      <!-- PROCESSO NÃO INICIADO — CTA central -->
+      <div style="max-width:480px;margin:60px auto;text-align:center">
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--primary-soft);border:2px solid var(--primary-border);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 20px">🔒</div>
+        <div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px">${f.nome.split(' ')[0]}, bem-vindo(a)!</div>
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.7;margin-bottom:24px">
+          O processo de implantação ainda não foi iniciado.<br>
+          Para iniciar, confirme o recebimento da <strong>COF</strong> e do <strong>Pré-contrato</strong> assinados e assine a declaração de início.
+        </div>
+        <button onclick="iniciarProcesso('${fid}')"
+          style="padding:14px 32px;border-radius:12px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:15px;font-weight:800;box-shadow:0 4px 16px rgba(27,63,139,.25);display:inline-flex;align-items:center;gap:10px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Iniciar processo de implantação
+        </button>
+        <div style="margin-top:16px;font-size:11px;color:var(--text-muted)">
+          Origem: ${f.origemEmpresa||f.origem?.empresa||'—'} · ${f.origemResponsavel||f.origem?.responsavel||'—'}
+        </div>
+      </div>` : `
       <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
         <div style="font-size:32px;margin-bottom:12px">👆</div>
         <div style="font-size:14px;font-weight:600">Selecione uma etapa ao lado</div>
         <div style="font-size:12px;margin-top:6px">Clique na etapa para ver o checklist, documentos e histórico</div>
-      </div>
+      </div>`}
     </div>
 
   </div>`;
 
-  // Abrir automaticamente a etapa atual
+  // Abrir automaticamente a etapa atual (só se processo já iniciado)
   setTimeout(() => {
-    if(f.etapaAtual <= ETAPAS.length) {
-      abrirEtapaProcesso(fid, f.etapaAtual);
-    } else {
-      abrirEtapaProcesso(fid, ETAPAS.length);
+    if(f.processoIniciado) {
+      if(f.etapaAtual <= ETAPAS.length) {
+        abrirEtapaProcesso(fid, f.etapaAtual);
+      } else {
+        abrirEtapaProcesso(fid, ETAPAS.length);
+      }
     }
   }, 50);
 }
