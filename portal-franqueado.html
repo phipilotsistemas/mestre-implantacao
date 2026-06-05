@@ -1158,6 +1158,7 @@ auth.onAuthStateChanged(user => {
   if(user) {
     // Usuário autenticado — verificar se já tem sessão montada
     if(window.PORTAL?.fid) return; // já logado, não faz nada
+    if(_saindoIntencional) return;  // logout em progresso, não restaurar
 
     // Tentar restaurar sessão do Firebase
     db.ref('portal_usuarios').orderByChild('email').equalTo(user.email).once('value')
@@ -1178,13 +1179,19 @@ auth.onAuthStateChanged(user => {
       .catch(e => console.warn('Restaurar sessão:', e.message));
 
   } else {
-    // Sem usuário — se portal estava ativo, voltar para login
-    if(window.PORTAL?.fid) {
-      window.PORTAL = {};
-      const app   = document.getElementById('app');
-      const login = document.getElementById('tela-login');
-      if(app)   app.style.display   = 'none';
-      if(login) login.style.display = 'flex';
+    // Sem usuário — voltar para login (não restaurar se foi logout intencional)
+    _saindoIntencional = false; // resetar flag
+    window.PORTAL = {};
+    const app   = document.getElementById('app');
+    const login = document.getElementById('tela-login');
+    if(app)   app.style.display   = 'none';
+    if(login) {
+      login.style.display = 'flex';
+      // Limpar campos
+      const emailEl = document.getElementById('login-email');
+      const senhaEl = document.getElementById('login-senha');
+      if(emailEl) emailEl.value = '';
+      if(senhaEl) senhaEl.value = '';
     }
   }
 });
@@ -1330,6 +1337,7 @@ const USUARIOS = {
 
 let PORTAL = {};
 let _aba = 'inicio';
+let _saindoIntencional = false; // flag para evitar restauração após logout
 
 // ── APPS SCRIPT / DRIVE ──
 var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXkAERCOWTTzyuttwqvdCPrJyf2WmztdGIDZUn3skMkwR9E3SIQbO1ktdAYKZqw7Ys/exec';
@@ -1482,6 +1490,30 @@ function renderAssBox(containerId, texto, labelBtn, onConfirm, corFundo, corText
   });
   setTimeout(()=>{ if(sc.scrollHeight<=sc.clientHeight) bn.classList.add('pronto'); },100);
   bn.onclick = onConfirm;
+}
+
+
+function fazerLogoutPortal() {
+  if(!confirm('Deseja realmente sair do portal?')) return;
+  _saindoIntencional = true;
+  PORTAL = {};
+  // Fechar listeners Firebase
+  try { db.ref('chamados/' + (PORTAL.fid||'')).off(); } catch(e) {}
+  try { db.ref('franqueados/' + (PORTAL.fid||'')).off(); } catch(e) {}
+  try { db.ref('reunioes').off(); } catch(e) {}
+  // Fazer signOut no Firebase — onAuthStateChanged vai mostrar o login
+  auth.signOut()
+    .then(() => {
+      // onAuthStateChanged cuida de mostrar a tela de login
+    })
+    .catch(e => {
+      // Forçar se signOut falhar
+      window.PORTAL = {};
+      const app   = document.getElementById('app');
+      const login = document.getElementById('tela-login');
+      if(app)   app.style.display   = 'none';
+      if(login) login.style.display = 'flex';
+    });
 }
 
 function fazerLogin() {
@@ -1871,9 +1903,12 @@ async function getChamados() {
     const snap = await db.ref('chamados/' + PORTAL.fid).once('value');
     const raw  = snap.val();
     if(!raw) return [];
-    return Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+    // Firebase pode retornar objeto com índices numéricos — garantir array
+    const lista = Array.isArray(raw)
+      ? raw.filter(Boolean)
+      : Object.values(raw).filter(Boolean);
+    return lista;
   } catch(e) {
-    // Fallback localStorage
     try {
       const snap = localStorage.getItem('suporte_' + PORTAL.fid);
       return snap ? JSON.parse(snap) : [];
@@ -2161,15 +2196,15 @@ function confirmarAbrirChamado() {
     gestorToken:  PORTAL.gestor?.token || '',
   };
 
-  // getChamados é async — usar await
-  getChamados().then(lista => {
+  // getChamados retorna array — garantir que é array antes de unshift
+  getChamados().then(raw => {
+    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
     lista.unshift(chamado);
     salvarChamados(lista);
     fecharModal();
     toast('Chamado ' + id + ' aberto. Seu gestor será notificado.', 'gn');
     renderSuporte();
   }).catch(e => {
-    // Fallback — criar lista nova se Firebase falhar
     salvarChamados([chamado]);
     fecharModal();
     toast('Chamado ' + id + ' aberto.', 'gn');
@@ -3058,7 +3093,7 @@ function abrirPerfilPortal() {
       <div style="font-size:17px;font-weight:800;color:var(--text)">${PORTAL.nome}</div>
       <div style="font-size:12px;color:var(--text-dim);margin-top:4px">${PORTAL.ticket} · Franqueado</div>
     </div>`,
-    `<button class="btn" style="width:100%;color:var(--red);border-color:#FECACA" onclick="location.reload()">
+    `<button class="btn" style="width:100%;color:var(--red);border-color:#FECACA" onclick="fazerLogoutPortal()">
       <i class="fi fi-sr-sign-out-alt" style="margin-right:6px"></i>Sair
     </button>`
   );
