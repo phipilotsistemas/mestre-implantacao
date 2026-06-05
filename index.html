@@ -5726,7 +5726,13 @@ function iniciarProcesso(fid) {
   const f = getFranqueado(fid);
   if(!f) return;
 
-  const contato = f.origem;
+  // Compatibilidade: cadastro salva campos separados, não objeto f.origem
+  const contato = f.origem || {
+    empresa:     f.origemEmpresa     || '—',
+    responsavel: f.origemResponsavel || '—',
+    tel:         f.origemTel         || '',
+    email:       f.origemEmail       || '',
+  };
   const telWA   = contato?.tel;
   const msgWA   = `Olá ${contato?.responsavel||''},\n\nEstamos iniciando o processo de implantação do franqueado *${f.nome}* (${f.ticket} · ${f.cidade}/${f.uf}).\n\nPara prosseguir, precisamos confirmar o recebimento dos seguintes documentos:\n• COF (Circular de Oferta de Franquia) assinada\n• Pré-contrato assinado\n\nPor favor, confirme o envio ou encaminhe os documentos o quanto antes.\n\nAtenciosamente,\n${SESSAO.nome}\nMestre da Obra`;
 
