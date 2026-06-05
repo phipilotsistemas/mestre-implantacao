@@ -850,6 +850,14 @@ select.inp{cursor:pointer}
         <span class="badge" id="badge-cand" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
 
+      <!-- DASHBOARD -->
+      <div class="sb-group">VISÃO GERAL</div>
+      <button class="sb-item" onclick="ir('dashboard',this)" id="sb-dashboard">
+        <div class="dot" style="background:#F5A623"></div>
+        <span>Dashboard</span>
+        <span class="badge" id="badge-dashboard" style="display:none;background:#DC2626;color:#fff">0</span>
+      </button>
+
       <!-- FRANQUEADOS com submenu -->
       <div class="sb-group">FRANQUEADOS</div>
       <button class="sb-item ativo" onclick="ir('franqueados',this)" id="sb-frq-implantacao">
@@ -1604,7 +1612,7 @@ function iniciarApp() {
   // Iniciar Firebase (modo offline gracioso)
   // Firebase já inicializado
 
-  ir('franqueados');
+  ir('dashboard');
   atualizarBadges();
   setTimeout(atualizarBadgeChamados, 800);
 
