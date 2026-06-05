@@ -1007,7 +1007,15 @@ function gasPost(body) {
    CONFIGURAÇÃO — Firebase
    Substitua pelas credenciais do projeto MO
 ══════════════════════════════════════════════════ */
-// Firebase config abaixo
+const FB_CFG = {
+  apiKey:            'COLE_AQUI_API_KEY',
+  authDomain:        'mestre-da-obra.firebaseapp.com',
+  databaseURL:       'https://mestre-da-obra-default-rtdb.firebaseio.com',
+  projectId:         'mestre-da-obra',
+  storageBucket:     'mestre-da-obra.firebasestorage.app',
+  messagingSenderId: 'COLE_AQUI_SENDER_ID',
+  appId:             'COLE_AQUI_APP_ID',
+};
 
 /* ══════════════════════════════════════════════════
    USUÁRIOS DA EQUIPE INTERNA
@@ -1448,11 +1456,9 @@ function gravarHistoricoFuncional(registro) {
 }
 
 /* Renderiza box de assinatura com scroll obrigatório */
-function renderAssBox(containerId, texto, labelBtn, onConfirm, corFundo, corTexto) {
+function renderAssBox(containerId, texto, labelBtn, onConfirm) {
   const el = $(containerId); if(!el) return;
-  const uid  = 'ass_'+Date.now();
-  const bg   = corFundo  || '';
-  const fg   = corTexto  || '';
+  const uid = 'ass_'+Date.now();
   el.innerHTML = `
     <div class="ass-box">
       <div class="ass-texto" id="scroll_${uid}">${texto.replace(/\n/g,'<br>')}</div>
@@ -1460,10 +1466,7 @@ function renderAssBox(containerId, texto, labelBtn, onConfirm, corFundo, corText
         Ao confirmar, você declara para todos os fins legais que leu, entendeu e concorda com o conteúdo acima.
         Esta ação será registrada com sua identificação, localização e horário.
       </div>
-      <button class="ass-btn" id="btn_${uid}"
-        ${bg ? `style="background:${bg};color:${fg||'#fff'};border-color:${bg}"` : ''}>
-        ${labelBtn||'Confirmar e assinar'}
-      </button>
+      <button class="ass-btn" id="btn_${uid}">${labelBtn||'Confirmar e assinar'}</button>
     </div>`;
   const sc = $(`scroll_${uid}`);
   const bn = $(`btn_${uid}`);
@@ -1570,16 +1573,6 @@ function iniciarApp() {
   // Mostrar Dev Tools só para o administrador principal
   const btnDev = $('sb-dev');
   if(btnDev) btnDev.style.display = SESSAO?.token === 'ADM-PHILLIPE' ? 'flex' : 'none';
-
-  // Carregar dados do Firebase (sincroniza cache local)
-  Promise.all([
-    carregarFranqueadosDoFirebase(),
-    carregarEquipeDoFirebase(),
-  ]).then(() => {
-    atualizarBadges();
-    if(_abaAtual === 'franqueados') renderFranqueados();
-    if(_abaAtual === 'equipe')      renderEquipe();
-  }).catch(() => {});
   $('tela-login').style.display = 'none';
   // Salvar equipe no Firebase para consulta do login
   try {
@@ -1606,54 +1599,15 @@ function iniciarApp() {
   }
   if(PERM.verRelatorios) $('sb-relatorios').style.display = '';
 
-  // Firebase já inicializado no topo — só pegar a referência do DB
+  // Iniciar Firebase (modo offline gracioso)
   try {
+    if(!firebase.apps.length) firebase.initializeApp(FB_CFG);
     db = firebase.database();
   } catch(e) { db = null; }
 
   ir('franqueados');
   atualizarBadges();
   setTimeout(atualizarBadgeChamados, 800);
-  // Listener Firebase para equipe em tempo real
-  try {
-    db.ref('equipe').on('value', snap => {
-      const raw = snap.val();
-      if(!raw) return;
-      const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
-      localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
-      lista.forEach(col => {
-        if(col.token) EQUIPE[col.token] = {
-          nome: col.nome, cargo: col.cargo,
-          tipo: col.tipo, cor: col.cor, email: col.email,
-        };
-      });
-      if(_abaAtual === 'equipe') renderEquipe();
-    });
-  } catch(e) {}
-
-  // Listener Firebase para chamados em tempo real
-  try {
-    db.ref('chamados').on('value', () => {
-      atualizarBadgeChamados();
-      if(_abaAtual === 'suporte') { renderSuportePainel(); }
-    });
-  } catch(e) {}
-
-  // Listener para agenda (tarefas e prazos) em tempo real
-  try {
-    db.ref('agenda').on('value', snap => {
-      const raw = snap.val() || {};
-      if(raw.tarefas) {
-        const lista = Array.isArray(raw.tarefas) ? raw.tarefas : Object.values(raw.tarefas);
-        localStorage.setItem('mo_tarefas', JSON.stringify(lista.filter(Boolean)));
-      }
-      if(raw.prazos) {
-        const lista = Array.isArray(raw.prazos) ? raw.prazos : Object.values(raw.prazos);
-        localStorage.setItem('mo_prazos', JSON.stringify(lista.filter(Boolean)));
-      }
-      if(_abaAtual === 'agenda') renderAgenda();
-    });
-  } catch(e) {}
 }
 
 /* ══════════════════════════════════════════════════
@@ -1684,7 +1638,7 @@ const RENDERS = {
   equipe:          renderEquipe,
   relatorios:      renderRelatorios,
   contatos:        renderContatosExternos,
-  suporte:         () => { renderSuportePainel(); },
+  suporte:         renderSuportePainel,
   dev:             renderDevTools,
 }
 // Armazena o fid do processo em visualização
@@ -1715,12 +1669,11 @@ function ir(aba, btn, fid) {
    DADOS SIMULADOS
 ══════════════════════════════════════════════════ */
 function getDados() {
-  // Lê do localStorage (cache) — Firebase atualiza via listener
   try {
     const s = localStorage.getItem('mo_franqueados');
     if(s) {
       const dados = JSON.parse(s);
-      // Migrar: processoIniciado:true mas etapaAtual:0 → etapaAtual:1
+      // Migrar: franqueados com processoIniciado:true mas etapaAtual:0 → etapaAtual:1
       let migrou = false;
       dados.forEach(f => {
         if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) {
@@ -1735,35 +1688,14 @@ function getDados() {
   return [];
 }
 
-// Carregar franqueados do Firebase e popular o cache local
-async function carregarFranqueadosDoFirebase() {
-  try {
-    const snap = await db.ref('franqueados').once('value');
-    const raw  = snap.val();
-    if(!raw) return;
-    const lista = Object.values(raw).filter(Boolean);
-    // Aplicar migração
-    lista.forEach(f => {
-      if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) f.etapaAtual = 1;
-    });
-    localStorage.setItem('mo_franqueados', JSON.stringify(lista));
-    return lista;
-  } catch(e) {
-    console.warn('carregarFranqueadosDoFirebase:', e.message);
-  }
-}
-
 function salvarDados(dados) {
-  // 1. Atualizar cache local imediatamente (UI não trava)
   localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-  // 2. Persistir no Firebase (fonte da verdade)
+  // Sincronizar com Firebase — usar objeto indexado por posição
   try {
     const obj = {};
-    dados.forEach(f => { if(f.id) obj[f.id] = f; });
-    db.ref('franqueados').set(obj).catch(e =>
-      console.warn('salvarDados Firebase:', e.message)
-    );
-  } catch(e) { console.warn('salvarDados:', e.message); }
+    dados.forEach((f,i) => { obj[f.id || ('f'+i)] = f; });
+    db.ref('franqueados').set(obj);
+  } catch(e) { console.warn('Firebase sync:', e); }
 }
 
 function getFranqueado(id) {
@@ -1771,25 +1703,10 @@ function getFranqueado(id) {
 }
 
 function atualizarFranqueado(id, updates) {
-  // Atualizar cache local
   const dados = getDados();
-  const idx   = dados.findIndex(f => f.id === id);
-  if(idx >= 0) {
-    Object.assign(dados[idx], updates);
-    localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-    // Atualizar só o franqueado específico no Firebase (mais eficiente)
-    try {
-      db.ref('franqueados/' + id).update(updates).catch(e =>
-        console.warn('atualizarFranqueado Firebase:', e.message)
-      );
-    } catch(e) {}
-    return dados[idx];
-  }
-  return null;
-}
-
-function getFranqueado(id) {
-  return getDados().find(f => f.id === id) || null;
+  const idx = dados.findIndex(f=>f.id===id);
+  if(idx>=0) { Object.assign(dados[idx], updates); salvarDados(dados); }
+  return dados[idx];
 }
 
 function atualizarBadges() {
@@ -2639,7 +2556,7 @@ function renderDrawerBody(f) {
       <div class="ficha-label">Esteira · Etapa ${f.etapaAtual} de ${ETAPAS.length}</div>
       ${ETAPAS.map(et=>{
         const concluida  = et.id < f.etapaAtual;
-        const atual      = et.id === f.etapaAtual;
+        const atual      = Number(et.id) === Number(f.etapaAtual);
         const bloqueada  = et.id > f.etapaAtual;
         const pendFrq    = atual && f.etapasPendentes && f.etapasPendentes[et.id]?.status === 'aguardando_franqueado';
         const cls = concluida?'concluida':atual?'atual':'pendente';
@@ -3279,41 +3196,19 @@ function renderEsteiraArquivados() {
    Responde, define prazo, resolve sem reunião
 ══════════════════════════════════════════════════════════════ */
 
-async function renderSuportePainel() {
-  // Limpar conteúdo e mostrar loading imediatamente
-  $('content').innerHTML = `
-    <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
-      <div style="font-size:32px;margin-bottom:12px">⏳</div>
-      <div style="font-size:13px">Carregando chamados...</div>
-    </div>`;
-
-  const dados = getDados();
-
-  // Ler chamados do Firebase (fonte da verdade — vem do portal do franqueado)
+function renderSuportePainel() {
+  setConteudo('suporte');
+  const dados    = getDados();
+  // Coletar todos os chamados de todos os franqueados
   let todosChamados = [];
-  try {
-    const snap = await db.ref('chamados').once('value');
-    const raw  = snap.val();
-    if(raw) {
-      // raw é { fid: [lista de chamados], ... }
-      Object.entries(raw).forEach(([fid, lista]) => {
-        const f = dados.find(x => x.id === fid);
-        const arr = Array.isArray(lista) ? lista : Object.values(lista);
-        arr.filter(Boolean).forEach(ch => {
-          todosChamados.push({ ...ch, _franqueado: f || { nome: ch.franqueado, ticket: ch.ticket } });
-        });
+  dados.forEach(f => {
+    try {
+      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+      lista.forEach(c => {
+        todosChamados.push({ ...c, _franqueado: f });
       });
-    }
-  } catch(e) {
-    console.warn('Erro ao ler chamados do Firebase:', e.message);
-    // Fallback: tentar localStorage
-    dados.forEach(f => {
-      try {
-        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-        lista.forEach(ch => todosChamados.push({ ...ch, _franqueado: f }));
-      } catch(e2) {}
-    });
-  }
+    } catch(e) {}
+  });
 
   // Ordenar por timestamp desc
   todosChamados.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
@@ -3363,32 +3258,18 @@ async function renderSuportePainel() {
   `;
 }
 
-async function filtrarChamadosPainel(status, btn) {
+function filtrarChamadosPainel(status, btn) {
   document.querySelectorAll('.esteira-tab').forEach(b => b.classList.remove('ativa'));
   btn.classList.add('ativa');
 
   const dados = getDados();
   let todosChamados = [];
-  try {
-    const snap = await db.ref('chamados').once('value');
-    const raw  = snap.val();
-    if(raw) {
-      Object.entries(raw).forEach(([fid, lista]) => {
-        const f = dados.find(x => x.id === fid);
-        const arr = Array.isArray(lista) ? lista : Object.values(lista);
-        arr.filter(Boolean).forEach(ch => {
-          todosChamados.push({ ...ch, _franqueado: f || { nome: ch.franqueado, ticket: ch.ticket } });
-        });
-      });
-    }
-  } catch(e) {
-    dados.forEach(f => {
-      try {
-        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-        lista.forEach(ch => todosChamados.push({ ...ch, _franqueado: f }));
-      } catch(e2) {}
-    });
-  }
+  dados.forEach(f => {
+    try {
+      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+      lista.forEach(c => todosChamados.push({ ...c, _franqueado: f }));
+    } catch(e) {}
+  });
 
   const filtrados = todosChamados
     .filter(c => c.status === status)
@@ -3422,53 +3303,9 @@ function cardChamadoPainel(c) {
       <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:10px;padding:8px;background:var(--bg);border-radius:6px">
         ${c.descricao}
       </div>
-      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
-
-      <!-- Retorno pendente — sempre visível quando aberto -->
-      ${c.retornoFranqueado && c.status === 'aberto' ? `
-      <div style="border-radius:8px;overflow:hidden;border:1px solid #FDE68A;margin-bottom:8px">
-        <div style="background:#FEF3C7;padding:6px 10px;font-size:10px;font-weight:700;color:#92400E">
-          ⚠ Retorno do franqueado · ${c.dataRetorno||''}
-        </div>
-        <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${c.retornoFranqueado}</div>
-      </div>` : ''}
-
-      <!-- Última resposta — sempre visível -->
-      ${c.respostaGestor ? `
-      <div style="border-radius:8px;overflow:hidden;border:1px solid #BBF7D0;margin-bottom:8px">
-        <div style="background:#F0FDF4;padding:6px 10px;font-size:10px;font-weight:700;color:var(--green)">
-          ${c.assinaturaFranqueado ? '✓ Resposta final' : 'Última resposta'} · ${c.dataResposta||''}
-        </div>
-        <div style="padding:8px 10px;font-size:12px;color:var(--text);background:#fff">${c.respostaGestor}</div>
-      </div>` : ''}
-
-      <!-- Histórico de trocas — recolhido por padrão -->
-      ${(c.historico||[]).length > 0 ? `
-      <details style="margin-bottom:8px">
-        <summary style="font-size:11px;color:var(--text-dim);cursor:pointer;user-select:none;font-weight:600;padding:4px 0">
-          📋 Histórico de trocas (${c.historico.length} rodada${c.historico.length>1?'s':''})
-        </summary>
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-          ${(c.historico||[]).map((h,i) => `
-          <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border)">
-            <div style="background:#F8FAFC;padding:5px 10px;font-size:10px;font-weight:700;color:var(--text-dim)">
-              Rodada ${i+1} · ${h.dataResposta||''}
-            </div>
-            <div style="padding:8px 10px;font-size:12px;color:var(--text);border-bottom:1px solid var(--border)">
-              <span style="font-size:10px;font-weight:700;color:var(--green)">Resposta: </span>${h.respostaGestor||'—'}
-            </div>
-            ${h.retornoFranqueado ? `
-            <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">
-              <span style="font-size:10px;font-weight:700;color:#92400E">Retorno (${h.dataRetorno||''}): </span>${h.retornoFranqueado}
-            </div>` : ''}
-          </div>`).join('')}
-        </div>
-      </details>` : ''}
-
-      ${c.assinaturaFranqueado ? `
-      <div style="font-size:11px;color:var(--green);font-weight:700;padding:4px 0;border-top:1px solid var(--border);margin-top:6px">
-        ✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}
-      </div>` : ''}
+      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:8px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
+      ${c.respostaGestor ? `<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ Resposta enviada em ${c.dataResposta}</div>` : ''}
+      ${c.assinaturaFranqueado ? `<div style="font-size:11px;color:var(--green);font-weight:700">✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}</div>` : ''}
       <!-- Ações do gestor -->
       ${c.status !== 'concluido' && c.status !== 'cancelado' ? `
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
@@ -3505,32 +3342,26 @@ function responderChamado(fid, chamadoId) {
   );
 }
 
-async function confirmarRespostaChamado(fid, chamadoId) {
+function confirmarRespostaChamado(fid, chamadoId) {
   const texto = $('resp-texto')?.value?.trim();
   if(!texto) { toast('Digite a resposta.','rd'); return; }
 
-  try {
-    const snap  = await db.ref('chamados/' + fid).once('value');
-    const raw   = snap.val();
-    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
-    const ch    = lista.find(x => x.id === chamadoId);
-    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
 
-    ch.respostaGestor = texto;
-    ch.gestorNome     = SESSAO.nome;
-    ch.gestorToken    = SESSAO.token;
-    ch.dataResposta   = hoje() + ' às ' + agora();
-    ch.status         = 'em_andamento';
+  c.respostaGestor  = texto;
+  c.gestorNome      = SESSAO.nome;
+  c.gestorToken     = SESSAO.token;
+  c.dataResposta    = hoje() + ' às ' + agora();
+  c.status          = 'em_andamento';
 
-    await db.ref('chamados/' + fid).set(lista);
-    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
 
-    fecharModal();
-    toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
-    renderSuportePainel();
-  } catch(e) {
-    toast('Erro ao salvar: ' + e.message, 'rd');
-  }
+  fecharModal();
+  toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
+  renderSuportePainel();
 }
 
 function definirPrazoChamado(fid, chamadoId) {
@@ -3548,50 +3379,43 @@ function definirPrazoChamado(fid, chamadoId) {
   );
 }
 
-async function confirmarPrazoChamado(fid, chamadoId) {
+function confirmarPrazoChamado(fid, chamadoId) {
   const dataISO = $('prazo-data')?.value;
   if(!dataISO) { toast('Selecione uma data.','rd'); return; }
   const [y,m,d]  = dataISO.split('-');
   const prazoFmt = d + '/' + m + '/' + y;
 
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
+
+  c.prazoGestor = prazoFmt;
+  c.prazoObs    = $('prazo-obs')?.value?.trim() || '';
+
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+
+  // Adicionar na agenda
   try {
-    const snap  = await db.ref('chamados/' + fid).once('value');
-    const raw   = snap.val();
-    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
-    const ch    = lista.find(x => x.id === chamadoId);
-    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
+    const eventos = JSON.parse(localStorage.getItem('mo_agenda_eventos') || '[]');
+    eventos.push({
+      id:     'chamado_' + chamadoId,
+      tipo:   'prazo',
+      titulo: 'Prazo: ' + (c.titulo||chamadoId),
+      data:   prazoFmt,
+      fid,
+      chamadoId,
+      franqueado: c.franqueado,
+      ticket:     c.ticket,
+      cor:        'cal-ev-prazo',
+    });
+    localStorage.setItem('mo_agenda_eventos', JSON.stringify(eventos));
+  } catch(e) {}
 
-    ch.prazoGestor = prazoFmt;
-    ch.prazoObs    = $('prazo-obs')?.value?.trim() || '';
-
-    await db.ref('chamados/' + fid).set(lista);
-    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-
-    // Adicionar na agenda
-    try {
-      const eventos = JSON.parse(localStorage.getItem('mo_agenda_eventos') || '[]');
-      eventos.push({
-        id:         'chamado_' + chamadoId,
-        tipo:       'prazo',
-        titulo:     'Prazo: ' + (ch.titulo || chamadoId),
-        data:       prazoFmt,
-        fid,
-        chamadoId,
-        franqueado: ch.franqueado,
-        ticket:     ch.ticket,
-        cor:        'cal-ev-prazo',
-      });
-      localStorage.setItem('mo_agenda_eventos', JSON.stringify(eventos));
-    } catch(e2) {}
-
-    fecharModal();
-    toast('Prazo definido: ' + prazoFmt + '. Evento adicionado à agenda.', 'gn');
-    renderSuportePainel();
-  } catch(e) {
-    toast('Erro ao salvar prazo: ' + e.message, 'rd');
-  }
+  fecharModal();
+  toast('Prazo definido: ' + prazoFmt + '. Evento adicionado à agenda.', 'gn');
+  renderSuportePainel();
 }
-
 
 function resolverSemReuniaChamado(fid, chamadoId) {
   abrirModal('Resolver chamado',`
@@ -3609,36 +3433,26 @@ function resolverSemReuniaChamado(fid, chamadoId) {
   );
 }
 
-async function confirmarResolucaoChamado(fid, chamadoId) {
+function confirmarResolucaoChamado(fid, chamadoId) {
   const texto = $('resolv-texto')?.value?.trim();
   if(!texto) { toast('Descreva a solução.','rd'); return; }
 
-  try {
-    // Ler do Firebase (fonte da verdade)
-    const snap  = await db.ref('chamados/' + fid).once('value');
-    const raw   = snap.val();
-    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
-    const ch    = lista.find(x => x.id === chamadoId);
-    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
 
-    ch.respostaGestor  = texto;
-    ch.gestorNome      = SESSAO.nome;
-    ch.gestorToken     = SESSAO.token;
-    ch.dataResposta    = hoje() + ' às ' + agora();
-    ch.status          = 'em_andamento';
-    ch.resolvidoGestor = true;
+  c.respostaGestor  = texto;
+  c.gestorNome      = SESSAO.nome;
+  c.dataResposta    = hoje() + ' às ' + agora();
+  c.status          = 'em_andamento'; // concluído só após franqueado assinar
+  c.resolvidoGestor = true;
 
-    // Salvar no Firebase
-    await db.ref('chamados/' + fid).set(lista);
-    // Atualizar localStorage como cache
-    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
 
-    fecharModal();
-    toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
-    renderSuportePainel();
-  } catch(e) {
-    toast('Erro ao salvar: ' + e.message, 'rd');
-  }
+  fecharModal();
+  toast('Chamado marcado como resolvido. Aguardando confirmação do franqueado.', 'gn');
+  renderSuportePainel();
 }
 
 function cancelarChamado(fid, chamadoId) {
@@ -3653,67 +3467,41 @@ function cancelarChamado(fid, chamadoId) {
   );
 }
 
-async function confirmarCancelamentoChamado(fid, chamadoId) {
+function confirmarCancelamentoChamado(fid, chamadoId) {
   const motivo = $('cancel-motivo')?.value?.trim();
   if(!motivo) { toast('Informe o motivo.','rd'); return; }
 
-  try {
-    const snap  = await db.ref('chamados/' + fid).once('value');
-    const raw   = snap.val();
-    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
-    const ch    = lista.find(x => x.id === chamadoId);
-    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
+  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
+  const c     = lista.find(x => x.id === chamadoId);
+  if(!c) return;
 
-    ch.status            = 'cancelado';
-    ch.motivoCancelamento= motivo;
-    ch.canceladoPor      = SESSAO.nome;
-    ch.dataCancelamento  = hoje() + ' às ' + agora();
+  c.status           = 'cancelado';
+  c.motivoCancelamento = motivo;
+  c.canceladoPor     = SESSAO.nome;
+  c.dataCancelamento = hoje() + ' às ' + agora();
 
-    await db.ref('chamados/' + fid).set(lista);
-    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
 
-    fecharModal();
-    toast('Chamado cancelado e registrado.', 'or');
-    renderSuportePainel();
-  } catch(e) {
-    toast('Erro ao salvar: ' + e.message, 'rd');
-  }
+  fecharModal();
+  toast('Chamado cancelado e registrado.', 'or');
+  renderSuportePainel();
 }
 
 function atualizarBadgeChamados() {
-  // Ler do Firebase para ter dados em tempo real
-  db.ref('chamados').once('value').then(snap => {
-    const raw = snap.val();
-    let total = 0;
-    if(raw) {
-      Object.values(raw).forEach(lista => {
-        const arr = Array.isArray(lista) ? lista : Object.values(lista);
-        total += arr.filter(Boolean).filter(c =>
-          c.status === 'aberto' || c.status === 'em_andamento'
-        ).length;
-      });
-    }
-    const badge = $('badge-chamados-nav');
-    if(badge) {
-      badge.style.display = total > 0 ? 'inline-block' : 'none';
-      badge.textContent   = total;
-    }
-  }).catch(() => {
-    // Fallback localStorage
-    const dados = getDados();
-    let total = 0;
-    dados.forEach(f => {
-      try {
-        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-        total += lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
-      } catch(e) {}
-    });
-    const badge = $('badge-chamados-nav');
-    if(badge) {
-      badge.style.display = total > 0 ? 'inline-block' : 'none';
-      badge.textContent   = total;
-    }
+  const dados = getDados();
+  let total = 0;
+  dados.forEach(f => {
+    try {
+      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+      total += lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
+    } catch(e) {}
   });
+  const badge = $('badge-chamados-nav');
+  if(badge) {
+    badge.style.display = total > 0 ? 'inline-block' : 'none';
+    badge.textContent   = total;
+  }
 }
 
 
@@ -4439,25 +4227,11 @@ function confirmarCadastroFranqueado() {
         });
     })
     .catch(err => {
-      console.error('Firebase Auth cadastro portal:', err.code, err.message);
       if(err.code === 'auth/email-already-in-use') {
-        // E-mail já existe — atualizar o mapeamento fid
-        toast('E-mail já cadastrado. Atualizando mapeamento...', 'or');
-        // Buscar o uid existente
-        db.ref('portal_usuarios').orderByChild('email').equalTo(email).once('value')
-          .then(snap => {
-            const dados = snap.val();
-            if(dados) {
-              const uid = Object.keys(dados)[0];
-              return db.ref('portal_usuarios/' + uid).set({ fid: novo.id, email });
-            }
-          })
-          .then(() => toast('Portal liberado para ' + nome.split(' ')[0] + '!', 'gn'))
-          .catch(() => toast('E-mail já em uso. Verifique no Firebase.', 'rd'));
-      } else if(err.code === 'auth/invalid-email') {
-        toast('E-mail inválido. Verifique o endereço digitado.', 'rd');
+        toast('E-mail já cadastrado no portal.', 'or');
       } else {
-        toast('Erro ao criar acesso: ' + (err.message||err.code), 'rd');
+        console.warn('Firebase Auth (portal):', err.message);
+        toast('Atenção: conta no portal não criada. Verifique o e-mail.', 'or');
       }
     });
 }
@@ -5298,40 +5072,86 @@ function getEquipe() {
     const s = localStorage.getItem('mo_equipe_rh');
     if(s) return JSON.parse(s);
   } catch(e) {}
-  return [];
-}
-
-async function carregarEquipeDoFirebase() {
-  try {
-    const snap = await db.ref('equipe').once('value');
-    const raw  = snap.val();
-    if(!raw) return;
-    const lista = Array.isArray(raw)
-      ? raw.filter(Boolean)
-      : Object.values(raw).filter(Boolean);
-    if(lista.length > 0) {
-      localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
-      // Atualizar EQUIPE em memória
-      lista.forEach(col => {
-        if(col.token) EQUIPE[col.token] = {
-          nome: col.nome, cargo: col.cargo,
-          tipo: col.tipo, cor: col.cor, email: col.email,
-        };
-      });
-    }
-    return lista;
-  } catch(e) {
-    console.warn('carregarEquipeDoFirebase:', e.message);
-  }
+    // Dados demo completos para visualização da ficha de registro
+  return [
+    {
+      id:'GES-001', token:'GES-001',
+      nome:'Maria Cláudia Souza Ferreira',
+      cargo:'Gestora de Implantação',
+      tipo:'gestor', cor:'#EA580C', modalidade:'CLT', status:'ativo',
+      cpf:'321.654.987-10', rg:'12.345.678-9', nasc:'1985-03-22',
+      email:'maria.claudia@mestradeobra.com.br',
+      tel:'(11) 98765-4321', ramal:'201',
+      admissao:'2022-03-01', salario:'R$ 8.500,00',
+      cargaHoraria:'44h semanais',
+      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'17:48', tolerancia:10, dias:'Segunda a Sexta' },
+      statusInicio:'', statusRetorno:'',
+      endereco:{ cep:'01310-100', logradouro:'Av. Paulista', numero:'1578', complemento:'Conj. 42', bairro:'Bela Vista', cidade:'São Paulo', uf:'SP' },
+      banco:{ banco:'Nubank', agencia:'0001', conta:'12345678-9', tipoConta:'Corrente', pix:'321.654.987-10' },
+      emergencia:{ nome:'Roberto Souza Ferreira', parentesco:'Cônjuge', tel:'(11) 97654-3210' },
+      obs:'Responsável pela implantação de todas as unidades da região Sudeste. Experiência em gestão de redes de franquias desde 2018. Coordena equipe de consultores e estagiários.',
+      foto:'',
+    },
+    {
+      id:'GES-002', token:'GES-002',
+      nome:'Rafael Torres Mendonça',
+      cargo:'Consultor de Implantação',
+      tipo:'gestor', cor:'#1E40AF', modalidade:'CLT', status:'ativo',
+      cpf:'123.456.789-00', rg:'98.765.432-1', nasc:'1990-07-15',
+      email:'rafael.torres@mestradeobra.com.br',
+      tel:'(11) 97777-8888', ramal:'202',
+      admissao:'2023-06-15', salario:'R$ 6.200,00',
+      cargaHoraria:'44h semanais',
+      horario:{ entrada:'08:30', saidaAlmoco:'12:30', retornoAlmoco:'13:30', saida:'18:18', tolerancia:10, dias:'Segunda a Sexta' },
+      statusInicio:'', statusRetorno:'',
+      endereco:{ cep:'04038-001', logradouro:'Rua Domingos de Morais', numero:'2187', complemento:'Apto 54', bairro:'Vila Mariana', cidade:'São Paulo', uf:'SP' },
+      banco:{ banco:'Itaú', agencia:'3456', conta:'87654-3', tipoConta:'Corrente', pix:'rafael.torres@mestradeobra.com.br' },
+      emergencia:{ nome:'Carla Torres Mendonça', parentesco:'Cônjuge', tel:'(11) 96666-5555' },
+      obs:'Carteira de franqueados nas regiões Sul e Centro-Oeste. Formação em Administração pela USP. Especialização em gestão de franquias pelo IBF.',
+      foto:'',
+    },
+    {
+      id:'EST-001', token:'EST-001',
+      nome:'Beatriz Oliveira Santos',
+      cargo:'Estagiária Administrativa',
+      tipo:'estagiario', cor:'#16A34A', modalidade:'Estágio', status:'ativo',
+      cpf:'456.789.123-55', rg:'23.456.789-0', nasc:'2002-11-08',
+      email:'beatriz.oliveira@mestradeobra.com.br',
+      tel:'(11) 94444-3333', ramal:'',
+      admissao:'2025-08-01', salario:'R$ 1.320,00',
+      cargaHoraria:'30h semanais (estágio)',
+      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'14:00', tolerancia:10, dias:'Segunda a Sexta' },
+      statusInicio:'', statusRetorno:'',
+      endereco:{ cep:'05407-002', logradouro:'Rua Teodoro Sampaio', numero:'744', complemento:'Apto 12', bairro:'Pinheiros', cidade:'São Paulo', uf:'SP' },
+      banco:{ banco:'Bradesco', agencia:'2222', conta:'56789-1', tipoConta:'Poupança', pix:'456.789.123-55' },
+      emergencia:{ nome:'Fernanda Oliveira Santos', parentesco:'Mãe', tel:'(11) 93333-2222' },
+      obs:'Cursando 4° ano de Administração na FGV-SP. Estágio supervisionado — carga horária 30h semanais. Benefícios: bolsa R$ 1.320,00 + vale-transporte. Previsão de encerramento: 31/07/2026.',
+      foto:'',
+    },
+    {
+      id:'AUX-001', token:'AUX-001',
+      nome:'Lucas Pereira Carvalho',
+      cargo:'Auxiliar Administrativo',
+      tipo:'auxiliar', cor:'#7C3AED', modalidade:'CLT', status:'ativo',
+      cpf:'789.123.456-88', rg:'34.567.890-1', nasc:'1997-04-20',
+      email:'lucas.pereira@mestradeobra.com.br',
+      tel:'(11) 92222-1111', ramal:'203',
+      admissao:'2024-02-12', salario:'R$ 2.800,00',
+      cargaHoraria:'44h semanais',
+      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'17:48', tolerancia:10, dias:'Segunda a Sexta' },
+      statusInicio:'', statusRetorno:'',
+      endereco:{ cep:'03301-000', logradouro:'Av. Radial Leste', numero:'1203', complemento:'Casa 2', bairro:'Tatuapé', cidade:'São Paulo', uf:'SP' },
+      banco:{ banco:'Banco do Brasil', agencia:'1111', conta:'23456-7', tipoConta:'Corrente', pix:'lucas.pereira@mestradeobra.com.br' },
+      emergencia:{ nome:'Ana Pereira Carvalho', parentesco:'Mãe', tel:'(11) 91111-0000' },
+      obs:'Responsável pelo suporte administrativo, arquivo físico e digital de documentos e controle de correspondências. Ensino médio completo. Em processo de qualificação interna.',
+      foto:'',
+    },
+  ];
 }
 
 function salvarEquipe(lista) {
   localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
-  try {
-    const obj = {};
-    lista.forEach(col => { if(col.id) obj[col.id] = col; });
-    db.ref('equipe').set(obj).catch(e => console.warn('salvarEquipe:', e.message));
-  } catch(e) {}
+  if(db){ try{ db.ref('equipe').set(lista); }catch(e){} }
 }
 
 function getColaborador(id) {
@@ -6042,28 +5862,22 @@ function adicionarArquivoPasta(fid, pasta) {
 
 function getEventosEtapa(fid, etapaId) {
   const key = `mo_eventos_${fid}_etapa${etapaId}`;
-  try { return JSON.parse(localStorage.getItem(key)||'[]'); }
-  catch(e) { return []; }
+  try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch(e) { return []; }
 }
 
 function salvarEventoEtapa(fid, etapaId, evento) {
-  const key    = `mo_eventos_${fid}_etapa${etapaId}`;
+  const key = `mo_eventos_${fid}_etapa${etapaId}`;
   const eventos = getEventosEtapa(fid, etapaId);
-  eventos.push({ ...evento, timestamp: evento.timestamp || Date.now() });
+  const ev = {
+    ...evento,
+    id:        `ev_${Date.now()}`,
+    timestamp:  Date.now(),
+    dataHora:  `${hoje()} ${agora()}`,
+  };
+  eventos.push(ev);
   localStorage.setItem(key, JSON.stringify(eventos));
-  // Firebase — histórico por etapa
-  try {
-    db.ref(`etapas/${fid}/et${etapaId}/eventos`).set(eventos).catch(() => {});
-  } catch(e) {}
-  // Também registrar no histórico geral do franqueado
-  try {
-    db.ref(`historico/${fid}/${Date.now()}`).set({
-      ...evento,
-      etapa: etapaId,
-      fid,
-      timestamp: evento.timestamp || Date.now(),
-    }).catch(() => {});
-  } catch(e) {}
+  if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/eventos`).push(ev); }catch(e){} }
+  return ev;
 }
 
 function abrirDetalheEtapa(fid, etapaId) {
@@ -6071,7 +5885,7 @@ function abrirDetalheEtapa(fid, etapaId) {
   const et      = ETAPAS.find(e=>e.id===etapaId);
   const eventos  = getEventosEtapa(fid, etapaId);
   const concluida = etapaId < f.etapaAtual;
-  const atual     = etapaId === f.etapaAtual;
+  const atual     = Number(etapaId) === Number(f.etapaAtual);
   const pendFrq   = atual && f.etapasPendentes?.[etapaId]?.status === 'aguardando_franqueado';
 
   // Status da etapa
@@ -7086,12 +6900,7 @@ async function confirmarInicioProcesso(fid, declaracao) {
     declaracaoInicio:    registroInicio,   // ← registrado no dossiê
   });
 
-  // ── Registro central de auditoria ──
-  registrarEvento(fid, 'processo_iniciado', {
-    texto:   `Processo de implantação iniciado. COF e Pré-contrato confirmados.`,
-    ticket:  f.ticket,
-    hash,
-  });
+  // ── Registro no evento da Etapa 1 ──
   salvarEventoEtapa(fid, 1, {
     ...registroInicio,
     tipo:  'processo_iniciado',
@@ -7192,63 +7001,6 @@ async function confirmarInicioProcesso(fid, declaracao) {
 ══════════════════════════════════════════════════════════════ */
 
 // Chamada GET ao Apps Script
-/* ══════════════════════════════════════════════════════════════
-   FUNÇÃO CENTRAL DE AUDITORIA
-   Todo evento do sistema passa por aqui
-   Grava em Firebase: historico/{fid}/{timestamp}
-   Formato padronizado para dossiê e histórico funcional
-══════════════════════════════════════════════════════════════ */
-function registrarEvento(fid, tipo, dados) {
-  if(!fid || !tipo) return;
-  const ts    = Date.now();
-  const evento = {
-    tipo,
-    fid,
-    data:      hoje(),
-    hora:      agora(),
-    timestamp: ts,
-    autor:     SESSAO?.nome      || dados.autor      || 'Sistema',
-    cargo:     SESSAO?.cargo     || dados.cargo      || '',
-    token:     SESSAO?.token     || dados.token      || '',
-    ...dados,
-  };
-  // 1. Firebase — histórico do franqueado
-  try {
-    db.ref(`historico/${fid}/${ts}`).set(evento).catch(() => {});
-  } catch(e) {}
-
-  // 2. Ficha mensal do gestor
-  try {
-    const mesAno = new Date().toISOString().slice(0,7);
-    const chave  = `mo_ficha_mensal_${SESSAO?.token||'geral'}_${mesAno}`;
-    const ficha  = JSON.parse(localStorage.getItem(chave) || '[]');
-    ficha.push({ tipo, fid, data: hoje(), hora: agora(), ...dados });
-    localStorage.setItem(chave, JSON.stringify(ficha));
-    db.ref(`ficha_mensal/${SESSAO?.token||'geral'}/${mesAno}/${ts}`).set(
-      { tipo, fid, data: hoje(), hora: agora(), ...dados }
-    ).catch(() => {});
-  } catch(e) {}
-
-  // 3. Atualizar historico[] no objeto do franqueado (para exibição na ficha)
-  try {
-    const dados2 = getDados();
-    const f = dados2.find(x => x.id === fid);
-    if(f) {
-      if(!f.historico) f.historico = [];
-      f.historico.push({
-        tipo,
-        data:   hoje(),
-        hora:   agora(),
-        texto:  dados.texto || `${tipo} registrado por ${SESSAO?.nome||'Sistema'}`,
-        autor:  SESSAO?.nome || 'Sistema',
-        hash:   dados.hash  || '',
-      });
-      localStorage.setItem('mo_franqueados', JSON.stringify(dados2));
-      db.ref(`franqueados/${fid}/historico`).set(f.historico).catch(() => {});
-    }
-  } catch(e) {}
-}
-
 async function appsGet(params) {
   const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
   const resp = await fetch(url, { redirect: 'follow' });
@@ -7537,61 +7289,124 @@ function seedProcessoFernando() {
    Hoje: localStorage  |  Produção: Apps Script + Google Drive
 ══════════════════════════════════════════════════════════════ */
 const StorageAdapter = {
-  // ── Documentos das etapas ──
+  // Salvar documento em uma pasta de etapa
+  // Em produção: POST para Apps Script → salva no Drive
   salvarDocumento(fid, etapaId, nomeDoc, base64, tipo) {
-    const key  = `mo_docs_${fid}_et${etapaId}`;
+    const key = `mo_docs_${fid}_et${etapaId}`;
     const docs = JSON.parse(localStorage.getItem(key)||'[]');
-    const doc  = {
+    const doc = {
       id:        `doc_${Date.now()}`,
       nome:      nomeDoc,
       tipo:      tipo || 'application/pdf',
-      base64,
-      tamanho:   Math.round((base64||'').length * 0.75),
+      base64,              // Em produção: Drive fileId (não base64)
+      tamanho:   Math.round(base64.length * 0.75),
       enviadoEm: new Date().toLocaleDateString('pt-BR'),
-      enviadoPor:'sistema',
-      status:    'pendente',
+      enviadoPor: 'sistema',
+      status:    'pendente', // pendente | validado | rejeitado
+      // driveFileId: '',   // Produção: ID do arquivo no Drive
+      // driveFolderPath: `Franqueados/${fid}/Implantação/Etapa ${etapaId}/`
     };
     docs.push(doc);
     localStorage.setItem(key, JSON.stringify(docs));
-    // Firebase
-    try { db.ref(`etapas/${fid}/et${etapaId}/docs`).set(docs); } catch(e) {}
     return doc;
   },
 
+  // Listar documentos de uma etapa
+  // Em produção: GET Apps Script → lista arquivos da pasta Drive
   listarDocumentos(fid, etapaId) {
     const key = `mo_docs_${fid}_et${etapaId}`;
     return JSON.parse(localStorage.getItem(key)||'[]');
   },
 
+  // Validar documento (gestora confirma recebimento)
+  // Em produção: PATCH Apps Script → move arquivo para subpasta /Validados/
   validarDocumento(fid, etapaId, docId, acao) {
     const key  = `mo_docs_${fid}_et${etapaId}`;
     const docs = JSON.parse(localStorage.getItem(key)||'[]');
-    const doc  = docs.find(d => d.id === docId);
+    const doc  = docs.find(d=>d.id===docId);
     if(doc) {
-      doc.status     = acao;
+      doc.status     = acao; // 'validado' | 'rejeitado'
       doc.validadoEm = new Date().toLocaleDateString('pt-BR');
-      doc.validadoPor= SESSAO?.nome || '—';
+      doc.validadoPor = SESSAO?.nome || '—';
       localStorage.setItem(key, JSON.stringify(docs));
-      try { db.ref(`etapas/${fid}/et${etapaId}/docs`).set(docs); } catch(e) {}
     }
     return doc;
   },
 
+  // Salvar prazo da GESTORA (para concluir a validação)
   salvarPrazo(fid, etapaId, dataISO) {
     localStorage.setItem(`mo_prazo_${fid}_et${etapaId}`, dataISO);
-    try { db.ref(`etapas/${fid}/et${etapaId}/prazo`).set(dataISO); } catch(e) {}
   },
   lerPrazo(fid, etapaId) {
     return localStorage.getItem(`mo_prazo_${fid}_et${etapaId}`) || '';
   },
 
-  // ── Subchat das etapas ──
+  // Salvar prazo do FRANQUEADO (para entregar documentos e assinar)
+  salvarPrazoFranqueado(fid, etapaId, dataISO) {
+    localStorage.setItem(`mo_prazo_frq_${fid}_et${etapaId}`, dataISO);
+  },
+  lerPrazoFranqueado(fid, etapaId) {
+    return localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`) || '';
+  },
+
+  // Verificar e registrar atrasos automaticamente
+  verificarAtrasos(fid, etapaId, f) {
+    const prazoGest = this.lerPrazo(fid, etapaId);
+    const prazoFrq  = this.lerPrazoFranqueado(fid, etapaId);
+    const hoje_d    = new Date(); hoje_d.setHours(0,0,0,0);
+    const eventos   = getEventosEtapa(fid, etapaId) || [];
+    const concluida = etapaId < (f?.etapaAtual||1);
+
+    // Verificar prazo do franqueado
+    if(prazoFrq && !concluida) {
+      const dtFrq = new Date(prazoFrq+'T00:00');
+      if(dtFrq < hoje_d) {
+        const jaRegistrado = eventos.find(e=>e.tipo==='prazo_extrapolado_franqueado');
+        if(!jaRegistrado) {
+          const dias = Math.floor((hoje_d - dtFrq)/(864e5));
+          salvarEventoEtapa(fid, etapaId, {
+            tipo:      'prazo_extrapolado_franqueado',
+            texto:     `PRAZO EXTRAPOLADO — RESPONSABILIDADE DO FRANQUEADO. O prazo para cumprimento das obrigações da Etapa ${etapaId} pelo franqueado venceu em ${dtFrq.toLocaleDateString('pt-BR')}. Atraso acumulado: ${dias} dia(s). Registro automático gerado pelo sistema PhiPilot.`,
+            autor:     'Sistema (automático)',
+            data:      hoje(), hora: agora(),
+            hash:      Math.abs(Math.imul(etapaId*31, fid.length*17)).toString(16).slice(0,8),
+            timestamp: Date.now(),
+            diasAtraso: dias,
+            responsavel: 'franqueado',
+          });
+        }
+      }
+    }
+
+    // Verificar prazo da gestora
+    if(prazoGest && !concluida) {
+      const dtGest = new Date(prazoGest+'T00:00');
+      if(dtGest < hoje_d) {
+        const jaRegistrado = eventos.find(e=>e.tipo==='prazo_extrapolado_gestora');
+        if(!jaRegistrado) {
+          const dias = Math.floor((hoje_d - dtGest)/(864e5));
+          salvarEventoEtapa(fid, etapaId, {
+            tipo:      'prazo_extrapolado_gestora',
+            texto:     `PRAZO EXTRAPOLADO — RESPONSABILIDADE DA FRANQUEADORA. O prazo para conclusão da validação da Etapa ${etapaId} pela equipe de implantação venceu em ${dtGest.toLocaleDateString('pt-BR')}. Atraso acumulado: ${dias} dia(s). Registro automático gerado pelo sistema PhiPilot.`,
+            autor:     'Sistema (automático)',
+            data:      hoje(), hora: agora(),
+            hash:      Math.abs(Math.imul(etapaId*37, fid.length*13)).toString(16).slice(0,8),
+            timestamp: Date.now(),
+            diasAtraso: dias,
+            responsavel: 'gestora',
+          });
+        }
+      }
+    }
+  },
+
+  // Salvar mensagem do subchat
   salvarMensagemSubchat(fid, etapaId, msg) {
     const key  = `mo_subchat_${fid}_et${etapaId}`;
     const msgs = JSON.parse(localStorage.getItem(key)||'[]');
     msgs.push({
       id:        `msg_${Date.now()}`,
-      tipo:      msg.tipo,
+      tipo:      msg.tipo,   // 'solicitacao'|'aprovacao'|'pendencia'|'prazo'|'livre'
       texto:     msg.texto,
       autor:     msg.autor,
       data:      new Date().toLocaleDateString('pt-BR'),
@@ -7600,56 +7415,11 @@ const StorageAdapter = {
       lido:      false,
     });
     localStorage.setItem(key, JSON.stringify(msgs));
-    // Firebase
-    try { db.ref(`etapas/${fid}/et${etapaId}/subchat`).set(msgs); } catch(e) {}
     return msgs[msgs.length-1];
   },
 
   listarSubchat(fid, etapaId) {
-    const key = `mo_subchat_${fid}_et${etapaId}`;
-    try { return JSON.parse(localStorage.getItem(key)||'[]'); }
-    catch(e) { return []; }
-  },
-
-  // Prazo dado pelo gestor ao FRANQUEADO (data esperada de conclusão pelo frq)
-  lerPrazoFranqueado(fid, etapaId) {
-    return localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`) || '';
-  },
-  salvarPrazoFranqueado(fid, etapaId, dataISO) {
-    localStorage.setItem(`mo_prazo_frq_${fid}_et${etapaId}`, dataISO);
-    try { db.ref(`etapas/${fid}/et${etapaId}/prazo_franqueado`).set(dataISO); } catch(e) {}
-  },
-
-  // Verificar atrasos e registrar alertas
-  verificarAtrasos(fid, etapaId, f) {
-    try {
-      const prazoFrq = localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`);
-      const prazoGes = localStorage.getItem(`mo_prazo_${fid}_et${etapaId}`);
-      const hoje2    = new Date(); hoje2.setHours(0,0,0,0);
-      const alertas  = JSON.parse(localStorage.getItem('mo_alertas_agenda')||'[]');
-      
-      [{ prazo: prazoFrq, tipo: 'prazo_franqueado' },
-       { prazo: prazoGes, tipo: 'prazo_gestora' }].forEach(({prazo, tipo}) => {
-        if(!prazo) return;
-        const dp = new Date(prazo + 'T00:00');
-        if(dp < hoje2) {
-          const jaExiste = alertas.find(a => a.fid===fid && a.etapa===etapaId && a.tipo===tipo);
-          if(!jaExiste) {
-            alertas.push({
-              id:        `alerta_${fid}_${etapaId}_${tipo}`,
-              tipo,
-              fid,
-              etapa:     etapaId,
-              franqueado:f?.nome || '',
-              ticket:    f?.ticket || '',
-              prazo,
-              criadoEm:  new Date().toLocaleDateString('pt-BR'),
-            });
-            localStorage.setItem('mo_alertas_agenda', JSON.stringify(alertas));
-          }
-        }
-      });
-    } catch(e) {}
+    return JSON.parse(localStorage.getItem(`mo_subchat_${fid}_et${etapaId}`)||'[]');
   },
 };
 
@@ -7704,7 +7474,7 @@ function gerarDossieEsteira(fid) {
     const subchat   = StorageAdapter.listarSubchat(fid, et.id);
     const prazo     = StorageAdapter.lerPrazo(fid, et.id);
     const concluida = et.id < f.etapaAtual;
-    const atual     = et.id === f.etapaAtual;
+    const atual     = Number(et.id) === Number(f.etapaAtual);
 
     // Datas reais da etapa
     const evIni  = eventos.find(e=>e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
@@ -8229,7 +7999,7 @@ function renderProcessoImplantacao(fid) {
       <div style="flex:1;overflow-y:auto;padding:8px 0">
         ${ETAPAS.map(et => {
           const concluida = et.id < f.etapaAtual;
-          const atual     = et.id === f.etapaAtual;
+          const atual     = Number(et.id) === Number(f.etapaAtual);
           const bloqueada = et.id > f.etapaAtual;
           const prazo     = StorageAdapter.lerPrazo(fid, et.id);
           const prazoVenc = prazo && new Date(prazo) < new Date();
@@ -8329,9 +8099,11 @@ function abrirEtapaProcesso(fid, etapaId) {
     if(btn) btn.style.background = e.id===etapaId ? 'var(--primary-soft)' : 'none';
   });
 
-  const concluida  = etapaId < f.etapaAtual;
-  const atual      = etapaId === f.etapaAtual;
-  const bloqueada  = etapaId > f.etapaAtual;
+  const _etId      = Number(etapaId);
+  const _etAtual   = Number(f.etapaAtual);
+  const concluida  = _etId < _etAtual;
+  const atual      = _etId === _etAtual;
+  const bloqueada  = _etId > _etAtual;
 
   // Verificar e registrar atrasos automaticamente
   if(!concluida && !bloqueada) StorageAdapter.verificarAtrasos(fid, etapaId, f);
@@ -10980,20 +10752,8 @@ function toggleConcluirEvento(evId) {
 ══════════════════════════════════════════════════════════════ */
 
 // ── Storage ──
-function getPrazos() {
-  try { return JSON.parse(localStorage.getItem('mo_prazos')||'[]'); } catch(e) { return []; }
-}
-function salvarPrazosDB(lista) {
-  localStorage.setItem('mo_prazos', JSON.stringify(lista));
-  try { db.ref('agenda/prazos').set(lista).catch(()=>{}); } catch(e) {}
-}
-function getTarefas() {
-  try { return JSON.parse(localStorage.getItem('mo_tarefas')||'[]'); } catch(e) { return []; }
-}
-function salvarTarefasDB(lista) {
-  localStorage.setItem('mo_tarefas', JSON.stringify(lista));
-  try { db.ref('agenda/tarefas').set(lista).catch(()=>{}); } catch(e) {}
-}
+function getPrazos()    { try{ return JSON.parse(localStorage.getItem('mo_prazos')||'[]'); }catch(e){ return []; } }
+function getTarefas()   { try{ return JSON.parse(localStorage.getItem('mo_tarefas')||'[]'); }catch(e){ return []; } }
 function salvarPrazos(l)  {
   localStorage.setItem('mo_prazos', JSON.stringify(l));
   atualizarBadgesAgenda();
@@ -13531,18 +13291,17 @@ window.addEventListener('DOMContentLoaded', ()=>{
   db.ref('franqueados').on('value', snap => {
     const raw = snap.val();
     if(!raw) return;
-    const dados = Object.values(raw).filter(Boolean);
-    // Aplicar migração automaticamente
-    dados.forEach(f => {
-      if(f.processoIniciado && (!f.etapaAtual || f.etapaAtual < 1)) f.etapaAtual = 1;
-    });
+    const dados = Array.isArray(raw) 
+      ? raw.filter(Boolean) 
+      : Object.values(raw).filter(Boolean);
     if(dados.length > 0) {
       localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-      // Re-renderizar a tela atual se for de franqueados
-      atualizarBadges();
-      if(_abaAtual === 'franqueados') { renderFranqueados(); }
-      if(_abaAtual === 'candidatos')  { renderCandidatos(); }
-      if(_abaAtual === 'inaugurados') { renderInaugurados(); }
+      // Re-renderizar se estiver na tela de franqueados
+      const esteiraVisivel = document.querySelector('.esteira-tab');
+      if(esteiraVisivel) {
+        renderFranqueados();
+        atualizarBadges();
+      }
     }
   });
   setTimeout(atualizarBadgeAlertas, 500);
