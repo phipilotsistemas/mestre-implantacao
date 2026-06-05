@@ -1278,6 +1278,22 @@ const USUARIOS = {
 
 let PORTAL = {};
 let _aba = 'inicio';
+
+// ── APPS SCRIPT / DRIVE ──
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXkAERCOWTTzyuttwqvdCPrJyf2WmztdGIDZUn3skMkwR9E3SIQbO1ktdAYKZqw7Ys/exec';
+
+async function appsPost(body) {
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return await resp.json();
+  } catch(e) {
+    console.warn('Apps Script POST falhou:', e.message);
+    return null;
+  }
+}
 let _chatCanal = 'gestor';
 let _calMes = new Date().getMonth();
 let _calAno = new Date().getFullYear();
@@ -1388,6 +1404,7 @@ function montarPortal(f, senhaUsada) {
     portalLiberado:  f.portalLiberado || false,
     gestor:          gestorObj,
     _senhaAtual:     senhaUsada,
+    drivePasstas:    f.drivePasstas || null,
   };
 
   $('tela-login').style.display='none';
@@ -1755,7 +1772,10 @@ function docRow(d, etId, interativo) {
     </div>
     <div style="flex:1;min-width:0">
       <div style="font-size:12.5px;font-weight:500;color:${ok?'var(--text-muted)':'var(--text)'};text-decoration:${ok?'line-through':'none'}">${d.titulo}</div>
-      ${ok?`<div style="font-size:10.5px;color:var(--text-dim);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${d.nomeAnexo}</div>`:''}
+      ${ok ? (d.driveUrl
+        ? `<a href="${d.driveUrl}" target="_blank" style="font-size:10.5px;color:var(--primary);margin-top:1px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none">☁ ${d.nomeAnexo} — ver no Drive</a>`
+        : `<div style="font-size:10.5px;color:var(--text-dim);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${d.nomeAnexo}${d.status==='enviando'?' (enviando...)':d.status==='local'?' (local)':''}</div>`)
+        : ''}
     </div>
     ${interativo?`<label style="padding:5px 10px;border-radius:8px;border:1.5px solid ${ok?'var(--green-border)':'var(--border)'};background:${ok?'var(--green-soft)':'#fff'};font-size:11px;font-weight:600;color:${ok?'var(--green)':'var(--text-dim)'};cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px">
       <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="display:none" onchange="anexarDoc(this,'${d.id}',${etId})">
@@ -1768,17 +1788,70 @@ function docRow(d, etId, interativo) {
 function anexarDoc(input, docId, etId) {
   const file = input.files?.[0];
   if(!file) return;
-  if(file.size > 3*1024*1024) { toast('Arquivo muito grande. Máximo 3MB.','rd'); input.value=''; return; }
+  if(file.size > 10*1024*1024) { toast('Arquivo muito grande. Máximo 10MB.','rd'); input.value=''; return; }
   const reader = new FileReader();
-  reader.onload = e => {
-    const lista = getDocs(etId);
-    const d = lista.find(x=>x.id===docId);
-    if(d) { d.anexo=e.target.result; d.nomeAnexo=file.name; d.anexadoEm=hoje(); }
-    try {
-      salvarDocs(etId, lista);
-      toast('Documento anexado: '+file.name,'gn');
-    } catch(err) { toast('Arquivo grande demais para salvar.','rd'); }
+  reader.onload = async e => {
+    const base64 = e.target.result;
+    const lista  = getDocs(etId);
+    const d      = lista.find(x=>x.id===docId);
+
+    // Salvar referência local (sem base64 pesado — só nome e status)
+    if(d) {
+      d.nomeAnexo  = file.name;
+      d.anexadoEm  = hoje();
+      d.status     = 'enviando';
+      d.driveUrl   = null;
+    }
+    try { salvarDocs(etId, lista); } catch(err) {}
     abrirDetalheEtapa(etId);
+    toast('Enviando ' + file.name + ' para o Drive...', 'or');
+
+    // Enviar para o Drive
+    try {
+      const chave   = 'pasta_et' + String(etId).padStart(2,'0') + '_id';
+      const pastaId = PORTAL.drivePasstas?.[chave];
+
+      if(pastaId) {
+        const result = await appsPost({
+          action:      'salvarPDF',
+          pastaId,
+          nomeArquivo: PORTAL.ticket + '_Et' + etId + '_' + file.name,
+          base64:      base64,
+          mimeType:    file.type || 'application/pdf',
+        });
+
+        if(result?.ok) {
+          // Atualizar com URL do Drive
+          const lista2 = getDocs(etId);
+          const d2 = lista2.find(x=>x.id===docId);
+          if(d2) {
+            d2.driveUrl  = result.arquivoUrl;
+            d2.driveId   = result.arquivoId;
+            d2.status    = 'enviado';
+            d2.anexo     = base64; // manter cache local
+          }
+          try { salvarDocs(etId, lista2); } catch(err) {}
+          toast('✓ ' + file.name + ' salvo no Drive!', 'gn');
+          abrirDetalheEtapa(etId);
+          return;
+        }
+      }
+      // Drive não disponível — salvar só localmente
+      const lista3 = getDocs(etId);
+      const d3 = lista3.find(x=>x.id===docId);
+      if(d3) { d3.anexo = base64; d3.status = 'local'; }
+      try { salvarDocs(etId, lista3); } catch(err) { toast('Arquivo muito grande para salvar localmente.','rd'); }
+      toast('Salvo localmente (Drive indisponível).', 'or');
+      abrirDetalheEtapa(etId);
+    } catch(err) {
+      console.warn('Drive upload:', err.message);
+      const lista4 = getDocs(etId);
+      const d4 = lista4.find(x=>x.id===docId);
+      if(d4) { d4.anexo = base64; d4.status = 'local'; }
+      try { salvarDocs(etId, lista4); } catch(e2) {}
+      toast('Salvo localmente.', 'or');
+      abrirDetalheEtapa(etId);
+    }
   };
   reader.readAsDataURL(file);
   input.value='';
@@ -2213,6 +2286,31 @@ function assinarTermo() {
 }
 
 function mostrarConfirmacaoTermo(reg) {
+  // Gerar PDF do Termo de Adesão no Drive
+  (async () => {
+    try {
+      const pastas = PORTAL.drivePasstas;
+      const pastaId = pastas?.pasta_et00_id;
+      if(pastaId) {
+        await appsPost({
+          action: 'gerarPDF',
+          tipo:   'termo_adesao',
+          pastaId,
+          dados: {
+            ticket: PORTAL.ticket,
+            nome:   PORTAL.nome,
+            data:   reg.data,
+            hora:   reg.hora,
+            lat:    reg.lat,
+            lon:    reg.lon,
+            hash:   reg.hash,
+          }
+        });
+        console.log('Termo de Adesão salvo no Drive.');
+      }
+    } catch(e) { console.warn('Drive termo adesão:', e.message); }
+  })();
+
   $('portal-content').innerHTML =
     '<div style="min-height:calc(100vh - 120px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">' +
       '<div style="width:80px;height:80px;border-radius:50%;background:var(--green-soft);border:3px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px">✓</div>' +
@@ -2425,32 +2523,69 @@ function toast(msg, tipo='or') {
 function anexarArquivo(input, tid) {
   const file = input.files?.[0];
   if(!file) return;
-
-  // Verificar tamanho (max 3MB para não estourar localStorage)
-  if(file.size > 3 * 1024 * 1024) {
-    toast('Arquivo muito grande. Máximo 3MB.','rd');
-    input.value='';
-    return;
+  if(file.size > 10 * 1024 * 1024) {
+    toast('Arquivo muito grande. Máximo 10MB.','rd');
+    input.value=''; return;
   }
 
   const reader = new FileReader();
-  reader.onload = e => {
-    const etId = PORTAL.etapaAtual;
-    const lista = getTarefas(etId);
-    const t     = lista.find(x=>x.id===tid);
-    if(t) {
-      t.anexo      = e.target.result; // base64
-      t.nomeAnexo  = file.name;
-      t.anexadoEm  = hoje();
-    }
+  reader.onload = async e => {
+    const base64 = e.target.result;
+    const etId   = PORTAL.etapaAtual;
+    const lista  = getTarefas(etId);
+    const t      = lista.find(x=>x.id===tid);
+
+    // Marcar como enviando
+    if(t) { t.nomeAnexo = file.name; t.anexadoEm = hoje(); t.status = 'enviando'; }
+    try { localStorage.setItem('portal_t_'+PORTAL.fid+'_'+etId, JSON.stringify(lista)); } catch(err) {}
+    if(_aba==='inicio') renderInicio(); else abrirDetalheEtapa(etId);
+    toast('Enviando ' + file.name + ' para o Drive...', 'or');
+
     try {
-      localStorage.setItem('portal_t_'+PORTAL.fid+'_'+etId, JSON.stringify(lista));
-      toast('Arquivo anexado: '+file.name,'gn');
+      const chave   = 'pasta_et' + String(etId).padStart(2,'0') + '_id';
+      const pastaId = PORTAL.drivePasstas?.[chave];
+
+      if(pastaId) {
+        const result = await appsPost({
+          action:      'salvarPDF',
+          pastaId,
+          nomeArquivo: PORTAL.ticket + '_Et' + etId + '_' + file.name,
+          base64,
+          mimeType:    file.type || 'application/pdf',
+        });
+
+        if(result?.ok) {
+          const lista2 = getTarefas(etId);
+          const t2 = lista2.find(x=>x.id===tid);
+          if(t2) {
+            t2.anexo    = base64;
+            t2.nomeAnexo= file.name;
+            t2.driveUrl = result.arquivoUrl;
+            t2.driveId  = result.arquivoId;
+            t2.status   = 'enviado';
+          }
+          try { localStorage.setItem('portal_t_'+PORTAL.fid+'_'+etId, JSON.stringify(lista2)); } catch(err) {}
+          toast('✓ ' + file.name + ' salvo no Drive!', 'gn');
+          if(_aba==='inicio') renderInicio(); else abrirDetalheEtapa(etId);
+          return;
+        }
+      }
+      // Fallback local
+      const lista3 = getTarefas(etId);
+      const t3 = lista3.find(x=>x.id===tid);
+      if(t3) { t3.anexo = base64; t3.status = 'local'; }
+      try { localStorage.setItem('portal_t_'+PORTAL.fid+'_'+etId, JSON.stringify(lista3)); } catch(err) {}
+      toast('Salvo localmente (Drive indisponível).', 'or');
+      if(_aba==='inicio') renderInicio(); else abrirDetalheEtapa(etId);
     } catch(err) {
-      toast('Erro ao salvar. Arquivo pode ser grande demais.','rd');
+      console.warn('Drive upload tarefa:', err.message);
+      const lista4 = getTarefas(etId);
+      const t4 = lista4.find(x=>x.id===tid);
+      if(t4) { t4.anexo = base64; t4.status = 'local'; }
+      try { localStorage.setItem('portal_t_'+PORTAL.fid+'_'+etId, JSON.stringify(lista4)); } catch(err2) {}
+      toast('Salvo localmente.', 'or');
+      if(_aba==='inicio') renderInicio(); else abrirDetalheEtapa(etId);
     }
-    if(_aba==='inicio') renderInicio();
-    else abrirDetalheEtapa(etId);
   };
   reader.readAsDataURL(file);
   input.value='';
