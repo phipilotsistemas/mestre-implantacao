@@ -1456,9 +1456,11 @@ function gravarHistoricoFuncional(registro) {
 }
 
 /* Renderiza box de assinatura com scroll obrigatório */
-function renderAssBox(containerId, texto, labelBtn, onConfirm) {
+function renderAssBox(containerId, texto, labelBtn, onConfirm, corFundo, corTexto) {
   const el = $(containerId); if(!el) return;
-  const uid = 'ass_'+Date.now();
+  const uid  = 'ass_'+Date.now();
+  const bg   = corFundo  || '';
+  const fg   = corTexto  || '';
   el.innerHTML = `
     <div class="ass-box">
       <div class="ass-texto" id="scroll_${uid}">${texto.replace(/\n/g,'<br>')}</div>
@@ -1466,7 +1468,10 @@ function renderAssBox(containerId, texto, labelBtn, onConfirm) {
         Ao confirmar, você declara para todos os fins legais que leu, entendeu e concorda com o conteúdo acima.
         Esta ação será registrada com sua identificação, localização e horário.
       </div>
-      <button class="ass-btn" id="btn_${uid}">${labelBtn||'Confirmar e assinar'}</button>
+      <button class="ass-btn" id="btn_${uid}"
+        ${bg ? `style="background:${bg};color:${fg||'#fff'};border-color:${bg}"` : ''}>
+        ${labelBtn||'Confirmar e assinar'}
+      </button>
     </div>`;
   const sc = $(`scroll_${uid}`);
   const bn = $(`btn_${uid}`);
