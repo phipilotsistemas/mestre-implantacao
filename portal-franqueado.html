@@ -1431,9 +1431,11 @@ function entrarNoPortal() {
     db.ref('franqueados/' + PORTAL.fid).on('value', snap => {
       const f = snap.val();
       if(!f) return;
-      PORTAL.etapaAtual      = f.etapaAtual      ?? PORTAL.etapaAtual;
-      PORTAL.processoIniciado = f.processoIniciado ?? PORTAL.processoIniciado;
-      PORTAL.portalLiberado  = f.portalLiberado   ?? PORTAL.portalLiberado;
+      PORTAL.etapaAtual       = f.etapaAtual       ?? PORTAL.etapaAtual;
+      PORTAL.processoIniciado = f.processoIniciado  ?? PORTAL.processoIniciado;
+      PORTAL.portalLiberado   = f.portalLiberado    ?? PORTAL.portalLiberado;
+      // Atualizar pastas do Drive sempre que chegarem do painel
+      if(f.drivePasstas) PORTAL.drivePasstas = f.drivePasstas;
     });
   } catch(e) {}
 }
@@ -2289,10 +2291,39 @@ function mostrarConfirmacaoTermo(reg) {
   // Gerar PDF do Termo de Adesão no Drive
   (async () => {
     try {
-      const pastas = PORTAL.drivePasstas;
+      // Tentar obter pastas do PORTAL (já carregadas)
+      let pastas = PORTAL.drivePasstas;
+
+      // Se não tiver, buscar direto no Firebase (pode ter chegado depois do login)
+      if(!pastas?.pasta_et00_id) {
+        const snap = await db.ref('franqueados/' + PORTAL.fid).once('value');
+        const f = snap.val();
+        if(f?.drivePasstas) {
+          PORTAL.drivePasstas = f.drivePasstas;
+          pastas = f.drivePasstas;
+        }
+      }
+
+      // Se ainda não tiver pastas, o gestor ainda não cadastrou no Drive
+      // Tentar criar agora via Apps Script
+      if(!pastas?.pasta_et00_id) {
+        console.warn('Pastas não encontradas — tentando criar via Apps Script...');
+        const result = await fetch(APPS_SCRIPT_URL + '?action=criarPastas' +
+          '&fid=' + encodeURIComponent(PORTAL.fid) +
+          '&nome=' + encodeURIComponent(PORTAL.nome) +
+          '&ticket=' + encodeURIComponent(PORTAL.ticket));
+        const novasPastas = await result.json();
+        if(!novasPastas.erro) {
+          PORTAL.drivePasstas = novasPastas;
+          pastas = novasPastas;
+          // Salvar no Firebase para o painel ter acesso
+          await db.ref('franqueados/' + PORTAL.fid + '/drivePasstas').set(novasPastas);
+        }
+      }
+
       const pastaId = pastas?.pasta_et00_id;
       if(pastaId) {
-        await appsPost({
+        const result = await appsPost({
           action: 'gerarPDF',
           tipo:   'termo_adesao',
           pastaId,
@@ -2306,7 +2337,13 @@ function mostrarConfirmacaoTermo(reg) {
             hash:   reg.hash,
           }
         });
-        console.log('Termo de Adesão salvo no Drive.');
+        if(result?.ok) {
+          console.log('Termo de Adesão salvo no Drive:', result.arquivoUrl);
+          // Registrar URL do termo na ficha
+          await db.ref('franqueados/' + PORTAL.fid + '/termoDriveUrl').set(result.arquivoUrl);
+        }
+      } else {
+        console.warn('Pasta 00_Cadastro não disponível — termo salvo apenas localmente.');
       }
     } catch(e) { console.warn('Drive termo adesão:', e.message); }
   })();
