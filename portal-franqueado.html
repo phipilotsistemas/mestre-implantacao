@@ -1039,8 +1039,16 @@ body { overflow-x:hidden }
         onkeydown="if(event.key==='Enter')fazerLogin()">
     </div>
     <button onclick="fazerLogin()" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em">Entrar</button>
-    
-    <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-muted)">
+
+    <!-- Link esqueci minha senha -->
+    <div style="text-align:center;margin-top:14px">
+      <button onclick="mostrarTelaEsqueceuSenha()"
+        style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--primary);text-decoration:underline;padding:0">
+        Esqueci minha senha
+      </button>
+    </div>
+
+    <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-muted)">
       Desenvolvido por <span style="font-weight:700;color:var(--primary)">PhiPilot Sistemas</span>
     </div>
   </div>
@@ -1092,6 +1100,12 @@ body { overflow-x:hidden }
       <img class="nav-icon-on"  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUUlEQVR4nO3SMQHAIADAsDEreMchN8jgaKKgR8de83xk/a8DeMsAcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAuAvJCwO9AigyAAAAAABJRU5ErkJggg=="       style="width:22px;height:22px;object-fit:contain;display:none">
       MO Talk
       <span id="badge-chat-p" class="nav-notif" style="display:none">0</span>
+    </button>
+    <button class="portal-nav-btn " data-aba="suporte" onclick="irAba('suporte',this)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:none"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="white" stroke-width="1.8" fill="none"/><circle cx="12" cy="17" r="1" fill="white"/></svg>
+      Suporte
+      <span id="badge-suporte-p" class="nav-notif" style="display:none">0</span>
     </button>
   </nav>
 
@@ -1300,6 +1314,111 @@ let _calAno = new Date().getFullYear();
 
 /* ══ LOGIN ══ */
 
+
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO A — ESQUECI MINHA SENHA
+   Fluxo: tela de recuperação → sendPasswordResetEmail →
+          Firebase envia link → usuário escolhe nova senha →
+          loga normalmente
+══════════════════════════════════════════════════════════════ */
+
+function mostrarTelaEsqueceuSenha() {
+  // Criar overlay de recuperação sobre a tela de login
+  const over = document.createElement('div');
+  over.id = 'tela-recuperacao';
+  over.style.cssText = 'position:fixed;inset:0;background:linear-gradient(145deg,#1B3F8B 0%,#2D5FCC 100%);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+  over.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:32px;max-width:400px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.3)">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:32px;margin-bottom:10px">🔑</div>
+        <div style="font-size:17px;font-weight:800;color:#1B3F8B;margin-bottom:6px">Recuperar acesso</div>
+        <div style="font-size:12px;color:#64748B;line-height:1.6">
+          Informe o e-mail cadastrado no seu portal.<br>
+          Você receberá um link para criar uma nova senha.
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:4px">E-mail de acesso</label>
+        <input type="email" id="rec-email" class="inp"
+          placeholder="seu@email.com"
+          style="width:100%;padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:10px;font-size:13px;outline:none">
+      </div>
+
+      <div id="rec-msg" style="display:none;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;line-height:1.5"></div>
+
+      <button onclick="enviarRecuperacaoSenha()"
+        style="width:100%;padding:13px;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:14px;font-weight:800;margin-bottom:12px">
+        Enviar link de recuperação
+      </button>
+
+      <button onclick="document.getElementById('tela-recuperacao').remove()"
+        style="width:100%;padding:10px;border-radius:12px;background:none;border:1.5px solid #E5E7EB;cursor:pointer;font-size:13px;color:#64748B">
+        Voltar ao login
+      </button>
+    </div>`;
+  document.body.appendChild(over);
+  // Focar no campo de email
+  setTimeout(() => document.getElementById('rec-email')?.focus(), 100);
+}
+
+async function enviarRecuperacaoSenha() {
+  const email  = document.getElementById('rec-email')?.value?.trim().toLowerCase();
+  const msgEl  = document.getElementById('rec-msg');
+
+  if(!email) {
+    msgEl.style.display = 'block';
+    msgEl.style.background = '#FEE2E2';
+    msgEl.style.color = '#DC2626';
+    msgEl.textContent = 'Informe o e-mail de acesso.';
+    return;
+  }
+
+  // Feedback de carregamento
+  msgEl.style.display = 'block';
+  msgEl.style.background = '#EFF6FF';
+  msgEl.style.color = '#1E40AF';
+  msgEl.textContent = '⏳ Enviando...';
+
+  try {
+    await auth.sendPasswordResetEmail(email, {
+      url: window.location.href, // redireciona de volta ao portal após redefinir
+      handleCodeInApp: false,
+    });
+
+    // Sucesso
+    msgEl.style.background = '#F0FDF4';
+    msgEl.style.color = '#166534';
+    msgEl.innerHTML = `
+      <strong>✓ E-mail enviado!</strong><br>
+      Verifique sua caixa de entrada em <strong>${email}</strong>.<br>
+      Clique no link recebido para criar sua nova senha.<br>
+      <span style="font-size:10.5px;color:#6B7280;margin-top:4px;display:block">
+        Não recebeu? Verifique o spam ou aguarde alguns minutos.
+      </span>`;
+
+    // Desabilitar botão para evitar reenvio imediato
+    const btn = document.querySelector('#tela-recuperacao button');
+    if(btn) {
+      btn.disabled = true;
+      btn.textContent = 'E-mail enviado';
+      btn.style.background = '#D1D5DB';
+      btn.style.color = '#6B7280';
+    }
+
+  } catch(err) {
+    msgEl.style.background = '#FEE2E2';
+    msgEl.style.color = '#DC2626';
+    if(err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+      msgEl.textContent = 'E-mail não encontrado. Verifique o endereço digitado ou entre em contato com seu gestor.';
+    } else if(err.code === 'auth/too-many-requests') {
+      msgEl.textContent = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    } else {
+      msgEl.textContent = 'Erro ao enviar: ' + (err.message || 'tente novamente.');
+    }
+  }
+}
 
 function fazerLogin() {
   const email = $('login-email')?.value?.trim().toLowerCase();
@@ -1574,10 +1693,240 @@ function irAba(aba, btn) {
   _aba = aba;
   document.querySelectorAll('.portal-nav-btn').forEach(b=>b.classList.remove('ativo'));
   if(btn) btn.classList.add('ativo');
-  ({inicio:renderInicio, etapas:renderEtapas, agenda:renderAgenda, chat:renderChat})[aba]?.();
+  ({inicio:renderInicio, etapas:renderEtapas, agenda:renderAgenda, chat:renderChat, suporte:renderSuporte})[aba]?.();
 }
 
 /* ══ INÍCIO ══ */
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO B — MÓDULO DE SUPORTE
+   Franqueado abre chamados → gestor responde → franqueado assina
+══════════════════════════════════════════════════════════════ */
+
+const TIPOS_CHAMADO = [{"id": "acesso", "label": "🔐 Acesso ao portal", "itens": ["Esqueci minha senha", "E-mail de acesso incorreto", "Não consigo fazer login", "Portal não carrega"]}, {"id": "documentos", "label": "📄 Documentos", "itens": ["Dificuldade para enviar documento", "Preciso substituir documento enviado", "Documento reprovado — preciso de orientação", "Solicitação de cópia de documento assinado", "Não encontro o documento solicitado na etapa"]}, {"id": "processo", "label": "📋 Processo de implantação", "itens": ["Dúvida sobre requisito de etapa", "Prazo de etapa inviável — solicito revisão", "Aguardando retorno do gestor há mais de 5 dias", "Etapa marcada incorretamente"]}, {"id": "financeiro", "label": "💰 Financeiro", "itens": ["Dúvida sobre valores do contrato", "Comprovante de pagamento não reconhecido", "Solicitação de nota fiscal", "Divergência no cronograma financeiro"]}, {"id": "ponto_obra", "label": "🏗️ Ponto comercial e obra", "itens": ["Dúvida sobre aprovação do ponto comercial", "Problema com laudo de vistoria", "Dúvida sobre projeto arquitetônico", "Atraso na obra — comunicação formal"]}, {"id": "equipe", "label": "👥 Equipe", "itens": ["Dúvida sobre contratação de funcionários", "Problema com treinamento presencial", "Substituição de sócio ou responsável", "Dúvida sobre documentação trabalhista"]}, {"id": "marketing", "label": "📣 Marketing e inauguração", "itens": ["Dúvida sobre materiais gráficos", "Solicitação de apoio para inauguração", "Problema com redes sociais da unidade", "Solicitação de materiais publicitários"]}, {"id": "sistema", "label": "⚙️ Sistema EMPSIS", "itens": ["Dificuldade no acesso ao sistema", "Erro durante uso do sistema", "Treinamento adicional necessário"]}, {"id": "juridico", "label": "📝 Jurídico e documental", "itens": ["Dúvida sobre cláusula do contrato", "Solicitação de alteração contratual", "Dúvida sobre alvará ou licença", "Alteração de dados cadastrais"]}, {"id": "reuniao", "label": "📅 Reunião", "itens": ["Solicitar reunião com o gestor", "Reagendar reunião marcada", "Cancelar reunião marcada"]}, {"id": "urgencia", "label": "🆘 Urgência", "itens": ["Problema crítico que paralisa a implantação", "Comunicação de desistência", "Solicitação de reunião emergencial"]}];
+
+function gerarIdChamado() {
+  const seq = (parseInt(localStorage.getItem('suporte_seq_' + PORTAL.fid) || '0') + 1);
+  localStorage.setItem('suporte_seq_' + PORTAL.fid, String(seq));
+  return 'SUP-' + String(seq).padStart(4, '0');
+}
+
+function getChamados() {
+  try {
+    const snap = localStorage.getItem('suporte_' + PORTAL.fid);
+    return snap ? JSON.parse(snap) : [];
+  } catch(e) { return []; }
+}
+
+function salvarChamados(lista) {
+  localStorage.setItem('suporte_' + PORTAL.fid, JSON.stringify(lista));
+  // Sincronizar com Firebase para o painel do gestor ver
+  try {
+    db.ref('chamados/' + PORTAL.fid).set(lista);
+  } catch(e) {}
+}
+
+function renderSuporte() {
+  const chamados = getChamados();
+  const abertos  = chamados.filter(c => c.status === 'aberto');
+  const andamento= chamados.filter(c => c.status === 'em_andamento');
+  const concluidos= chamados.filter(c => c.status === 'concluido');
+
+  const badgeS = document.getElementById('badge-suporte-p');
+  if(badgeS) {
+    const n = abertos.length + andamento.length;
+    badgeS.style.display = n > 0 ? 'block' : 'none';
+    badgeS.textContent = n;
+  }
+
+  $('portal-content').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--text)">Central de Suporte</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Abra chamados e acompanhe o atendimento</div>
+      </div>
+      <button onclick="abrirNovoChamado()"
+        style="padding:10px 18px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800">
+        + Novo chamado
+      </button>
+    </div>
+
+    ${chamados.length === 0 ? `
+    <div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
+      <div style="font-size:36px;margin-bottom:12px">🎯</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Nenhum chamado aberto</div>
+      <div style="font-size:12px">Abra um chamado sempre que precisar de suporte durante o processo de implantação.</div>
+    </div>` : ''}
+
+    ${abertos.length > 0 ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:8px">● Abertos (${abertos.length})</div>
+      ${abertos.map(c => cardChamado(c)).join('')}
+    </div>` : ''}
+
+    ${andamento.length > 0 ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);margin-bottom:8px">● Em andamento (${andamento.length})</div>
+      ${andamento.map(c => cardChamado(c)).join('')}
+    </div>` : ''}
+
+    ${concluidos.length > 0 ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:8px">● Concluídos (${concluidos.length})</div>
+      ${concluidos.map(c => cardChamado(c)).join('')}
+    </div>` : ''}
+  `;
+}
+
+function cardChamado(c) {
+  const corStatus = {aberto:'var(--red)',em_andamento:'var(--amber)',concluido:'var(--green)',cancelado:'var(--text-muted)'};
+  const labelStatus = {aberto:'Aberto',em_andamento:'Em andamento',concluido:'Concluído',cancelado:'Cancelado'};
+  const tipo = TIPOS_CHAMADO.find(t => t.id === c.categoria);
+  return `
+    <div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--border);border-left:4px solid ${corStatus[c.status]||'var(--border)'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div>
+          <div style="font-size:12px;font-weight:800;color:var(--text)">${c.id} · ${c.titulo}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${tipo?.label||c.categoria} · Aberto em ${c.dataAbertura}</div>
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${corStatus[c.status]||'var(--border)'}22;color:${corStatus[c.status]||'var(--text-muted)'}">
+          ${labelStatus[c.status]||c.status}
+        </span>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:8px">${c.descricao.slice(0,120)}${c.descricao.length>120?'...':''}</div>
+      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600">⏱ Prazo do gestor: ${c.prazoGestor}</div>` : ''}
+      ${c.respostaGestor ? `
+      <div style="background:#F0FDF4;border-radius:8px;padding:10px;margin-top:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:4px">Resposta do gestor · ${c.dataResposta}</div>
+        <div style="font-size:12px;color:var(--text)">${c.respostaGestor}</div>
+        ${c.status === 'em_andamento' && !c.assinaturaFranqueado ? `
+        <button onclick="assinarConclusaoChamado('${c.id}')"
+          style="margin-top:10px;padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+          ✓ Confirmar atendimento
+        </button>` : ''}
+        ${c.assinaturaFranqueado ? `<div style="font-size:10px;color:var(--green);margin-top:6px">✓ Confirmado por você em ${c.dataAssinatura}</div>` : ''}
+      </div>` : ''}
+    </div>`;
+}
+
+function abrirNovoChamado() {
+  const etapaAtual = PORTAL.etapaAtual || 0;
+  const nomeEtapa  = etapaAtual > 0 ? 'Etapa ' + etapaAtual : 'Cadastro / Pré-implantação';
+
+  abrirModal('Novo chamado de suporte',`
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Etapa atual do processo</label>
+      <div style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:13px;font-weight:700;color:var(--primary);margin-top:4px">${nomeEtapa}</div>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Categoria <span style="color:var(--red)">*</span></label>
+      <select class="inp" id="cham-categoria" onchange="atualizarItensChamado(this.value)">
+        <option value="">Selecione uma categoria...</option>
+        ${TIPOS_CHAMADO.map(t=>`<option value="${t.id}">${t.label}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field" id="field-cham-item" style="display:none;margin-bottom:12px">
+      <label>Assunto específico <span style="color:var(--red)">*</span></label>
+      <select class="inp" id="cham-item">
+        <option value="">Selecione...</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:12px">
+      <label>Descrição detalhada <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="cham-descricao" rows="4"
+        placeholder="Descreva o problema ou solicitação com o máximo de detalhes possível..."
+        style="resize:vertical"></textarea>
+    </div>
+    <div id="cham-erro" style="display:none;color:var(--red);font-size:11px;margin-bottom:8px"></div>
+  `,
+  `<button class="btn" onclick="fecharModal()">Cancelar</button>
+   <button class="btn primary" onclick="confirmarAbrirChamado()">Abrir chamado</button>`
+  );
+}
+
+function atualizarItensChamado(categoriaId) {
+  const tipo = TIPOS_CHAMADO.find(t => t.id === categoriaId);
+  const fieldItem = $('field-cham-item');
+  const sel = $('cham-item');
+  if(!tipo || !fieldItem || !sel) return;
+  fieldItem.style.display = 'block';
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    tipo.itens.map(i => `<option value="${i}">${i}</option>`).join('');
+}
+
+function confirmarAbrirChamado() {
+  const categoria = $('cham-categoria')?.value;
+  const item      = $('cham-item')?.value;
+  const descricao = $('cham-descricao')?.value?.trim();
+  const erroEl    = $('cham-erro');
+
+  if(!categoria) { erroEl.style.display='block'; erroEl.textContent='Selecione uma categoria.'; return; }
+  if(!item)      { erroEl.style.display='block'; erroEl.textContent='Selecione o assunto específico.'; return; }
+  if(!descricao || descricao.length < 10) { erroEl.style.display='block'; erroEl.textContent='Descreva o problema (mínimo 10 caracteres).'; return; }
+
+  const tipo     = TIPOS_CHAMADO.find(t => t.id === categoria);
+  const id       = gerarIdChamado();
+  const chamado  = {
+    id,
+    categoria,
+    titulo:       item,
+    descricao,
+    etapaAberta:  PORTAL.etapaAtual || 0,
+    nomeEtapa:    PORTAL.etapaAtual > 0 ? 'Etapa ' + PORTAL.etapaAtual : 'Pré-implantação',
+    status:       'aberto',
+    dataAbertura: hoje(),
+    horaAbertura: agora(),
+    timestamp:    Date.now(),
+    franqueado:   PORTAL.nome,
+    ticket:       PORTAL.ticket,
+    fid:          PORTAL.fid,
+    gestorToken:  PORTAL.gestor?.token || '',
+  };
+
+  const lista = getChamados();
+  lista.unshift(chamado); // mais recente primeiro
+  salvarChamados(lista);
+  fecharModal();
+  toast('Chamado ' + id + ' aberto. Seu gestor será notificado.', 'gn');
+  renderSuporte();
+}
+
+function assinarConclusaoChamado(chamadoId) {
+  const lista   = getChamados();
+  const chamado = lista.find(c => c.id === chamadoId);
+  if(!chamado) return;
+
+  const declaracao = `Eu, ${PORTAL.nome}, confirmo que o chamado ${chamadoId} foi atendido satisfatoriamente pelo gestor ${chamado.gestorNome||'—'} em ${hoje()} às ${agora()}. Assunto: ${chamado.titulo}.`;
+
+  abrirModal('Confirmar atendimento',`
+    <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:4px">✓ Confirmar que o chamado foi resolvido</div>
+      <div style="font-size:11px;color:var(--text);line-height:1.6">${chamado.titulo}<br>Resposta: ${chamado.respostaGestor}</div>
+    </div>
+    <div id="ass-conclusao-container"></div>
+  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>`);
+
+  setTimeout(() => {
+    renderAssBox('ass-conclusao-container', declaracao, 'Assinar e confirmar atendimento', async () => {
+      const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+      const lista2 = getChamados();
+      const c2 = lista2.find(c => c.id === chamadoId);
+      if(c2) {
+        c2.status              = 'concluido';
+        c2.assinaturaFranqueado = true;
+        c2.declaracaoConclusao  = declaracao;
+        c2.hashConclusao        = hash;
+        c2.dataAssinatura       = hoje() + ' às ' + agora();
+        c2.tempAtendimento      = Math.round((Date.now() - c2.timestamp) / 3600000) + 'h';
+      }
+      salvarChamados(lista2);
+      fecharModal();
+      toast('Atendimento confirmado. Chamado ' + chamadoId + ' encerrado.', 'gn');
+      renderSuporte();
+    });
+  }, 100);
+}
+
 function renderInicio() {
   // Se processo não iniciado — verificar termo primeiro
   if(!PORTAL.processoIniciado) {
