@@ -2198,7 +2198,7 @@ function renderEsteiraLista() {
   el.innerHTML = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div style="font-size:12px;color:var(--text-dim)">${todos.length} franqueado${todos.length!==1?'s':''} cadastrado${todos.length!==1?'s':''} · ${ativos.length} em implantação · ${aguard.length} aguardando início</div>
-    <button class="btn primary" onclick="abrirCadastroFranqueado()">+ Novo franqueado</button>
+    <button onclick="abrirCadastroFranqueado()" style="padding:8px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-weight:800;font-size:13px">+ Novo franqueado</button>
   </div>
   <div class="card" style="overflow:hidden">
     <table class="frq-table" style="width:100%">
@@ -2226,10 +2226,10 @@ function renderEsteiraLista() {
             <td>
               <div style="display:flex;align-items:center;gap:8px">
                 <div style="display:flex;gap:4px;flex-shrink:0">
-                  <button class="btn sm" onclick="event.stopPropagation();abrirFichaFranqueado('${f.id}')" title="Ficha do franqueado"
-                    style="padding:4px 8px;font-size:12px">👤</button>
-                  <button class="btn sm" onclick="event.stopPropagation();gerarDossieEsteira('${f.id}')" title="Dossiê completo"
-                    style="padding:4px 8px;font-size:12px">📋</button>
+                  <button class="btn sm" onclick="event.stopPropagation();abrirFichaFranqueado('${f.id}')" title="Abrir ficha do franqueado"
+                    style="padding:4px 9px;font-size:11px;font-weight:600">Ficha</button>
+                  <button class="btn sm" onclick="event.stopPropagation();gerarDossieEsteira('${f.id}')" title="Gerar dossiê completo"
+                    style="padding:4px 9px;font-size:11px;font-weight:600">Dossiê</button>
                 </div>
                 <div>
                   <div style="font-weight:700;font-size:13px">${f.nome}</div>
@@ -2466,6 +2466,15 @@ function renderDrawerBody(f) {
           <div style="width:8px;height:8px;border-radius:50%;background:var(--green)"></div>
         </div></div>
         <div class="dado-item"><div class="dado-l">Entrada no sistema</div><div class="dado-v">${fmtData(f.dataEntrada)}</div></div>
+        <div class="dado-item"><div class="dado-l">Senha do portal</div><div class="dado-v">${
+          (() => {
+            const trocada = localStorage.getItem('senha_trocada_'+f.id)==='1';
+            const data    = localStorage.getItem('senha_trocada_data_'+f.id)||'';
+            return trocada
+              ? '<span style="color:var(--green);font-weight:700">✓ Alterada</span><span style="font-size:10px;color:var(--text-muted);margin-left:6px">em '+data+'</span>'
+              : '<span style="color:var(--amber);font-weight:700">⏳ Provisória</span><span style="font-size:10px;color:var(--text-muted);margin-left:6px">(não trocada ainda)</span>';
+          })()
+        }</div></div>
       </div>
     </div>
 
@@ -3960,19 +3969,82 @@ function verificarFechamentoMensal() {
 ══════════════════════════════════════════════════ */
 function mascara(el, tipo) {
   if(!el) return;
+
+  // Bloquear teclas não numéricas (exceto backspace, delete, setas, tab, ctrl+c/v)
+  const tiposNumericos = ['cpf','rg','cnpj','tel','cep','money'];
+  if(tiposNumericos.includes(tipo)) {
+    el.addEventListener('keydown', function(e) {
+      const permitidas = ['Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'];
+      if(permitidas.includes(e.key)) return;
+      if(e.ctrlKey || e.metaKey) return; // ctrl+c, ctrl+v, ctrl+a
+      if(!/^\d$/.test(e.key)) e.preventDefault(); // bloqueia letras e especiais
+    });
+    // Bloquear colar texto não numérico
+    el.addEventListener('paste', function(e) {
+      e.preventDefault();
+      const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
+      const pos = this.selectionStart;
+      const val = this.value.replace(/\D/g,'');
+      const novo = val.slice(0,pos) + txt;
+      // Disparar input manualmente com valor colado
+      this.value = txt; // temporário para o handler de input formatar
+      this.dispatchEvent(new Event('input'));
+    });
+  }
+
   el.addEventListener('input', function() {
     let v = this.value.replace(/\D/g,'');
-    if(tipo==='cpf')   this.value = v.slice(0,11).replace(/^(\d{3})(\d{3})(\d{3})(\d{0,2})/,'$1.$2.$3-$4');
-    if(tipo==='rg')    this.value = v.slice(0,9).replace(/^(\d{2})(\d{3})(\d{3})(\d{0,1})/,'$1.$2.$3-$4');
-    if(tipo==='cnpj')  this.value = v.slice(0,14).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/,'$1.$2.$3/$4-$5');
-    if(tipo==='tel')   this.value = v.slice(0,11).length<=10
-      ? v.slice(0,10).replace(/^(\d{2})(\d{4})(\d{0,4})/,'($1) $2-$3')
-      : v.slice(0,11).replace(/^(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3');
-    if(tipo==='cep')   this.value = v.slice(0,8).replace(/^(\d{5})(\d{0,3})/,'$1-$2');
-    if(tipo==='data')  {
-      v = this.value.replace(/\D/g,'').slice(0,8);
-      this.value = v.replace(/^(\d{2})(\d{2})(\d{0,4})/,'$1/$2/$3');
+
+    if(tipo==='cpf') {
+      v = v.slice(0,11);
+      if(v.length <= 3)       this.value = v;
+      else if(v.length <= 6)  this.value = v.slice(0,3)+'.'+v.slice(3);
+      else if(v.length <= 9)  this.value = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
+      else                    this.value = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9,11);
+      this.setAttribute('maxlength','14');
     }
+
+    if(tipo==='rg') {
+      v = v.slice(0,9);
+      this.value = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,1})/, (_,a,b,c,d)=>
+        d !== undefined ? a+'.'+b+'.'+c+'-'+d : c ? a+'.'+b+'.'+c : b ? a+'.'+b : a
+      );
+      this.setAttribute('maxlength','12');
+    }
+
+    if(tipo==='cnpj') {
+      v = v.slice(0,14);
+      if(v.length <= 2)       this.value = v;
+      else if(v.length <= 5)  this.value = v.slice(0,2)+'.'+v.slice(2);
+      else if(v.length <= 8)  this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5);
+      else if(v.length <= 12) this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8);
+      else                    this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8,12)+'-'+v.slice(12,14);
+      this.setAttribute('maxlength','18');
+    }
+
+    if(tipo==='tel') {
+      v = v.slice(0,11); // sempre celular (11 dígitos = 9 dígito)
+      if(v.length === 0)      this.value = '';
+      else if(v.length <= 2)  this.value = '('+v;
+      else if(v.length <= 7)  this.value = '('+v.slice(0,2)+') '+v.slice(2);
+      else                    this.value = '('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7,11);
+      this.setAttribute('maxlength','15');
+    }
+
+    if(tipo==='cep') {
+      v = v.slice(0,8);
+      this.value = v.length > 5 ? v.slice(0,5)+'-'+v.slice(5) : v;
+      this.setAttribute('maxlength','9');
+    }
+
+    if(tipo==='data') {
+      v = this.value.replace(/\D/g,'').slice(0,8);
+      if(v.length <= 2)      this.value = v;
+      else if(v.length <= 4) this.value = v.slice(0,2)+'/'+v.slice(2);
+      else                   this.value = v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4,8);
+      this.setAttribute('maxlength','10');
+    }
+
     if(tipo==='money') {
       v = this.value.replace(/\D/g,'');
       if(!v) { this.value=''; return; }
@@ -3980,6 +4052,25 @@ function mascara(el, tipo) {
       this.value = 'R$ '+num.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     }
   });
+
+  // Validação ao perder o foco — alertar se incompleto
+  if(['cpf','cnpj','tel'].includes(tipo)) {
+    el.addEventListener('blur', function() {
+      const v = this.value.replace(/\D/g,'');
+      const mins = {cpf:11, cnpj:14, tel:10};
+      const min  = mins[tipo];
+      if(v.length > 0 && v.length < min) {
+        this.style.borderColor = 'var(--red)';
+        this.title = tipo.toUpperCase() + ' incompleto — verifique o número digitado';
+      } else {
+        this.style.borderColor = '';
+        this.title = '';
+      }
+    });
+    el.addEventListener('focus', function() {
+      this.style.borderColor = '';
+    });
+  }
 }
 
 function aplicarMascaras() {
@@ -10529,51 +10620,64 @@ function abrirProcessoFranqueado(fid) {
 
 
 function toggleKpiDropdown(id, card) {
-  // Extrair título do card
-  const titulo = card.querySelector('.stat-label')?.textContent?.trim() || 'Detalhe';
-  const val    = card.querySelector('.stat-val')?.textContent?.trim() || '';
-  const sub    = card.querySelector('.stat-sub')?.textContent?.trim() || '';
-
-  // Pegar o dropdown já renderizado no DOM (hidden, mas com conteúdo)
-  const dd = $(id);
+  const titulo = (card.querySelector('.stat-label')?.textContent?.trim() || 'Detalhe');
+  const val    = (card.querySelector('.stat-val')?.textContent?.trim() || '').replace(/\s+/g,' ');
+  const dd     = $(id);
   if(!dd) return;
 
-  const items = dd.querySelectorAll('.kpi-item, [style*="padding:10px"]');
+  // Coletar todos os itens clicáveis do dropdown (qualquer filho direto com onclick ou cursor:pointer)
+  const todosFilhos = Array.from(dd.children);
   let corpo = '';
 
-  if(items.length === 0) {
-    // Conteúdo de texto simples (vazio/nenhum)
-    corpo = `<div style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:13px">${dd.textContent?.trim() || 'Nenhum item'}</div>`;
+  if(todosFilhos.length === 0 || (todosFilhos.length === 1 && !todosFilhos[0].onclick && !todosFilhos[0].getAttribute('onclick'))) {
+    const txt = dd.textContent?.trim();
+    corpo = '<div style="text-align:center;padding:28px 0;color:var(--text-muted);font-size:13px">' + (txt || 'Nenhum item') + '</div>';
   } else {
-    // Montar lista limpa para o modal
-    corpo = `<div style="display:flex;flex-direction:column;gap:4px;max-height:60vh;overflow-y:auto;margin:0 -4px">`;
-    items.forEach(item => {
-      const onclick = item.getAttribute('onclick') || '';
-      const ticket  = item.querySelector('.kpi-item-ticket')?.textContent || '';
-      const nome    = item.querySelector('.kpi-item-nome')?.textContent || '';
-      const etapa   = item.querySelector('.kpi-item-etapa')?.textContent || '';
-      const etapaColor = item.querySelector('.kpi-item-etapa')?.style?.color || 'var(--text-dim)';
-      if(ticket || nome) {
-        corpo += `<div onclick="${onclick.replace(/"/g,"'")};fecharModal()" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:10px;cursor:pointer;background:var(--bg);border:1px solid var(--border);transition:all .12s" onmouseover="this.style.background='var(--primary-soft)'" onmouseout="this.style.background='var(--bg)'">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--text)">${nome}</div>
-            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${ticket}</div>
-          </div>
-          <span style="font-size:11px;font-weight:700;color:${etapaColor}">${etapa}</span>
-        </div>`;
+    corpo = '<div style="display:flex;flex-direction:column;gap:6px;max-height:65vh;overflow-y:auto">';
+    todosFilhos.forEach(item => {
+      const oc    = item.getAttribute('onclick') || '';
+      // kpi-item estruturado
+      const ticket = item.querySelector('.kpi-item-ticket')?.textContent?.trim() || '';
+      const nome   = item.querySelector('.kpi-item-nome')?.textContent?.trim()   || '';
+      const etapa  = item.querySelector('.kpi-item-etapa')?.textContent?.trim()  || '';
+      const eCor   = item.querySelector('.kpi-item-etapa')?.style?.color || 'var(--text-dim)';
+      // item simples (aguardando — tem nome e ticket em divs)
+      const divs   = item.querySelectorAll('div');
+      const nomeSimples  = divs[0]?.textContent?.trim() || '';
+      const ticketSimples= divs[1]?.textContent?.trim() || '';
+
+      // Limpar onclick para funcionar no modal: adicionar fecharModal()
+      const ocClean = oc.replace(/event\.stopPropagation\(\);?/g,'').trim();
+      const ocFinal = ocClean ? ocClean + ';fecharModal()' : 'fecharModal()';
+
+      if(nome || nomeSimples) {
+        const n = nome || nomeSimples;
+        const t = ticket || ticketSimples;
+        const e = etapa;
+        corpo +=
+          '<div onclick="' + ocFinal.replace(/"/g,"&quot;") + '"' +
+          ' style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;' +
+          'border-radius:10px;cursor:pointer;background:var(--bg);border:1px solid var(--border);transition:background .12s"' +
+          ' onmouseover="this.style.background=&quot;var(--primary-soft)&quot;"' +
+          ' onmouseout="this.style.background=&quot;var(--bg)&quot;">' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:var(--text)">' + n + '</div>' +
+              (t ? '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' + t + '</div>' : '') +
+            '</div>' +
+            (e ? '<span style="font-size:11px;font-weight:700;color:' + eCor + '">' + e + '</span>' : '') +
+          '</div>';
       } else {
-        // Fallback para item sem estrutura kpi-item
         const txt = item.textContent?.trim();
-        if(txt) corpo += `<div style="padding:12px 16px;font-size:12px;color:var(--text-muted);text-align:center">${txt}</div>`;
+        if(txt) corpo += '<div style="padding:12px 16px;font-size:12px;color:var(--text-muted);text-align:center">' + txt + '</div>';
       }
     });
-    corpo += `</div>`;
+    corpo += '</div>';
   }
 
   abrirModal(
-    `${titulo} <span style="font-size:22px;font-weight:800;color:var(--accent);margin-left:8px">${val}</span>`,
+    titulo + (val ? ' — ' + val : ''),
     corpo,
-    `<button class="btn primary" onclick="fecharModal()">Fechar</button>`
+    '<button class="btn primary" onclick="fecharModal()">Fechar</button>'
   );
 }
 
