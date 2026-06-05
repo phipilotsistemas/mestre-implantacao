@@ -1608,6 +1608,13 @@ function iniciarApp() {
   ir('franqueados');
   atualizarBadges();
   setTimeout(atualizarBadgeChamados, 800);
+  // Listener Firebase para chamados em tempo real
+  try {
+    db.ref('chamados').on('value', () => {
+      atualizarBadgeChamados();
+      if(_abaAtual === 'suporte') { renderSuportePainel(); }
+    });
+  } catch(e) {}
 }
 
 /* ══════════════════════════════════════════════════
@@ -1638,7 +1645,7 @@ const RENDERS = {
   equipe:          renderEquipe,
   relatorios:      renderRelatorios,
   contatos:        renderContatosExternos,
-  suporte:         renderSuportePainel,
+  suporte:         () => { renderSuportePainel(); },
   dev:             renderDevTools,
 }
 // Armazena o fid do processo em visualização
@@ -3197,9 +3204,7 @@ function renderEsteiraArquivados() {
 ══════════════════════════════════════════════════════════════ */
 
 async function renderSuportePainel() {
-  setConteudo('suporte');
-
-  // Mostrar loading
+  // Limpar conteúdo e mostrar loading imediatamente
   $('content').innerHTML = `
     <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
       <div style="font-size:32px;margin-bottom:12px">⏳</div>
