@@ -1519,51 +1519,44 @@ function logarFirebase() {
     if(erro) { erro.style.display='block'; erro.textContent='Preencha e-mail e senha.'; }
     return;
   }
-  if(erro) { erro.style.display='block'; erro.textContent='Verificando...'; erro.style.color='var(--primary)'; erro.style.background='var(--primary-soft)'; }
 
-  auth.signInWithEmailAndPassword(email, senha)
-    .then(cred => {
-      const uid = cred.user.uid;
-      // Buscar perfil direto no objeto EQUIPE pelo email
-      const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
-      if(!entrada) throw new Error('Perfil não encontrado. Verifique se o e-mail está cadastrado na equipe.');
-      const [token, membro] = entrada;
-      SESSAO = { token, uid, ...membro };
-      PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
-      localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
-      if(erro) erro.style.display='none';
-      iniciarApp();
-    })
-    .catch(err => {
-      if(erro) {
-        erro.style.display='block';
-        erro.style.color='#DC2626';
-        erro.style.background='#FEE2E2';
-        if(err.code==='auth/user-not-found'||err.code==='auth/invalid-login-credentials') {
-          // Tentar criar o usuário automaticamente se não existir
-          auth.createUserWithEmailAndPassword(email, senha)
-            .then(cred => {
-              const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
-              if(!entrada) { erro.textContent='Perfil não cadastrado na equipe.'; return; }
-              const [token, membro] = entrada;
-              SESSAO = { token, uid: cred.user.uid, ...membro };
-              PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
-              localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
-              if(erro) erro.style.display='none';
-              iniciarApp();
-            })
-            .catch(e2 => {
-              erro.textContent = e2.code === 'auth/email-already-in-use'
-                ? 'Senha incorreta. Tente novamente.'
-                : 'Erro: ' + (e2.message || e2.code);
-            });
-        } else if(err.code==='auth/wrong-password') {
-          erro.textContent='Senha incorreta.';
-        } else {
-          erro.textContent = err.message || 'Erro ao conectar.';
-        }
-      }
-    });
+  // ── LOGIN LOCAL (fase de desenvolvimento) ──
+  // Valida contra o objeto EQUIPE sem precisar do Firebase Auth
+  const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
+  if(!entrada) {
+    if(erro) { erro.style.display='block'; erro.style.color='#DC2626'; erro.style.background='#FEE2E2'; erro.textContent='E-mail não cadastrado na equipe.'; }
+    return;
+  }
+  const [token, membro] = entrada;
+
+  // Verificar senha local (armazenada no localStorage por token)
+  const senhaKey   = 'mo_senha_' + token;
+  const senhaSalva = localStorage.getItem(senhaKey);
+
+  if(!senhaSalva) {
+    // Primeiro acesso — salvar senha e entrar
+    localStorage.setItem(senhaKey, senha);
+  } else if(senhaSalva !== senha) {
+    if(erro) { erro.style.display='block'; erro.style.color='#DC2626'; erro.style.background='#FEE2E2'; erro.textContent='Senha incorreta.'; }
+    return;
+  }
+
+  // Login ok
+  SESSAO = { token, uid: token, ...membro };
+  PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
+  localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
+  if(erro) erro.style.display='none';
+
+  // Conectar Firebase em background (para dados em tempo real)
+  try {
+    if(db) {
+      // Firebase já inicializado — só sincronizar dados
+      carregarFranqueadosDoFirebase().catch(()=>{});
+      carregarEquipeDoFirebase().catch(()=>{});
+    }
+  } catch(e) {}
+
+  iniciarApp();
 }
 
 function logar(token) {
