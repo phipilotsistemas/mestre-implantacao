@@ -2480,6 +2480,17 @@ function renderDrawerBody(f) {
           <div style="width:8px;height:8px;border-radius:50%;background:var(--green)"></div>
         </div></div>
         <div class="dado-item"><div class="dado-l">Entrada no sistema</div><div class="dado-v">${fmtData(f.dataEntrada)}</div></div>
+        ${f.drivePasstas?.pasta_raiz ? `
+        <div class="dado-item">
+          <div class="dado-l">Pasta no Drive</div>
+          <div class="dado-v">
+            <a href="${f.drivePasstas.pasta_raiz}" target="_blank"
+               style="display:inline-flex;align-items:center;gap:6px;color:var(--primary);font-weight:600;font-size:12px;text-decoration:none;padding:4px 10px;border:1.5px solid var(--primary-border);border-radius:8px;background:var(--primary-soft)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Abrir pasta
+            </a>
+          </div>
+        </div>` : ''}
         <div class="dado-item"><div class="dado-l">Senha do portal</div><div class="dado-v">${
           (() => {
             const trocada = localStorage.getItem('senha_trocada_'+f.id)==='1';
@@ -4236,6 +4247,16 @@ function mascara(el, tipo) {
   }
 }
 
+// Aplica máscara em todos os elementos com data-mask no DOM ou dentro de um container
+function aplicarMascaras(container) {
+  const root = container || document;
+  setTimeout(() => {
+    root.querySelectorAll('[data-mask]').forEach(el => {
+      mascara(el, el.getAttribute('data-mask'));
+    });
+  }, 50);
+}
+
 /* ══════════════════════════════════════════════════
    DADOS DA EQUIPE
    Persistência em localStorage (+ Firebase)
@@ -4431,6 +4452,15 @@ function abrirFichaColaborador(id) {
 
     <!-- ABA PESSOAL -->
     <div id="aba-pessoal">
+      <!-- Link pasta Drive se disponível -->
+      ${col.drivePasstas?.pasta_raiz ? `
+      <div style="margin-bottom:10px">
+        <a href="${col.drivePasstas.pasta_raiz}" target="_blank"
+           style="display:inline-flex;align-items:center;gap:6px;color:var(--primary);font-weight:600;font-size:12px;text-decoration:none;padding:5px 12px;border:1.5px solid var(--primary-border);border-radius:8px;background:var(--primary-soft)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Abrir pasta no Drive
+        </a>
+      </div>` : ''}
       <div style="display:flex;align-items:center;gap:16px;padding:12px;background:#F8FAFC;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
       <!-- Avatar / foto -->
       <div style="position:relative;flex-shrink:0">
@@ -4726,7 +4756,7 @@ function salvarColaborador(id) {
   // Atualizar EQUIPE em memória
   EQUIPE[token] = { nome, cargo, tipo:novo.tipo, cor:novo.cor };
 
-  // Inicializar pastas do colaborador
+  // Inicializar pastas do colaborador (localStorage)
   inicializarPastasColaborador(novo);
 
   window._fotoTemp = undefined;
@@ -4734,6 +4764,36 @@ function salvarColaborador(id) {
   fecharModal();
   toast(idx>=0?'Colaborador atualizado.':'Colaborador cadastrado.','gn');
   renderEquipe();
+
+  // Criar pastas no Drive (só para cadastros novos)
+  if(idx < 0) {
+    const _colId   = novo.id;
+    const _colNome = novo.nome;
+    const _colCargo= novo.cargo;
+    (async () => {
+      try {
+        toast('☁ Criando pasta da equipe no Drive...', 'or');
+        const pastas = await appsGet({
+          action: 'criarPastasEquipe',
+          id:     _colId,
+          nome:   _colNome,
+          cargo:  _colCargo,
+        });
+        if(!pastas || pastas.erro) throw new Error(pastas?.erro || 'Sem resposta');
+        // Salvar URLs das pastas no colaborador
+        const lista2 = getEquipe();
+        const col2   = lista2.find(x=>x.id===_colId);
+        if(col2) {
+          col2.drivePasstas = pastas;
+          salvarEquipe(lista2);
+        }
+        toast('✓ Pasta criada no Drive para ' + _colNome.split(' ')[0] + '!', 'gn');
+      } catch(e) {
+        console.warn('Drive equipe:', e.message);
+        toast('Colaborador salvo. Pasta Drive pendente.', 'or');
+      }
+    })();
+  }
 }
 
 function alterarStatusColaborador(id) {
