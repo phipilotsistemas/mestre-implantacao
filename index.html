@@ -1317,16 +1317,25 @@ const firebaseConfig = {
   messagingSenderId: "75920848277",
   appId: "1:75920848277:web:ccd5d229fdc9bd8a7d329c"
 };
-let auth, db;
+let auth, db, authSecundario;
 try {
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db   = firebase.database();
+
+  // App secundário isolado — usado APENAS para criar conta do franqueado
+  // sem derrubar a sessão do gestor logado no painel
+  const appSecundario = firebase.initializeApp(firebaseConfig, 'portal-criacao');
+  authSecundario = appSecundario.auth();
 } catch(e) {
   console.warn('Firebase não disponível:', e.message);
-  auth = { signInWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')) };
-  db   = { ref: () => ({ set: ()=>{}, on: ()=>{}, once: ()=>Promise.resolve({val:()=>null}), push: ()=>{} }) };
+  auth = { signInWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), onAuthStateChanged: (cb) => cb(null) };
+  authSecundario = { createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), signOut: () => {} };
+  db   = { ref: () => ({ set: ()=>Promise.resolve(), on: ()=>{}, once: ()=>Promise.resolve({val:()=>null}), push: ()=>{} }) };
 }
+// ── APPS SCRIPT URL ──
+var APPS_SCRIPT_URL = localStorage.getItem('mo_apps_script_url') || 'https://script.google.com/macros/s/AKfycbxXkAERCOWTTzyuttwqvdCPrJyf2WmztdGIDZUn3skMkwR9E3SIQbO1ktdAYKZqw7Ys/exec';
+
 var _abaAtual = 'franqueados';
 var _chatAtual = null;
 var _chatRef   = null;
@@ -1478,8 +1487,13 @@ function iniciarLogin() {
         iniciarApp();
         return;
       }
+      // Usuário Firebase autenticado mas não é da equipe do painel
+      // (pode ser um franqueado que foi criado pelo app secundário)
+      // Não deslogar — simplesmente ignorar
+      if(SESSAO?.token) return; // gestor já está logado via sessão local
     }
     // Sem sessão válida — mostrar tela de login
+    if(SESSAO?.token) return; // sessão local ainda ativa, não derrubar
     $('tela-login').style.display = 'flex';
     $('app').style.display = 'none';
   });
@@ -2701,6 +2715,31 @@ async function confirmarEtapa(fid, etapaId) {
 
   toast(`Etapa ${etapaId} assinada. Franqueado notificado e aguardando validação.`, 'gn');
 
+  // Gerar PDF da Declaração da Gestora no Drive
+  (async () => {
+    try {
+      const fAtual = getFranqueado(fid);
+      const pastas = fAtual?.drivePasstas;
+      const chave  = 'pasta_et' + String(etapaId).padStart(2,'0') + '_id';
+      const pastaId = pastas?.[chave];
+      if(pastaId) {
+        const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+        await gerarPDFNoDrive('declaracao_gestora', pastaId, {
+          ticket:         fAtual.ticket,
+          nomeFranqueado: fAtual.nome,
+          etapa:          etapaId,
+          nomeEtapa:      et?.nome || 'Etapa '+etapaId,
+          nomeGestor:     SESSAO.nome,
+          cargo:          SESSAO.cargo,
+          data:           hoje(),
+          hora:           agora(),
+          declaracao,
+          hash,
+        });
+      }
+    } catch(e) { console.warn('Drive declaração gestora:', e.message); }
+  })();
+
   // Enviar notificação formal ao franqueado via chat
   notificarFranqueadoEtapa(fid, etapaId, f);
 
@@ -2876,6 +2915,27 @@ async function confirmarArquivamento(fid, justificativa, declaracao) {
   fecharModal();
   fecharDrawer();
   toast(`${f.nome} arquivado. Cadastro preservado na aba Arquivados.`, 'gn');
+
+  // Gerar PDF do Registro de Arquivamento no Drive
+  (async () => {
+    try {
+      const fAtual = getFranqueado(fid);
+      const pastaId = fAtual?.drivePasstas?.pasta_et99_id;
+      if(pastaId) {
+        await gerarPDFNoDrive('arquivamento', pastaId, {
+          ticket:         fAtual.ticket,
+          nomeFranqueado: fAtual.nome,
+          por:            SESSAO.nome,
+          cargo:          SESSAO.cargo,
+          justificativa,
+          declaracao,
+          hash,
+          data:           hoje(),
+          hora:           agora(),
+        });
+      }
+    } catch(e) { console.warn('Drive arquivamento:', e.message); }
+  })();
   renderFranqueados();
   atualizarBadges();
 }
@@ -3097,6 +3157,28 @@ function encerrarFranquia(fid) {
       await assinarDigital(`implantacao/${fid}/encerramento`, declaracao);
       fecharModal();
       toast('Franquia encerrada e dossiê gerado.','rd');
+
+      // Gerar PDF do Registro de Encerramento no Drive
+      (async () => {
+        try {
+          const fEnc = getFranqueado(fid);
+          const pastaId = fEnc?.drivePasstas?.pasta_et99_id;
+          if(pastaId) {
+            const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+            await gerarPDFNoDrive('encerramento', pastaId, {
+              ticket:         fEnc.ticket,
+              nomeFranqueado: fEnc.nome,
+              por:            SESSAO.nome,
+              cargo:          SESSAO.cargo,
+              motivo:         '—',
+              declaracao,
+              hash,
+              data:           hoje(),
+              hora:           agora(),
+            });
+          }
+        } catch(e) { console.warn('Drive encerramento:', e.message); }
+      })();
     });
   },100);
 }
@@ -3117,7 +3199,7 @@ function abrirCadastroFranqueado() {
        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Dados pessoais</div>
        <div class="grid-2" style="margin-bottom:12px">
          <div class="field"><label>Nome completo *</label><input class="inp" id="nf-nome" placeholder="Nome do franqueado"></div>
-         <div class="field"><label>CPF *</label><input class="inp" id="nf-cpf" placeholder="000.000.000-00"></div>
+         <div class="field"><label>CPF *</label><input class="inp" id="nf-cpf" data-mask="cpf" placeholder="000.000.000-00" inputmode="numeric"></div>
          <div class="field"><label>Data de nascimento</label><input class="inp" type="date" id="nf-nascimento"></div>
          <div class="field"><label>Estado civil</label>
            <select class="inp" id="nf-civil">
@@ -3126,11 +3208,11 @@ function abrirCadastroFranqueado() {
            </select>
          </div>
          <div class="field"><label>Profissão atual</label><input class="inp" id="nf-profissao" placeholder="Ex: Engenheiro, Empresário..."></div>
-         <div class="field"><label>Renda mensal declarada</label><input class="inp" id="nf-renda" placeholder="R$ 0,00"></div>
+         <div class="field"><label>Renda mensal declarada</label><input class="inp" id="nf-renda" data-mask="money" placeholder="R$ 0,00" inputmode="numeric"></div>
        </div>
        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Contato e acesso</div>
        <div class="grid-2" style="margin-bottom:12px">
-         <div class="field"><label>Telefone / WhatsApp *</label><input class="inp" id="nf-tel" placeholder="(11) 99999-0000"></div>
+         <div class="field"><label>Telefone / WhatsApp *</label><input class="inp" id="nf-tel" data-mask="tel" placeholder="(11) 99999-0000" inputmode="numeric"></div>
          <div class="field"><label>E-mail *</label><input class="inp" id="nf-email" placeholder="email@email.com"></div>
          <div class="field"><label>Senha inicial do portal *</label><input class="inp" id="nf-senha" value="123456" placeholder="Senha para o portal"></div>
        </div>
@@ -3151,8 +3233,8 @@ function abrirCadastroFranqueado() {
          <div class="field"><label>Gestor responsável *</label>
            <select class="inp" id="nf-gestor">${gestores}</select>
          </div>
-         <div class="field"><label>Capital disponível</label><input class="inp" id="nf-capital" placeholder="R$ 0,00"></div>
-         <div class="field"><label>Valor investido até hoje</label><input class="inp" id="nf-investido" placeholder="R$ 0,00"></div>
+         <div class="field"><label>Capital disponível</label><input class="inp" id="nf-capital" data-mask="money" placeholder="R$ 0,00" inputmode="numeric"></div>
+         <div class="field"><label>Valor investido até hoje</label><input class="inp" id="nf-investido" data-mask="money" placeholder="R$ 0,00" inputmode="numeric"></div>
          <div class="field" style="grid-column:1/-1"><label>Ponto comercial em vista</label><input class="inp" id="nf-ponto" placeholder="Endereço ou descrição do ponto"></div>
          <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea class="inp" id="nf-obs" rows="2" placeholder="Anotações relevantes..."></textarea></div>
        </div>
@@ -3160,13 +3242,15 @@ function abrirCadastroFranqueado() {
        <div class="grid-2">
          <div class="field"><label>Empresa de origem *</label><input class="inp" id="nf-origem-empresa" placeholder="Ex: A300 Consultoria"></div>
          <div class="field"><label>Responsável *</label><input class="inp" id="nf-origem-responsavel" placeholder="Nome do responsável"></div>
-         <div class="field"><label>Telefone</label><input class="inp" id="nf-origem-tel" placeholder="(11) 99999-0000"></div>
+         <div class="field"><label>Telefone</label><input class="inp" id="nf-origem-tel" data-mask="tel" placeholder="(11) 99999-0000" inputmode="numeric"></div>
          <div class="field"><label>E-mail</label><input class="inp" id="nf-origem-email" placeholder="email@origem.com"></div>
        </div>
      </div>`,
     `<button class="btn" onclick="fecharModal()">Cancelar</button>
      <button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar franqueado</button>`
   );
+  // Aplicar máscaras nos campos numéricos após o modal renderizar
+  aplicarMascaras();
 }
 
 function confirmarCadastroFranqueado() {
@@ -3246,15 +3330,69 @@ function confirmarCadastroFranqueado() {
   renderFranqueados();
   toast(`${nome} cadastrado! Ticket: ${novo.ticket}`, 'gn');
 
-  // Criar usuário no Firebase Auth
-  auth.createUserWithEmailAndPassword(email, senha)
-    .then(cred => db.ref('portal_usuarios/' + cred.user.uid).set({ fid: novo.id, email }))
-    .then(() => toast('Portal liberado para ' + nome.split(' ')[0] + '!', 'gn'))
+  // Criar pastas no Drive e gerar Ficha Cadastral
+  // (assíncrono — não bloqueia o fluxo)
+  (async () => {
+    try {
+      // 1. Criar estrutura de pastas
+      const pastas = await appsGet({
+        action: 'criarPastas',
+        fid: novo.id,
+        nome,
+        ticket: novo.ticket,
+      });
+      if(pastas.erro) throw new Error(pastas.erro);
+
+      // Salvar IDs das pastas na ficha do franqueado
+      atualizarFranqueado(novo.id, { drivePasstas: pastas });
+
+      // 2. Gerar Ficha Cadastral na pasta 00_Cadastro
+      await gerarPDFNoDrive('ficha_cadastral', pastas.pasta_et00_id, {
+        ticket:           novo.ticket,
+        nome,
+        cpf:              $('nf-cpf')?.value || novo.cpf,
+        tel,
+        email,
+        cidade,
+        uf:               $('nf-uf')?.value,
+        modelo:           $('nf-modelo')?.value,
+        gestor:           Object.values(EQUIPE).find(e=>e.token===gestor||e.id===gestor)?.nome || gestor,
+        dataCadastro:     hoje(),
+        origemEmpresa:    origemEmpresa || '',
+        origemResponsavel:origemResponsavel || '',
+        origemTel:        origemTel || '',
+        origemEmail:      origemEmail || '',
+        renda:            $('nf-renda')?.value || '',
+        capital:          $('nf-capital')?.value || '',
+        investido:        $('nf-investido')?.value || '',
+        ponto:            $('nf-ponto')?.value || '',
+      });
+
+      toast(`Pastas criadas no Drive para ${nome.split(' ')[0]}!`, 'gn');
+    } catch(e) {
+      console.warn('Drive/PDF:', e.message);
+      toast('Cadastro salvo. Pastas no Drive pendentes (verifique conexão).', 'or');
+    }
+  })();
+
+  // Criar usuário no Firebase Auth usando app secundário isolado
+  // Isso evita que o Firebase troque a sessão do gestor logado
+  authSecundario.createUserWithEmailAndPassword(email, senha)
+    .then(cred => {
+      // Salvar mapeamento uid → fid no banco
+      return db.ref('portal_usuarios/' + cred.user.uid).set({ fid: novo.id, email })
+        .then(() => {
+          // Deslogar do app secundário — nunca afeta o gestor
+          authSecundario.signOut();
+          toast('Portal liberado para ' + nome.split(' ')[0] + '!', 'gn');
+        });
+    })
     .catch(err => {
       if(err.code === 'auth/email-already-in-use') {
         toast('E-mail já cadastrado no portal.', 'or');
       } else {
-        console.warn('Firebase Auth:', err.message);
+        console.warn('Firebase Auth (portal):', err.message);
+        toast('Atenção: conta no portal não criada. Verifique o e-mail.', 'or');
       }
     });
 }
@@ -3970,82 +4108,86 @@ function verificarFechamentoMensal() {
 function mascara(el, tipo) {
   if(!el) return;
 
-  // Bloquear teclas não numéricas (exceto backspace, delete, setas, tab, ctrl+c/v)
-  const tiposNumericos = ['cpf','rg','cnpj','tel','cep','money'];
-  if(tiposNumericos.includes(tipo)) {
+  const numericos = ['cpf','cnpj','tel','cep','money','rg'];
+
+  // Desktop: bloquear teclas não numéricas no keydown
+  if(numericos.includes(tipo)) {
     el.addEventListener('keydown', function(e) {
-      const permitidas = ['Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'];
-      if(permitidas.includes(e.key)) return;
-      if(e.ctrlKey || e.metaKey) return; // ctrl+c, ctrl+v, ctrl+a
-      if(!/^\d$/.test(e.key)) e.preventDefault(); // bloqueia letras e especiais
+      const ok = ['Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'];
+      if(ok.includes(e.key) || e.ctrlKey || e.metaKey) return;
+      if(!/^\d$/.test(e.key)) e.preventDefault();
     });
-    // Bloquear colar texto não numérico
+
+    // Mobile e desktop: limpar não-numéricos no evento input (antes de formatar)
+    el.addEventListener('beforeinput', function(e) {
+      if(e.data && /[^\d]/.test(e.data)) e.preventDefault();
+    });
+
+    // Colar: aceitar só dígitos
     el.addEventListener('paste', function(e) {
       e.preventDefault();
       const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
-      const pos = this.selectionStart;
-      const val = this.value.replace(/\D/g,'');
-      const novo = val.slice(0,pos) + txt;
-      // Disparar input manualmente com valor colado
-      this.value = txt; // temporário para o handler de input formatar
+      if(!txt) return;
+      // Inserir os dígitos na posição do cursor
+      const s = this.selectionStart, en = this.selectionEnd;
+      const atual = this.value.replace(/\D/g,'');
+      const novoRaw = atual.slice(0, s) + txt;
+      // Colocar o valor cru e deixar o evento input formatar
+      this.value = novoRaw;
       this.dispatchEvent(new Event('input'));
     });
   }
 
   el.addEventListener('input', function() {
+    const pos = this.selectionStart;
     let v = this.value.replace(/\D/g,'');
 
-    if(tipo==='cpf') {
+    if(tipo === 'cpf') {
       v = v.slice(0,11);
       if(v.length <= 3)       this.value = v;
       else if(v.length <= 6)  this.value = v.slice(0,3)+'.'+v.slice(3);
       else if(v.length <= 9)  this.value = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
       else                    this.value = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9,11);
-      this.setAttribute('maxlength','14');
     }
 
-    if(tipo==='rg') {
+    else if(tipo === 'rg') {
       v = v.slice(0,9);
-      this.value = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,1})/, (_,a,b,c,d)=>
-        d !== undefined ? a+'.'+b+'.'+c+'-'+d : c ? a+'.'+b+'.'+c : b ? a+'.'+b : a
-      );
-      this.setAttribute('maxlength','12');
+      if(v.length <= 2)      this.value = v;
+      else if(v.length <= 5) this.value = v.slice(0,2)+'.'+v.slice(2);
+      else if(v.length <= 8) this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5);
+      else                   this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'-'+v.slice(8,9);
     }
 
-    if(tipo==='cnpj') {
+    else if(tipo === 'cnpj') {
       v = v.slice(0,14);
       if(v.length <= 2)       this.value = v;
       else if(v.length <= 5)  this.value = v.slice(0,2)+'.'+v.slice(2);
       else if(v.length <= 8)  this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5);
       else if(v.length <= 12) this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8);
       else                    this.value = v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8,12)+'-'+v.slice(12,14);
-      this.setAttribute('maxlength','18');
     }
 
-    if(tipo==='tel') {
-      v = v.slice(0,11); // sempre celular (11 dígitos = 9 dígito)
+    else if(tipo === 'tel') {
+      v = v.slice(0,11);
       if(v.length === 0)      this.value = '';
       else if(v.length <= 2)  this.value = '('+v;
       else if(v.length <= 7)  this.value = '('+v.slice(0,2)+') '+v.slice(2);
       else                    this.value = '('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7,11);
-      this.setAttribute('maxlength','15');
     }
 
-    if(tipo==='cep') {
+    else if(tipo === 'cep') {
       v = v.slice(0,8);
       this.value = v.length > 5 ? v.slice(0,5)+'-'+v.slice(5) : v;
-      this.setAttribute('maxlength','9');
     }
 
-    if(tipo==='data') {
+    else if(tipo === 'data') {
       v = this.value.replace(/\D/g,'').slice(0,8);
       if(v.length <= 2)      this.value = v;
       else if(v.length <= 4) this.value = v.slice(0,2)+'/'+v.slice(2);
       else                   this.value = v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4,8);
-      this.setAttribute('maxlength','10');
     }
 
-    if(tipo==='money') {
+    else if(tipo === 'money') {
       v = this.value.replace(/\D/g,'');
       if(!v) { this.value=''; return; }
       const num = parseInt(v,10)/100;
@@ -4053,15 +4195,14 @@ function mascara(el, tipo) {
     }
   });
 
-  // Validação ao perder o foco — alertar se incompleto
+  // Borda vermelha se campo numérico incompleto ao sair
   if(['cpf','cnpj','tel'].includes(tipo)) {
     el.addEventListener('blur', function() {
       const v = this.value.replace(/\D/g,'');
-      const mins = {cpf:11, cnpj:14, tel:10};
-      const min  = mins[tipo];
+      const min = {cpf:11, cnpj:14, tel:10}[tipo];
       if(v.length > 0 && v.length < min) {
         this.style.borderColor = 'var(--red)';
-        this.title = tipo.toUpperCase() + ' incompleto — verifique o número digitado';
+        this.title = tipo.toUpperCase()+' incompleto';
       } else {
         this.style.borderColor = '';
         this.title = '';
@@ -4071,14 +4212,6 @@ function mascara(el, tipo) {
       this.style.borderColor = '';
     });
   }
-}
-
-function aplicarMascaras() {
-  setTimeout(()=>{
-    document.querySelectorAll('[data-mask]').forEach(el=>{
-      mascara(el, el.getAttribute('data-mask'));
-    });
-  }, 50);
 }
 
 /* ══════════════════════════════════════════════════
@@ -5184,6 +5317,32 @@ function mostrarConcordancia(fid, etapaId) {
 
       fecharModal();
       toast(`Etapa ${etapaId} concluída. Avançando para Etapa ${novaEtapa}.`,'gn');
+
+      // Gerar PDF da Concordância do Franqueado no Drive
+      (async () => {
+        try {
+          const fAtual = getFranqueado(fid);
+          const pastas = fAtual?.drivePasstas;
+          const chave  = 'pasta_et' + String(etapaId).padStart(2,'0') + '_id';
+          const pastaId = pastas?.[chave];
+          if(pastaId) {
+            const etObj = ETAPAS.find(e=>e.id===etapaId);
+            const hash  = Math.abs(declaracaoFrq.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+            await gerarPDFNoDrive('concordancia_franqueado', pastaId, {
+              ticket:         fAtual.ticket,
+              nomeFranqueado: fAtual.nome,
+              etapa:          etapaId,
+              nomeEtapa:      etObj?.nome || 'Etapa '+etapaId,
+              data:           hoje(),
+              hora:           agora(),
+              declaracao:     declaracaoFrq,
+              hash,
+              lat:            'não disponível',
+              lon:            'não disponível',
+            });
+          }
+        } catch(e) { console.warn('Drive concordância:', e.message); }
+      })();
       const fAtual = getFranqueado(fid);
       renderDrawerBody(fAtual);
       renderDrawerFoot(fAtual);
@@ -5831,7 +5990,50 @@ async function confirmarInicioProcesso(fid, declaracao) {
   fecharModal();
   toast('Processo iniciado. A Etapa 1 — Onboarding foi desbloqueada.', 'gn');
 
-  // Criar estrutura de pastas automaticamente
+  // Gerar PDF da Declaração de Início e salvar no Drive
+  (async () => {
+    try {
+      const fAtualizado = getFranqueado(fid);
+      const pastas = fAtualizado?.drivePasstas;
+
+      // Se pastas ainda não existem, criar agora
+      let pastaId01;
+      if(pastas?.pasta_et01_id) {
+        pastaId01 = pastas.pasta_et01_id;
+      } else {
+        const novasPastas = await appsGet({
+          action: 'criarPastas',
+          fid,
+          nome: f.nome,
+          ticket: f.ticket,
+        });
+        if(!novasPastas.erro) {
+          atualizarFranqueado(fid, { drivePasstas: novasPastas });
+          pastaId01 = novasPastas.pasta_et01_id;
+        }
+      }
+
+      if(pastaId01) {
+        await gerarPDFNoDrive('declaracao_inicio', pastaId01, {
+          ticket:          f.ticket,
+          nomeFranqueado:  f.nome,
+          cidade:          f.cidade,
+          uf:              f.uf,
+          modelo:          f.modelo,
+          nomeGestor:      SESSAO.nome,
+          cargo:           SESSAO.cargo,
+          data:            hoje(),
+          hora:            agora(),
+          declaracao,
+          hash:            Math.abs(declaracao.split('').reduce((h,c)=>((h<<5)-h)+c.charCodeAt(0),0)).toString(16),
+        });
+        toast('Declaração de Início salva no Drive.', 'gn');
+      }
+    } catch(e) {
+      console.warn('Drive declaração início:', e.message);
+    }
+  })();
+
   criarPastasFranqueado(fid);
 
   const fAtual = getFranqueado(fid);
@@ -5846,13 +6048,64 @@ async function confirmarInicioProcesso(fid, declaracao) {
    os paths esperados para quando o Drive estiver integrado.
 ══════════════════════════════════════════════════════════════ */
 
+
+/* ══════════════════════════════════════════════════════════════
+   INTEGRAÇÃO COM APPS SCRIPT / GOOGLE DRIVE
+══════════════════════════════════════════════════════════════ */
+
+// Chamada GET ao Apps Script
+async function appsGet(params) {
+  const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
+  const resp = await fetch(url);
+  if(!resp.ok) throw new Error('Apps Script retornou HTTP ' + resp.status);
+  return await resp.json();
+}
+
+// Chamada POST ao Apps Script
+async function appsPost(body) {
+  const resp = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if(!resp.ok) throw new Error('Apps Script retornou HTTP ' + resp.status);
+  return await resp.json();
+}
+
+// Gerar PDF no Drive via Apps Script
+async function gerarPDFNoDrive(tipo, pastaId, dados) {
+  try {
+    const result = await appsPost({ action: 'gerarPDF', tipo, pastaId, dados });
+    if(result.erro) throw new Error(result.erro);
+    return result; // { ok, arquivoId, arquivoUrl, nomeArquivo }
+  } catch(e) {
+    console.warn('gerarPDF falhou:', e.message);
+    return null;
+  }
+}
+
+// Salvar arquivo base64 no Drive
+async function salvarArquivoNoDrive(pastaId, nomeArquivo, base64, mimeType) {
+  try {
+    const result = await appsPost({
+      action: 'salvarPDF',
+      pastaId, nomeArquivo, base64,
+      mimeType: mimeType || 'application/pdf',
+    });
+    if(result.erro) throw new Error(result.erro);
+    return result;
+  } catch(e) {
+    console.warn('salvarArquivo falhou:', e.message);
+    return null;
+  }
+}
+
 async function criarPastasFranqueado(fid) {
   const f    = getFranqueado(fid);
   const nome = f?.nome?.replace(/[^a-zA-Z0-9À-ú ]/g,'').trim() || fid;
   const ticket = f?.ticket || fid;
 
   // URL do Apps Script — substituir pela URL real quando disponível
-  const APPS_SCRIPT_URL = localStorage.getItem('app_url') || '';
+  const APPS_SCRIPT_URL_LOCAL = APPS_SCRIPT_URL || localStorage.getItem('app_url') || '';
 
   // Estrutura de pastas esperada
   const estrutura = {
@@ -5868,9 +6121,9 @@ async function criarPastasFranqueado(fid) {
   };
 
   try {
-    if(APPS_SCRIPT_URL) {
+    if(APPS_SCRIPT_URL_LOCAL) {
       // ── PRODUÇÃO: chamar Apps Script para criar pastas no Drive ──
-      const resp = await fetch(APPS_SCRIPT_URL + '?action=criarPastas&fid='+encodeURIComponent(fid)+'&nome='+encodeURIComponent(nome)+'&ticket='+encodeURIComponent(ticket));
+      const resp = await fetch(APPS_SCRIPT_URL_LOCAL + '?action=criarPastas&fid='+encodeURIComponent(fid)+'&nome='+encodeURIComponent(nome)+'&ticket='+encodeURIComponent(ticket));
       const data = await resp.json();
 
       // Apps Script retorna { pasta_raiz: 'url', pasta_contratos: 'url', ... }
