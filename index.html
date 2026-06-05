@@ -1317,9 +1317,16 @@ const firebaseConfig = {
   messagingSenderId: "75920848277",
   appId: "1:75920848277:web:ccd5d229fdc9bd8a7d329c"
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db   = firebase.database();
+let auth, db;
+try {
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db   = firebase.database();
+} catch(e) {
+  console.warn('Firebase não disponível:', e.message);
+  auth = { signInWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')) };
+  db   = { ref: () => ({ set: ()=>{}, on: ()=>{}, once: ()=>Promise.resolve({val:()=>null}), push: ()=>{} }) };
+}
 var _abaAtual = 'franqueados';
 var _chatAtual = null;
 var _chatRef   = null;
@@ -1576,6 +1583,10 @@ const RENDERS = {
 }
 // Armazena o fid do processo em visualização
 let _processoAtual = null;;
+
+function irFicha(fid) {
+  ir('processo', null, fid);
+}
 
 function ir(aba, btn, fid) {
   _abaAtual = aba;
@@ -5367,6 +5378,7 @@ async function confirmarInicioProcesso(fid, declaracao) {
 
   atualizarFranqueado(fid, {
     processoIniciado:    true,
+    etapaAtual:          1,
     dataInicioProcesso:  hoje(),
     historico:           novoHist,
   });
