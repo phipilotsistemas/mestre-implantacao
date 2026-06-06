@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · dossie-assinaturas-v15','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · agenda-token-v18','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1679,7 +1679,7 @@ function iniciarApp() {
               // Registrar concordância do franqueado no localStorage (para o dossiê)
               salvarEventoEtapa(fid, Number(n.etapa), {
                 tipo:    'concordancia_franqueado',
-                texto:   n.franqueado + ' (' + n.ticket + ') assinou a ciência da conclusão da Etapa ' + n.etapa + '.',
+                texto:   'Eu, ' + n.franqueado + ', franqueado da rede Mestre da Obra (' + n.ticket + '), declaro que estou ciente da conclusão da Etapa ' + n.etapa + ' e que NÃO tenho dúvidas, questionamentos ou insatisfações a registrar. Concordo com o avanço para a próxima etapa. Data: ' + (n.data || hoje()) + ' às ' + (n.hora || agora()) + '.',
                 autor:   n.franqueado,
                 data:    n.data || hoje(), hora: n.hora || agora(),
                 dataHora:(n.data || hoje()) + ' ' + (n.hora || agora()),
@@ -4686,7 +4686,7 @@ function gerarHTMLDossie(col, mesAno, eventos) {
     body{font-family:'Times New Roman',Times,serif;font-size:10.5pt;color:#000;background:#fff;padding:20mm 22mm 26mm 22mm}
     /* CABEÇALHO */
     .cab{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:10px;border-bottom:1.5px solid #000;margin-bottom:10px}
-    .cab-logo{height:90px;width:240px;object-fit:cover;object-position:20% center}
+    .cab-logo{height:67px;width:173px;object-fit:cover;object-position:20% center}
     .cab-dir{text-align:right;font-size:8pt;color:#444;line-height:1.7}
     /* TÍTULO DO DOCUMENTO */
     .doc-titulo{text-align:center;margin:16px 0 20px}
@@ -6530,7 +6530,7 @@ function gerarHTMLFichaRegistro(col) {
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Times New Roman',Times,serif;font-size:9.5pt;color:#000;background:#fff;padding:18mm 20mm 26mm 20mm}
     .cab{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:1.5px solid #000;margin-bottom:8px}
-    .cab-logo{height:90px;width:240px;object-fit:cover;object-position:20% center}
+    .cab-logo{height:67px;width:173px;object-fit:cover;object-position:20% center}
     .cab-dir{text-align:right;font-size:8pt;color:#444;line-height:1.6}
     .doc-titulo{text-align:center;margin:12px 0 16px}
     .doc-titulo h1{font-size:12pt;font-weight:bold;text-transform:uppercase;letter-spacing:.08em}
@@ -7502,7 +7502,7 @@ function gerarDossieEsteira(fid) {
     const atual     = et.id === f.etapaAtual;
 
     // Datas reais da etapa
-    const evIni  = eventos.find(e=>e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
+    const evIni  = eventos.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
     const evConc = eventos.find(e=>e.tipo==='etapa_concluida');
     const evGest = eventos.find(e=>e.tipo==='assinatura_gestora');
     const evFrq  = eventos.find(e=>e.tipo==='concordancia_franqueado');
@@ -7601,7 +7601,7 @@ function gerarDossieEsteira(fid) {
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Times New Roman',Times,serif;font-size:9.5pt;color:#000;background:#fff;padding:16mm 18mm 26mm 18mm}
     .cab{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid #D1D5DB;margin-bottom:10px}
-    .cab-logo{height:100px;width:260px;object-fit:cover;object-position:20% center}
+    .cab-logo{height:67px;width:173px;object-fit:cover;object-position:20% center}
     .cab-dir{text-align:right;font-size:8pt;color:#444;line-height:1.6;font-family:Arial,sans-serif}
     h1{font-size:13pt;font-weight:bold;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin:10px 0 4px}
     .subtitulo{text-align:center;font-size:9pt;color:#555;margin-bottom:6px;font-family:Arial,sans-serif}
@@ -8030,7 +8030,7 @@ function renderProcessoImplantacao(fid) {
           const prazoVenc = prazo && new Date(prazo) < new Date();
           // Datas da etapa para o sidebar
           const evsCached = getEventosEtapa(fid, et.id)||[];
-          const evIniSb   = evsCached.find(e=>e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
+          const evIniSb   = evsCached.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
           const evConcSb  = evsCached.find(e=>e.tipo==='etapa_concluida');
           const dtIniSb   = evIniSb?.data||'';
           const dtConcSb  = evConcSb?.data||'';
@@ -8187,7 +8187,7 @@ function abrirEtapaProcesso(fid, etapaId) {
   const evGest     = eventos.find(e=>e.tipo==='assinatura_gestora');
   const evFrq      = eventos.find(e=>e.tipo==='concordancia_franqueado');
   const evConcluida= eventos.find(e=>e.tipo==='etapa_concluida');
-  const evIniItem  = eventos.find(e=>e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
+  const evIniItem  = eventos.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
   const dtIni      = evIniItem?.data || '—';
   const dtConc     = evConcluida?.data || '—';
   let   diasGastos = 0;
@@ -9262,6 +9262,8 @@ function confirmarMigracao(cid) {
     uf:              (cidadeUF[1]||'').trim(),
     modelo,
     gestor,
+    gestorToken:      gestor,
+    gestorNome:       EQUIPE[gestor]?.nome || '',
     processoIniciado: false,
     etapaAtual:       1,
     portalLiberado:   false,
