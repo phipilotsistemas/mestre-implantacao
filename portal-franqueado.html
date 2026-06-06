@@ -2361,7 +2361,8 @@ function getDisponibilidadeGestor() {
   // Ler do Firebase — disponibilidade configurada pelo gestor
   return new Promise(resolve => {
     const token = PORTAL.gestor?.token || '';
-    if(!token) { resolve({}); return; }
+    console.log('[Agenda] getDisponibilidadeGestor token:', token);
+    if(!token) { console.warn('[Agenda] token vazio — PORTAL.gestor:', JSON.stringify(PORTAL.gestor)); resolve({}); return; }
     db.ref('disponibilidade/' + token).once('value')
       .then(snap => resolve(snap.val() || {}))
       .catch(() => resolve({}));
@@ -2410,7 +2411,12 @@ async function renderAgendaReunioes() {
     return;
   }
 
-  if(!disp.link) {
+  // Diagnóstico — visível no console do portal
+  console.log('[Agenda] token gestor:', PORTAL.gestor?.token, '| disp:', JSON.stringify(disp));
+
+  // Verificar se o gestor configurou ao menos um dia com horários
+  const diasAtivos = disp.dias ? Object.values(disp.dias).filter(d => d.ativo && d.horarios?.length > 0) : [];
+  if(!disp.dias || diasAtivos.length === 0) {
     $('portal-content').innerHTML = `
       <div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
         <div style="font-size:36px;margin-bottom:12px">📅</div>
