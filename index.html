@@ -3674,26 +3674,51 @@ function responderChamado(fid, chamadoId) {
   );
 }
 
-function confirmarRespostaChamado(fid, chamadoId) {
+async function confirmarRespostaChamado(fid, chamadoId) {
   const texto = $('resp-texto')?.value?.trim();
   if(!texto) { toast('Digite a resposta.','rd'); return; }
 
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
+  try {
+    // Sempre ler do Firebase — fonte da verdade
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw.filter(Boolean)
+                : raw ? Object.values(raw).filter(Boolean) : [];
 
-  c.respostaGestor  = texto;
-  c.gestorNome      = SESSAO.nome;
-  c.gestorToken     = SESSAO.token;
-  c.dataResposta    = hoje() + ' às ' + agora();
-  c.status          = 'em_andamento';
+    const ch = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
 
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
+    // Preservar histórico da resposta anterior se houver retorno do franqueado
+    if(ch.retornoFranqueado) {
+      if(!ch.historico) ch.historico = [];
+      ch.historico.push({
+        respostaGestor:    ch.respostaGestor,
+        dataResposta:      ch.dataResposta,
+        gestorNome:        ch.gestorNome,
+        retornoFranqueado: ch.retornoFranqueado,
+        dataRetorno:       ch.dataRetorno,
+      });
+      ch.retornoFranqueado = null;
+      ch.dataRetorno       = null;
+    }
 
-  fecharModal();
-  toast('Resposta enviada. Aguardando confirmação do franqueado.', 'gn');
-  renderSuportePainel();
+    ch.respostaGestor  = texto;
+    ch.gestorNome      = SESSAO.nome;
+    ch.gestorToken     = SESSAO.token;
+    ch.dataResposta    = hoje() + ' às ' + agora();
+    ch.status          = 'em_andamento';
+    ch.resolvidoGestor = false;
+
+    // Salvar no Firebase (fonte da verdade) + cache local
+    await db.ref('chamados/' + fid).set(lista);
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+
+    fecharModal();
+    toast('Resposta enviada. Franqueado será notificado.', 'gn');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, 'rd');
+  }
 }
 
 function definirPrazoChamado(fid, chamadoId) {
