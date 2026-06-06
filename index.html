@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · portal-pastas-v7','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · ciclo-completo-v9','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -6872,6 +6872,7 @@ async function confirmarInicioProcesso(fid, declaracao) {
   // ── Redirecionar para a tela de processo (Etapa 1) ──
   setTimeout(() => {
     renderProcessoImplantacao(fid);
+    setTimeout(() => { abrirEtapaProcesso(fid, 1); }, 150);
   }, 300);
 
   // ── Gerar PDF da Declaração de Início no Drive (assíncrono) ──
@@ -8030,6 +8031,15 @@ function renderProcessoImplantacao(fid) {
 }
 
 /* ── ÁREA DE TRABALHO DE UMA ETAPA ── */
+async function verificarValidacaoPendente(fid, etapaId) {
+  try {
+    var snap = await db.ref('validacoes/' + fid + '/et' + etapaId).once('value');
+    var val = snap.val();
+    if(val && val.status === 'aguardando') return val;
+  } catch(e) {}
+  return null;
+}
+
 function abrirEtapaProcesso(fid, etapaId) {
   _etapaVizualizando = etapaId;
   const f       = getFranqueado(fid);
