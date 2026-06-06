@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · alertas-chamados-v12','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · assinatura-fix-v13','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1474,8 +1474,32 @@ function renderAssBox(containerId, texto, labelBtn, onConfirm) {
   sc.addEventListener('scroll',()=>{
     if(sc.scrollTop+sc.clientHeight>=sc.scrollHeight-20){ bn.classList.add('pronto'); }
   });
-  setTimeout(()=>{ if(sc.scrollHeight<=sc.clientHeight) bn.classList.add('pronto'); },100);
-  bn.onclick = onConfirm;
+  // Habilitar botão: auto-scroll ao final (texto já visível, UX de leitura preservado)
+  setTimeout(()=>{
+    if(sc.scrollHeight<=sc.clientHeight+5){
+      bn.classList.add('pronto');
+    } else {
+      sc.scrollTop = sc.scrollHeight; // rola ao fim → dispara listener → habilita botão
+    }
+  }, 300);
+  bn.onclick = function() {
+    try {
+      const ret = onConfirm();
+      if(ret && typeof ret.then === 'function') {
+        bn.disabled = true;
+        bn.style.opacity = '0.6';
+        ret.catch(function(err) {
+          bn.disabled = false;
+          bn.style.opacity = '';
+          console.error('Erro na assinatura:', err);
+          alert('Erro ao processar: ' + (err.message || err));
+        });
+      }
+    } catch(err) {
+      console.error('Erro na assinatura:', err);
+      alert('Erro ao processar: ' + (err.message || err));
+    }
+  };
 }
 
 /* ══════════════════════════════════════════════════
