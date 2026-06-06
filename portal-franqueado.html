@@ -2353,7 +2353,7 @@ async function assinarConclusaoChamado(chamadoId) {
 
 /* ══════════════════════════════════════════════════════════════
    BLOCO C — AGENDAMENTO DE REUNIÕES (PORTAL DO FRANQUEADO)
-   Franqueado vê vagas disponíveis e agenda com 24h de antecedência
+   Franqueado vê vagas disponíveis e agenda com 48h de antecedência
    Uma reunião por vez — só pode agendar nova após concluir a atual
 ══════════════════════════════════════════════════════════════ */
 
@@ -2430,7 +2430,7 @@ async function renderAgendaReunioes() {
     return;
   }
 
-  // Gerar vagas disponíveis (próximos 14 dias, mínimo 24h de antecedência)
+  // Gerar vagas disponíveis (próximos 14 dias, mínimo 48h de antecedência)
   const vagas = gerarVagasDisponiveis(disp, todasReunioes);
 
   if(vagas.length === 0) {
@@ -2438,7 +2438,7 @@ async function renderAgendaReunioes() {
       <div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
         <div style="font-size:36px;margin-bottom:12px">📭</div>
         <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Nenhuma vaga disponível</div>
-        <div style="font-size:12px">Não há vagas nos próximos 14 dias com antecedência mínima de 24h.<br>Tente mais tarde ou use o MO Talk.</div>
+        <div style="font-size:12px">Não há vagas nos próximos 14 dias com antecedência mínima de 48h.<br>Tente mais tarde ou use o MO Talk.</div>
       </div>`;
     return;
   }
@@ -2454,7 +2454,7 @@ async function renderAgendaReunioes() {
     <div style="margin-bottom:16px">
       <div style="font-size:16px;font-weight:800;color:var(--text)">Agendar reunião</div>
       <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
-        Selecione uma vaga disponível · Mínimo 24h de antecedência · Uma reunião por vez
+        Selecione uma vaga disponível · Mínimo 48h de antecedência · Uma reunião por vez
       </div>
     </div>
 
@@ -2543,7 +2543,7 @@ function gerarVagasDisponiveis(disp, todasReunioes) {
   const diasSemana = ['dom','seg','ter','qua','qui','sex','sab'];
   const vagas = [];
   const agora2 = new Date();
-  const limite24h = new Date(agora2.getTime() + 24*3600*1000);
+  const limite24h = new Date(agora2.getTime() + 48*3600*1000); // 48h de antecedência mínima
 
   // Próximos 14 dias
   for(let d=1; d<=14; d++) {
@@ -2562,7 +2562,7 @@ function gerarVagasDisponiveis(disp, todasReunioes) {
       const dataHora = new Date(data);
       dataHora.setHours(h, m, 0, 0);
 
-      // Mínimo 24h de antecedência
+      // Mínimo 48h de antecedência
       if(dataHora <= limite24h) return;
 
       // Verificar se a vaga já está ocupada
