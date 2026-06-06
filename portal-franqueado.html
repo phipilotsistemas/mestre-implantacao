@@ -1621,7 +1621,9 @@ function montarPortal(f, senhaUsada) {
   let gestorObj = gestor;
   if(f.gestorToken || (typeof f.gestor === 'string' && f.gestor.includes('-'))) {
     const token = f.gestorToken || f.gestor;
-    // Tentar encontrar dados da equipe no localStorage
+    // Garantir que o token sempre está preservado (Firebase não está acessível aqui)
+    gestorObj = { nome: f.gestorNome || gestorObj.nome !== token ? (f.gestorNome || gestorObj.nome) : '', token, cor: '#1B3F8B', tel: '', email: '', cargo: '' };
+    // Tentar enriquecer com dados da equipe no localStorage (painel)
     try {
       const equipe = JSON.parse(localStorage.getItem('mo_equipe_rh') || '[]');
       const membroEquipe = equipe.find(e => e.token === token || e.id === token);
@@ -1636,6 +1638,15 @@ function montarPortal(f, senhaUsada) {
         };
       }
     } catch(e) {}
+    // Se nome ainda não foi resolvido, buscar no Firebase de forma assíncrona
+    if(!gestorObj.nome) {
+      try {
+        db.ref('equipe/' + token).once('value').then(snap => {
+          const m = snap.val();
+          if(m && m.nome) { PORTAL.gestor.nome = m.nome; PORTAL.gestor.cor = m.cor || '#1B3F8B'; }
+        });
+      } catch(e) {}
+    }
   }
 
   PORTAL = {
