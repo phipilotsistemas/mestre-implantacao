@@ -1480,7 +1480,21 @@ function renderAssBox(containerId, texto, labelBtn, onConfirm) {
    LOGIN
 ══════════════════════════════════════════════════ */
 function iniciarLogin() {
-  // Tentar restaurar sessão via Firebase Auth (persiste entre refreshes)
+  // ── Restaurar sessão do localStorage PRIMEIRO (funciona offline) ──
+  const sessaoSalva = localStorage.getItem('mo_impl_sessao');
+  if(sessaoSalva) {
+    try {
+      const s = JSON.parse(sessaoSalva);
+      if(s && s.token && EQUIPE[s.token]) {
+        SESSAO = s;
+        PERM   = PERMISSOES[EQUIPE[s.token].tipo] || PERMISSOES.auxiliar;
+        iniciarApp();
+        return;
+      }
+    } catch(e) {}
+    localStorage.removeItem('mo_impl_sessao');
+  }
+  // Sem sessão local — tentar Firebase Auth (para sessões online)
   auth.onAuthStateChanged(user => {
     if(user) {
       // Usuário ainda autenticado — restaurar sessão
