@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · ciclo-completo-v9','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · etapa-prazo-v10','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -3283,7 +3283,7 @@ async function confirmarInicioEtapa(fid, etapaId, declaracao) {
       concluido:false,
       criadoEm: hoje(),
     });
-    salvarPrazosDB(prazos);
+    salvarPrazos(prazos);
   }
 
   // 3. Notificar franqueado via Firebase
@@ -3299,7 +3299,10 @@ async function confirmarInicioEtapa(fid, etapaId, declaracao) {
       data:        hoje(), hora: agora(), timestamp: ts,
       lido:        false,
     });
-  } catch(e) {}
+  } catch(e) {
+    console.error('Erro ao notificar franqueado:', e.message);
+    toast('Aviso: etapa iniciada, mas houve falha ao notificar o portal. Verifique a conexão.', 'or');
+  }
 
   // 4. Registrar no histórico central
   registrarEvento(fid, 'etapa_iniciada', {
