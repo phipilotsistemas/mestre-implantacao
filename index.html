@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · calendario-hover-v22','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · calendario-modal-v23','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -10427,6 +10427,12 @@ function renderCalendario() {
     const isHoje = data.getTime() === hoje2.getTime();
     const evsD   = evs.filter(e=>e.data===key);
     const tipo   = TIPOS_EVENTO.find(t=>t.id===evsD[0]?.tipo);
+    // Reuniões agendadas neste dia (converte DD/MM/YYYY → YYYY-MM-DD)
+    const reusD  = getReunioes().filter(r => {
+      if(r.status !== 'agendada') return false;
+      const [d2,m2,y2] = (r.data||'').split('/').map(Number);
+      return `${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}` === key;
+    });
 
     return '<div class="cal-day'+(outroMes?' outro-mes':'')+(isHoje?' hoje':'')+'" ' +
       'data-key="'+key+'" ' +
@@ -10434,7 +10440,7 @@ function renderCalendario() {
       '' +
       'onmouseenter="iniciarHoverDia(this)" onmouseleave="cancelarHoverDia(this)" ' +
       'onclick="clicarDia(this)" ' +
-      'style="position:relative;cursor:pointer;'+(evsD.length||getPrazos().some(p=>p.data===key&&!p.concluido)?'border-left:3px solid var(--primary)':'')+'">' +
+      'style="position:relative;cursor:pointer;'+(evsD.length||reusD.length||getPrazos().some(p=>p.data===key&&!p.concluido)?'border-left:3px solid var(--primary)':'')+'">' +
       '<div class="cal-day-num">'+data.getDate()+'</div>' +
       evsD.slice(0,3).map(ev => {
         const t = TIPOS_EVENTO.find(x=>x.id===ev.tipo)||TIPOS_EVENTO[6];
@@ -10448,21 +10454,16 @@ function renderCalendario() {
         '<div class="cal-ev cal-ev-prazo" onclick="event.stopPropagation();abrirPrazo(this.dataset.pid)" data-pid="'+p.id+'" title="'+p.titulo+'"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="9.5" fill="#F5A623"/><circle cx="10" cy="10" r="1.8" fill="#1a1a1a"/><line x1="10" y1="10" x2="14.5" y2="5.5" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/><line x1="10" y1="10" x2="10" y2="15" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/></svg> '+p.titulo+'</div>'
       ).join('') +
       (evsD.length>2?'<div style="font-size:8px;color:var(--text-muted);margin-top:1px">+' + (evsD.length-2) + ' mais</div>':'') +
-      // Popup hover
-      '<div class="cal-popup" style="display:none;position:absolute;top:0;left:0;min-width:220px;max-width:270px;background:#fff;border:1.5px solid var(--primary);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:999;padding:10px;pointer-events:auto">' +
-        '<div style="font-size:10.5px;font-weight:700;color:var(--primary);margin-bottom:7px;border-bottom:1px solid var(--border);padding-bottom:5px">' +
-          data.toLocaleDateString("pt-BR",{weekday:"short",day:"numeric",month:"short"}) +
-        '</div>' +
-        evsD.map(ev => {
-          const t2 = TIPOS_EVENTO.find(x=>x.id===ev.tipo)||TIPOS_EVENTO[6];
-          return '<div class="cal-ev '+t2.cor+'" onclick="event.stopPropagation();abrirEvento(this.dataset.evid)" data-evid="'+ev.id+'" style="margin-bottom:3px;white-space:normal;'+(ev.concluido?'opacity:.5;text-decoration:line-through':'')+'">'+t2.icon+' '+ev.titulo+(ev.hora?' · '+ev.hora:'')+'</div>';
-        }).join('') +
-        getPrazos().filter(p=>p.data===key&&!p.concluido).map(p=>
-          '<div class="cal-ev cal-ev-prazo" onclick="event.stopPropagation();abrirPrazo(this.dataset.pid)" data-pid="'+p.id+'" style="margin-bottom:3px;white-space:normal"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="9.5" fill="#F5A623"/><circle cx="10" cy="10" r="1.8" fill="#1a1a1a"/><line x1="10" y1="10" x2="14.5" y2="5.5" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/><line x1="10" y1="10" x2="10" y2="15" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/></svg> '+p.titulo+'</div>'
-        ).join('') +
-        (evsD.length===0&&getPrazos().filter(p=>p.data===key&&!p.concluido).length===0?'<div style="font-size:11px;color:var(--text-muted);font-style:italic">Dia livre</div>':'') +
-        '<div style="margin-top:6px;text-align:right"><button onclick="event.stopPropagation();abrirNovoEvento(\''+key+'\')" style="font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;color:var(--primary);font-family:inherit;opacity:.7">+ evento</button></div>' +
-      '</div>' +
+      // Reuniões agendadas no dia
+      reusD.slice(0,2).map(r => {
+        const dados2 = getDados();
+        const f2 = dados2.find(x=>x.id===r.fid);
+        return '<div class="cal-ev cal-ev-reuniao" onclick="event.stopPropagation();fecharModal();cancelarReuniao(\"'+r.id+'\")"' +
+          ' title="'+r.hora+' · '+(f2?.nome?.split(' ')[0]||'Reunião')+' · '+r.motivo+'">' +
+          '📞 '+r.hora+' — '+(f2?.nome?.split(' ')[0]||'Franqueado')+'</div>';
+      }).join('') +
+      // popup substituído por modal (clicarDia → abrirModalDia)
+      '' +
     '</div>';
   }).join('');
 }
@@ -12134,18 +12135,76 @@ let _diaHoverTimer = null;
 let _diaExpandido  = null;
 
 function clicarDia(el) {
-  // Clique no dia = expandir para ver atividades (não abrir add-event)
   const key = el.dataset.key;
   if(!key) return;
   _agendaDiaSel = key;
   renderListaLateral();
-  // Se o popup já está aberto neste dia, fecha; senão abre
-  if(_diaExpandido === el) {
-    recolherDia(el);
-  } else {
-    if(_diaExpandido) recolherDia(_diaExpandido);
-    _mostrarPopupDia(el);
-  }
+  abrirModalDia(key);
+}
+
+function abrirModalDia(key) {
+  const [yy,mm,dd] = key.split('-').map(Number);
+  const data = new Date(yy, mm-1, dd);
+  const tituloData = data.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
+  const titulo = tituloData.charAt(0).toUpperCase() + tituloData.slice(1);
+
+  const evs      = getEventosAgenda().filter(e => e.data === key);
+  const reunioes = getReunioes().filter(r => {
+    if(r.status !== 'agendada') return false;
+    const [d,m,y] = (r.data||'').split('/').map(Number);
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}` === key;
+  });
+  const prazos = getPrazos().filter(p => p.data === key && !p.concluido);
+  const dados  = getDados();
+
+  const temAlgo = evs.length || reunioes.length || prazos.length;
+
+  const corpoDia = `
+    <div style="min-width:320px">
+      ${reunioes.length > 0 ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1E40AF;margin-bottom:6px">📞 Reuniões agendadas</div>
+        ${reunioes.map(r => {
+          const f = dados.find(x=>x.id===r.fid);
+          return `<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px;margin-bottom:6px">
+            <div style="font-size:12px;font-weight:700;color:#1E40AF">${r.hora} · ${f?.nome?.split(' ').slice(0,2).join(' ')||r.fid}</div>
+            <div style="font-size:11px;color:#3B82F6;margin-top:2px">⏱ ${r.duracao||60}min · ${r.motivo||'—'}</div>
+            <div style="margin-top:6px;display:flex;gap:6px">
+              ${r.link?`<a href="${r.link}" target="_blank" style="font-size:10px;padding:3px 8px;border-radius:6px;background:#1E40AF;color:#fff;text-decoration:none">Entrar</a>`:''}
+              <button onclick="fecharModal();cancelarReuniao('${r.id}')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid #BFDBFE;background:#fff;color:#DC2626;cursor:pointer">Gerenciar</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+
+      ${evs.length > 0 ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px">📌 Eventos</div>
+        ${evs.map(ev => {
+          const t = TIPOS_EVENTO.find(x=>x.id===ev.tipo)||TIPOS_EVENTO[6];
+          return `<div class="cal-ev ${t.cor}" onclick="fecharModal();abrirEvento('${ev.id}')"
+            style="margin-bottom:4px;padding:6px 8px;white-space:normal;border-radius:6px;cursor:pointer;${ev.concluido?'opacity:.5;text-decoration:line-through':''}">
+            ${t.icon} ${ev.titulo}${ev.hora?' · '+ev.hora:''}
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+
+      ${prazos.length > 0 ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#92400E;margin-bottom:6px">⏰ Prazos</div>
+        ${prazos.map(p => `<div class="cal-ev cal-ev-prazo" onclick="fecharModal();abrirPrazo('${p.id}')"
+          style="margin-bottom:4px;padding:6px 8px;white-space:normal;border-radius:6px;cursor:pointer">
+          ⏰ ${p.titulo}
+        </div>`).join('')}
+      </div>` : ''}
+
+      ${!temAlgo ? `<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:13px;font-style:italic">Dia livre — nenhum compromisso</div>` : ''}
+    </div>`;
+
+  abrirModal(titulo, corpoDia,
+    `<button class="btn" onclick="fecharModal()">Fechar</button>
+     <button class="btn primary" onclick="fecharModal();abrirNovoEvento('${key}')">+ Novo evento</button>`
+  );
 }
 
 function iniciarHoverDia(el) {
