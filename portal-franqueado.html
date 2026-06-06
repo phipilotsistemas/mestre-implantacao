@@ -1631,8 +1631,12 @@ function montarPortal(f, senhaUsada) {
 
   $('tela-login').style.display='none';
 
-  // Verificar se já trocou a senha do 1º acesso
-  const senhaTrocada = localStorage.getItem('senha_trocada_' + PORTAL.fid) === '1';
+  // Verificar se já trocou a senha do 1º acesso (localStorage OU Firebase)
+  let senhaTrocada = localStorage.getItem('senha_trocada_' + PORTAL.fid) === '1';
+  if(!senhaTrocada && f.senhaTrocada && f.senhaTrocada.trocada) {
+    senhaTrocada = true;
+    localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
+  }
   if(!senhaTrocada) {
     renderTrocarSenha();
     return;
