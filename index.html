@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · calendario-modal-v23','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · listener-reunioes-v25','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1534,18 +1534,6 @@ function iniciarLogin() {
         PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
         localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
         iniciarApp();
-        // Listener em tempo real para novas reuniões
-        db.ref('reunioes').on('value', snap => {
-          const raw = snap.val();
-          if(!raw) return;
-          const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
-          localStorage.setItem('mo_reunioes', JSON.stringify(lista));
-          atualizarBadgesAgenda();
-          atualizarBadgeReunioes();
-          // Atualizar submenu se estiver aberto
-          const subR = $('sub-reunioes');
-          if(subR && subR.style.display !== 'none') renderSubReunioes();
-        });
         return;
       }
       // Usuário Firebase autenticado mas não é da equipe do painel
@@ -1656,6 +1644,29 @@ function iniciarApp() {
 
   ir('dashboard');
   atualizarBadges();
+
+  // Listener em tempo real para reuniões — funciona com qualquer tipo de login
+  try {
+    db.ref('reunioes').off(); // limpar listener anterior se houver
+    db.ref('reunioes').on('value', snap => {
+      const raw = snap.val();
+      if(!raw) return;
+      const lista = Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).filter(Boolean);
+      localStorage.setItem('mo_reunioes', JSON.stringify(lista));
+      atualizarBadgesAgenda();
+      atualizarBadgeReunioes();
+      // Atualizar aba de reuniões se estiver aberta
+      const subR = $('sub-reunioes');
+      if(subR && subR.style.display !== 'none') renderSubReunioes();
+      // Atualizar dashboard (balão de nova reunião)
+      const dash = $('content');
+      if(dash && window._abaAtual === 'dashboard') renderDashboard();
+      // Atualizar calendário se estiver na aba agenda
+      if(window._abaAtual === 'agenda') {
+        try { renderCalendario(); } catch(e) {}
+      }
+    });
+  } catch(e) { console.warn('Listener reunioes:', e); }
   // Badge de chamados atualizado via renderSuportePainel()
 
   // Listener para notificações do franqueado → gestor
@@ -11157,7 +11168,11 @@ function cardReuniaoPainel(r) {
           style="padding:6px 12px;border-radius:8px;background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;cursor:pointer;font-size:11px;font-weight:700">
           📅 Reagendar
         </button>
-        <button onclick="cancelarReuniao('${r.id}')"
+        <button onclick="registrarReuniaoRealizada('${r.id}')"
+          style="padding:6px 12px;border-radius:8px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;cursor:pointer;font-size:11px;font-weight:700">
+          📝 Registrar como realizada
+        </button>
+        <button onclick="cancelarReuniao('${r.id}')""
           style="padding:6px 12px;border-radius:8px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;cursor:pointer;font-size:11px;font-weight:700">
           ✕ Cancelar
         </button>
@@ -11265,6 +11280,92 @@ function reagendarReuniao(reuId) {
       }
     });
   }, 100);
+}
+
+function registrarReuniaoRealizada(reuId) {
+  const lista = getReunioes();
+  const r     = lista.find(x => x.id === reuId);
+  if(!r) return;
+  const f = getDados().find(x => x.id === r.fid);
+
+  // Verificar se franqueado já registrou
+  const resumoFrq = r.resumoFranqueado || '';
+  const duracaoFrq = r.duracaoReal || r.duracao || 45;
+
+  abrirModal('📝 Registrar reunião como realizada', `
+    <div style="min-width:340px">
+      ${resumoFrq ? `<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px;margin-bottom:14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#166534;margin-bottom:4px">Resumo registrado pelo franqueado</div>
+        <div style="font-size:12px;color:#166534">${resumoFrq}</div>
+        <div style="font-size:10px;color:#16A34A;margin-top:2px">Duração informada: ${duracaoFrq} min</div>
+      </div>` : '<div style="font-size:11px;color:var(--text-dim);margin-bottom:14px">O franqueado ainda não registrou o resumo.</div>'}
+
+      <div class="field" style="margin-bottom:14px">
+        <label>Duração real da reunião (minutos)</label>
+        <input class="inp" id="real-duracao" type="number" min="5" max="240" value="${duracaoFrq}" style="width:120px">
+      </div>
+      <div class="field">
+        <label>Resumo do gestor <span style="font-weight:400;color:var(--text-dim)">(opcional)</span></label>
+        <textarea class="inp" id="real-resumo" rows="4"
+          placeholder="O que foi tratado, decisões tomadas, encaminhamentos, próximos passos..."></textarea>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarRegistroRealizada('${reuId}')">✅ Registrar</button>`
+  );
+}
+
+async function confirmarRegistroRealizada(reuId) {
+  const duracao = parseInt($('real-duracao')?.value) || 0;
+  const resumo  = $('real-resumo')?.value?.trim() || '';
+  const lista   = getReunioes();
+  const r       = lista.find(x => x.id === reuId);
+  if(!r) return;
+
+  r.status         = 'realizada';
+  r.duracaoReal    = duracao;
+  r.resumoGestor   = resumo;
+  r.gestorNome     = SESSAO.nome;
+  r.dataRealizacao = hoje() + ' às ' + agora();
+
+  if(!r.historico) r.historico = [];
+  r.historico.push({
+    data:   hoje() + ' às ' + agora(),
+    autor:  SESSAO.nome,
+    tipo:   'realizada',
+    obs:    resumo || 'Reunião registrada como realizada pelo gestor.',
+  });
+
+  salvarReunioes(lista);
+
+  // Salvar resumo do gestor no Firebase
+  try { await db.ref('reunioes_conclusao/' + reuId + '/gestor').set({
+    gestorNome:   SESSAO.nome,
+    duracaoReal:  duracao,
+    resumoGestor: resumo,
+    registradoEm: hoje() + ' às ' + agora(),
+  }); } catch(e) {}
+
+  // Salvar evento no processo do franqueado
+  salvarEventoEtapa(r.fid, r.etapa || r.etapaAtual || 0, {
+    tipo:  'reuniao_realizada',
+    texto: `Reunião ${reuId} registrada como realizada. Duração: ${duracao}min.${resumo ? ' Resumo: ' + resumo : ''}`,
+    autor: SESSAO.nome,
+    data:  hoje(), hora: agora(), timestamp: Date.now(),
+  });
+
+  // Notificar franqueado
+  try { db.ref('reunioes_notif/' + r.fid).set({
+    tipo:   'realizada',
+    reuId,
+    resumo: resumo,
+    data:   hoje(),
+  }); } catch(e) {}
+
+  fecharModal();
+  toast('Reunião registrada como realizada.', 'gn');
+  renderSubReunioes();
+  renderDashboard();
 }
 
 function cancelarReuniao(reuId) {
