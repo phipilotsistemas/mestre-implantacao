@@ -1630,7 +1630,7 @@ function iniciarApp() {
 
   ir('dashboard');
   atualizarBadges();
-  setTimeout(atualizarBadgeChamados, 800);
+  // Badge de chamados atualizado via renderSuportePainel()
 
   // Listener para notificações do franqueado → gestor
   try {
@@ -2133,7 +2133,7 @@ function renderEsteiraPainel() {
   const ativos     = dados.filter(f => f.processoIniciado && f.etapaAtual >= 1 && f.etapaAtual <= ETAPAS.length && f.status !== 'arquivado');
   const desist     = dados.filter(f => f.status === 'desistencia');
   const aguardando = dados.filter(f => !f.processoIniciado && f.status !== 'arquivado');
-  console.log('[RENDER] Total dados:', dados.length, '| Aguardando:', aguardando.length, '| Ativos:', ativos.length);
+  // dados carregados
   const hoje_ts    = Date.now();
 
   // ── Tempo médio de implantação ──
