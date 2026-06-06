@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · reunioes-completo-v21','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · calendario-hover-v22','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -10430,9 +10430,11 @@ function renderCalendario() {
 
     return '<div class="cal-day'+(outroMes?' outro-mes':'')+(isHoje?' hoje':'')+'" ' +
       'data-key="'+key+'" ' +
-      'onclick="selecionarDia(this.dataset.key)" ' +
-      'onmouseenter="expandirDia(this)" onmouseleave="recolherDia(this)" ' +
-      'style="position:relative;'+(evsD.length||getPrazos().some(p=>p.data===key&&!p.concluido)?'border-left:3px solid var(--primary)':'')+'">' +
+      // onclick handled by clicarDia
+      '' +
+      'onmouseenter="iniciarHoverDia(this)" onmouseleave="cancelarHoverDia(this)" ' +
+      'onclick="clicarDia(this)" ' +
+      'style="position:relative;cursor:pointer;'+(evsD.length||getPrazos().some(p=>p.data===key&&!p.concluido)?'border-left:3px solid var(--primary)':'')+'">' +
       '<div class="cal-day-num">'+data.getDate()+'</div>' +
       evsD.slice(0,3).map(ev => {
         const t = TIPOS_EVENTO.find(x=>x.id===ev.tipo)||TIPOS_EVENTO[6];
@@ -10459,7 +10461,7 @@ function renderCalendario() {
           '<div class="cal-ev cal-ev-prazo" onclick="event.stopPropagation();abrirPrazo(this.dataset.pid)" data-pid="'+p.id+'" style="margin-bottom:3px;white-space:normal"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="9.5" fill="#F5A623"/><circle cx="10" cy="10" r="1.8" fill="#1a1a1a"/><line x1="10" y1="10" x2="14.5" y2="5.5" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/><line x1="10" y1="10" x2="10" y2="15" stroke="#1a1a1a" stroke-width="1.6" stroke-linecap="round"/></svg> '+p.titulo+'</div>'
         ).join('') +
         (evsD.length===0&&getPrazos().filter(p=>p.data===key&&!p.concluido).length===0?'<div style="font-size:11px;color:var(--text-muted);font-style:italic">Dia livre</div>':'') +
-        '<button onclick="event.stopPropagation();abrirNovoEvento(\''+key+'\')" style="margin-top:6px;width:100%;font-size:10px;padding:4px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;color:var(--primary);font-family:inherit">+ Adicionar evento</button>' +
+        '<div style="margin-top:6px;text-align:right"><button onclick="event.stopPropagation();abrirNovoEvento(\''+key+'\')" style="font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;color:var(--primary);font-family:inherit;opacity:.7">+ evento</button></div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -10468,7 +10470,7 @@ function renderCalendario() {
 function selecionarDia(key) {
   _agendaDiaSel = key;
   renderListaLateral();
-  abrirNovoEvento(key);
+  // não abre mais add-event — clique no dia expande o popup
 }
 
 function renderListaLateral() {
@@ -12128,27 +12130,77 @@ function seedPrazosDemo() {
 seedPrazosDemo();
 
 
-function expandirDia(el) {
+let _diaHoverTimer = null;
+let _diaExpandido  = null;
+
+function clicarDia(el) {
+  // Clique no dia = expandir para ver atividades (não abrir add-event)
+  const key = el.dataset.key;
+  if(!key) return;
+  _agendaDiaSel = key;
+  renderListaLateral();
+  // Se o popup já está aberto neste dia, fecha; senão abre
+  if(_diaExpandido === el) {
+    recolherDia(el);
+  } else {
+    if(_diaExpandido) recolherDia(_diaExpandido);
+    _mostrarPopupDia(el);
+  }
+}
+
+function iniciarHoverDia(el) {
+  cancelarHoverDia(el);
+  _diaHoverTimer = setTimeout(() => {
+    if(_diaExpandido !== el) {
+      if(_diaExpandido) recolherDia(_diaExpandido);
+      _mostrarPopupDia(el);
+    }
+  }, 2000); // 2 segundos
+}
+
+function cancelarHoverDia(el) {
+  if(_diaHoverTimer) { clearTimeout(_diaHoverTimer); _diaHoverTimer = null; }
+  // Só recolhe se não foi fixado por clique
+  // (popup fecha apenas se mouse sair E não foi aberto por clique)
+  if(el && el !== _diaExpandido) return;
+}
+
+function _mostrarPopupDia(el) {
   const popup = el.querySelector('.cal-popup');
   if(!popup) return;
   const rect = el.getBoundingClientRect();
-  popup.style.display = 'block';
-  popup.style.top     = '0px';
-  if(rect.left + 280 > window.innerWidth - 20) {
-    popup.style.left = 'auto'; popup.style.right = '0px';
-  } else {
-    popup.style.left = '0px'; popup.style.right = 'auto';
-  }
-  el.style.zIndex    = '100';
-  el.style.transform  = 'scale(1.02)';
-  el.style.boxShadow  = '0 4px 20px rgba(27,63,139,.18)';
-  el.style.transition = 'all .15s';
+  const posRight = rect.left + 270 > window.innerWidth - 20;
+  popup.style.display  = 'block';
+  popup.style.top      = '100%';
+  popup.style.left     = posRight ? 'auto' : '0px';
+  popup.style.right    = posRight ? '0px'  : 'auto';
+  popup.style.marginTop = '4px';
+  el.style.zIndex    = '200';
+  el.style.transition = 'box-shadow .15s';
+  el.style.boxShadow  = '0 4px 20px rgba(27,63,139,.22)';
+  _diaExpandido = el;
+
+  // Fechar ao clicar fora
+  setTimeout(() => {
+    const handler = (e) => {
+      if(!el.contains(e.target)) {
+        recolherDia(el);
+        document.removeEventListener('click', handler);
+      }
+    };
+    document.addEventListener('click', handler);
+  }, 10);
 }
+
 function recolherDia(el) {
+  if(!el) return;
   const popup = el.querySelector('.cal-popup');
   if(popup) popup.style.display = 'none';
-  el.style.zIndex = ''; el.style.transform = ''; el.style.boxShadow = '';
+  el.style.zIndex = ''; el.style.boxShadow = '';
+  if(_diaExpandido === el) _diaExpandido = null;
 }
+
+function expandirDia(el) { _mostrarPopupDia(el); } // compatibilidade
 
 
 /* ══════════════════════════════════════════════════════════════
