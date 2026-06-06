@@ -2417,11 +2417,15 @@ async function renderAgendaReunioes() {
   // Verificar se o gestor configurou ao menos um dia com horários
   const diasAtivos = disp.dias ? Object.values(disp.dias).filter(d => d.ativo && d.horarios?.length > 0) : [];
   if(!disp.dias || diasAtivos.length === 0) {
+    const temDiasSemHorario = disp.dias && Object.values(disp.dias).some(d => d.ativo && (!d.horarios || d.horarios.length === 0));
     $('portal-content').innerHTML = `
       <div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
         <div style="font-size:36px;margin-bottom:12px">📅</div>
         <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Sem vagas disponíveis</div>
-        <div style="font-size:12px;line-height:1.6">Seu gestor ainda não configurou os horários de atendimento.<br>Entre em contato pelo MO Talk.</div>
+        <div style="font-size:12px;line-height:1.6">${temDiasSemHorario
+          ? 'Seu gestor marcou dias disponíveis mas ainda não preencheu os horários.<br>Entre em contato pelo MO Talk.'
+          : 'Seu gestor ainda não configurou os horários de atendimento.<br>Entre em contato pelo MO Talk.'
+        }</div>
       </div>`;
     return;
   }
