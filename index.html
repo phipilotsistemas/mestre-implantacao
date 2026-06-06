@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · loop-trace-v3','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · recursao-corrigida-v4','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1871,16 +1871,12 @@ function renderAlertas() {
 
 /* ══ ALIASES DE COMPATIBILIDADE ══ */
 function abrirCadastroFranqueado() {
-  // Abre o drawer de cadastro de novo franqueado
-  ir('franqueados');
-  setTimeout(() => {
-    const btn = document.getElementById('btn-novo-frq');
-    if(btn) btn.click();
-    else {
-      // Fallback: abrir modal direto
-      abrirModalNovoFranqueado();
-    }
-  }, 200);
+  // CORRECAO DO LOOP: antes esta funcao clicava no proprio botao btn-novo-frq,
+  // cujo onclick e abrirCadastroFranqueado() -> recursao infinita que travava o painel.
+  // Um novo franqueado nasce de um candidato (Negociacao) e depois "migrar para a esteira".
+  const b = document.querySelector('.sb-item[onclick*="candidatos"]');
+  ir('candidatos', b);
+  setTimeout(() => { if(typeof abrirNovoCandidato === 'function') abrirNovoCandidato(); }, 250);
 }
 
 function abrirModalNovoFranqueado() {
@@ -1946,19 +1942,6 @@ function irFicha(fid) {
 }
 
 function ir(aba, btn, fid) {
-  // ── DIAGNOSTICO + GUARDA DE LOOP (temporario) ──
-  const _agora = Date.now();
-  if(!window.__irCount) window.__irCount = {};
-  if(_agora - (window.__irLast||0) > 1000) window.__irCount = {};
-  window.__irLast = _agora;
-  window.__irCount[aba] = (window.__irCount[aba]||0) + 1;
-  if(window.__irCount[aba] === 1)
-    console.log('%c[IR] aba=' + aba, 'background:#1D9E75;color:#fff;padding:2px 8px;border-radius:3px');
-  if(window.__irCount[aba] === 6) {
-    console.error('%c[IR] LOOP detectado em "' + aba + '" — pilha de quem chamou abaixo:', 'background:#c0392b;color:#fff;padding:2px 8px');
-    console.trace('[IR] ORIGEM DO LOOP');
-  }
-  if(window.__irCount[aba] > 8) { console.warn('[IR] loop barrado para "' + aba + '"'); return; }
   _abaAtual = aba;
   document.querySelectorAll('.sb-item').forEach(b=>b.classList.remove('ativo'));
   if(btn) btn.classList.add('ativo');
@@ -1972,18 +1955,8 @@ function ir(aba, btn, fid) {
   $('topbar-title').textContent = TITULOS[aba]||aba;
   const fn = RENDERS[aba];
   if(fn) {
-    try {
-      const _c = document.getElementById('content');
-      const _antes = _c ? _c.innerHTML.length : -1;
-      fn();
-      const _dps = _c ? _c.innerHTML.length : -1;
-      console.log('[IR] render "' + aba + '" OK — content ' + _antes + ' -> ' + _dps + ' chars');
-    } catch(err) {
-      console.error('[IR] ERRO no render de "' + aba + '":', err);
-      alert('Erro ao abrir ' + aba + ': ' + err.message);
-    }
-  } else {
-    console.warn('[IR] SEM render para aba "' + aba + '" (RENDERS nao tem essa chave)');
+    try { fn(); }
+    catch(err) { console.error('Erro ao renderizar a aba "' + aba + '":', err); }
   }
   setTimeout(()=>{ try{ if(window.lucide) lucide.createIcons(); }catch(e){} }, 50);
 }
