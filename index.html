@@ -2106,7 +2106,7 @@ function renderFranqueados() {
     <div id="esteira-aba-arquivados" class="esteira-aba"></div>
   `;
   // Aguardar o browser processar o DOM antes de injetar o conteúdo
-  requestAnimationFrame(() => renderEsteiraPainel());
+  requestAnimationFrame(() => { if($('esteira-aba-painel')) renderEsteiraPainel(); });
 
 }
 
@@ -2123,7 +2123,7 @@ function trocarAbaEsteira(aba, btn) {
     arquivados:  renderEsteiraArquivados,
   };
   // Sempre re-renderiza para garantir dados atualizados
-  if(fns[aba]) requestAnimationFrame(() => fns[aba]());
+  if(fns[aba]) requestAnimationFrame(() => { if($('esteira-aba-'+aba)) fns[aba](); });
 }
 
 /* ══ ABA 1: PAINEL ══ */
@@ -2236,6 +2236,7 @@ function renderEsteiraPainel() {
   const em5dias   = calcVencendo();
 
   const el = $('esteira-aba-painel');
+  if(!el) return; // aba não está mais no DOM
   el.innerHTML = `
 
   <!-- ── BOLÕES PRINCIPAIS ── -->
@@ -2595,6 +2596,7 @@ function renderEsteiraLista() {
   const corDias = (d) => d > 14 ? 'dias-critico' : d > 7 ? 'dias-alerta' : 'dias-ok';
 
   const el = $('esteira-aba-lista');
+  if(!el) return;
   el.innerHTML = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div style="font-size:12px;color:var(--text-dim)">${todos.length} franqueado${todos.length!==1?'s':''} cadastrado${todos.length!==1?'s':''} · ${ativos.length} em implantação · ${aguard.length} aguardando início</div>
