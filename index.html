@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · agenda-horarios-v20','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · reunioes-completo-v21','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1751,7 +1751,9 @@ function renderDashboard() {
   const amanha   = new Date(hoje2); amanha.setDate(amanha.getDate()+1);
   const em5dias  = new Date(hoje2); em5dias.setDate(hoje2.getDate()+5);
   const prazos   = getPrazos().filter(p => !p.concluido);
-  const reunioes = getReunioes().filter(r => r.status === 'agendada');
+  const reunioes  = getReunioes().filter(r => r.status === 'agendada');
+  const vistas    = new Set(JSON.parse(localStorage.getItem('mo_reun_vistas')||'[]'));
+  const novasReun = reunioes.filter(r => !vistas.has(r.id));
 
   const precisamAgora = [];
   const atencao       = [];
@@ -1782,7 +1784,10 @@ function renderDashboard() {
       const dr = new Date(y,m-1,d);
       return dr <= amanha;
     });
-    if(reuProx.length) itens.push({ tipo:'reuniao', label:`Reunião: ${reuProx[0].data} às ${reuProx[0].hora}`, urgencia:2 });
+    if(reuProx.length) {
+      const nova = !vistas.has(reuProx[0].id);
+      itens.push({ tipo:'reuniao', label:`Reunião${nova?' 🆕':''}: ${reuProx[0].data} às ${reuProx[0].hora}`, urgencia: nova ? 1 : 2, reuId: reuProx[0].id });
+    }
     // Prazo próximo
     const prazoProx = prazos.filter(p => {
       if(p.fid!==f.id||!p.dataISO||prazoVenc.find(pv=>pv.id===p.id)) return false;
@@ -1837,6 +1842,23 @@ function renderDashboard() {
       </div>
       <button onclick="renderDashboard()" class="btn sm">↻ Atualizar</button>
     </div>
+    ${novasReun.length>0?`
+    <div style="background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+      <div style="font-size:28px;line-height:1">📅</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:800;color:#1E40AF;margin-bottom:6px">
+          ${novasReun.length === 1 ? '1 reunião nova agendada' : novasReun.length+' reuniões novas agendadas'}
+        </div>
+        ${novasReun.map(r=>{
+          const f2 = dados.find(x=>x.id===r.fid);
+          return `<div style="font-size:12px;color:#1E3A8A;margin-bottom:3px">
+            📌 <b>${f2?.nome?.split(' ').slice(0,2).join(' ')||r.fid}</b> — ${r.data} às ${r.hora}
+            <span style="color:#6B7280;font-size:11px"> · ${r.motivo||'sem motivo'}</span>
+            <button onclick="marcarReuniaoVista('${r.id}')" style="margin-left:8px;font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid #93C5FD;background:#fff;color:#1E40AF;cursor:pointer">Ciente ✓</button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:``}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px">
       ${[
         {label:'Precisam de você',valor:precisamAgora.length,cor:'#DC2626',bg:'#FEE2E2',icon:'🔴'},
@@ -10942,67 +10964,82 @@ function abrirConfigurarDisponibilidade() {
   const dias  = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
   const vals  = ['seg','ter','qua','qui','sex','sab'];
 
+  // Slots de 30 em 30 min — 07:00 a 20:00
+  const slots = [];
+  for(let h=7;h<=20;h++){slots.push(String(h).padStart(2,'0')+':00');if(h<20)slots.push(String(h).padStart(2,'0')+':30');}
+
+  // Estado dos horários selecionados (global para salvarConfiguracaoDisponibilidade ler)
+  window._dispHorSel = {};
+  vals.forEach(v => { window._dispHorSel[v] = new Set(disp.dias?.[v]?.horarios||[]); });
+
   abrirModal('⚙ Configurar disponibilidade para reuniões',`
     <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">
-      Defina os dias e horários em que você aceita reuniões virtuais.<br>
-      Os franqueados verão essas vagas com no mínimo 24h de antecedência.
+      Defina os dias e horários. Franqueados verão vagas com mínimo <b>48h</b> de antecedência.
     </div>
-
     <!-- Link da reunião -->
     <div class="field" style="margin-bottom:16px">
-      <label>Link fixo da sala de reunião</label>
+      <label>Link fixo da sala de reunião <span style="font-weight:400;color:var(--text-dim)">(opcional)</span></label>
       <input class="inp" id="disp-link" value="${disp.link||''}"
         placeholder="https://meet.google.com/xxx-xxxx-xxx ou https://zoom.us/j/...">
-      <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Cole o link da sua sala fixa do Google Meet, Zoom ou Teams.</div>
     </div>
-
     <!-- Duração padrão -->
     <div class="field" style="margin-bottom:16px">
-      <label>Duração padrão das reuniões</label>
+      <label>Duração padrão</label>
       <select class="inp" id="disp-duracao">
         ${['30','45','60','90'].map(d=>`<option value="${d}" ${(disp.duracao||'60')===d?'selected':''}>${d} minutos</option>`).join('')}
       </select>
     </div>
-
-    <!-- Dias e horários -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Dias disponíveis e horários</div>
+    <!-- Dias e horários via chips -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">Dias e horários disponíveis</div>
     ${dias.map((dia,i) => {
-      const val   = vals[i];
-      const ativo = disp.dias?.[val]?.ativo || false;
-      const hors  = (disp.dias?.[val]?.horarios || []).join(', ');
+      const val     = vals[i];
+      const ativo   = disp.dias?.[val]?.ativo || false;
+      const selHors = disp.dias?.[val]?.horarios || [];
+      const chipsHtml = slots.map(s => {
+        const id  = 'chip-'+val+'-'+s.replace(':','-');
+        const sel = selHors.includes(s);
+        return `<button type="button" id="${id}" onclick="toggleDispChip('${val}','${s}')"
+          style="padding:3px 9px;border-radius:6px;border:1.5px solid ${sel?'var(--primary)':'var(--border)'};font-size:11px;cursor:pointer;font-family:inherit;background:${sel?'var(--primary)':'var(--bg)'};color:${sel?'#fff':'var(--text)'};transition:all .15s">${s}</button>`;
+      }).join('');
       return `
-      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;min-width:80px">
-          <input type="checkbox" id="disp-dia-${val}" ${ativo?'checked':''} style="accent-color:var(--primary)">
-          <span style="font-size:13px;font-weight:600">${dia}</span>
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
+          <input type="checkbox" id="disp-dia-${val}" ${ativo?'checked':''} style="accent-color:var(--primary)" onchange="toggleDispDia('${val}')">
+          <span style="font-size:13px;font-weight:700">${dia}</span>
+          <span id="disp-cnt-${val}" style="font-size:11px;color:var(--text-dim)">${selHors.length>0?selHors.length+' horário(s)':''}</span>
         </label>
-        <input class="inp" id="disp-hor-${val}" value="${hors}"
-          placeholder="09:00, 14:00, 16:30"
-          style="flex:1;font-size:12px;padding:6px 10px"
-          ${ativo?'':'disabled'}>
+        <div id="disp-chips-${val}" style="display:${ativo?'flex':'none'};flex-wrap:wrap;gap:5px">${chipsHtml}</div>
       </div>`;
     }).join('')}
-
-    <div style="font-size:10px;color:var(--text-muted);margin-top:10px">
-      Horários: separe por vírgula. Ex: <b>09:00, 14:00, 16:30</b>
-    </div>
-
-
   `,
   `<button class="btn" onclick="fecharModal()">Cancelar</button>
    <button class="btn primary" onclick="salvarConfiguracaoDisponibilidade()">Salvar disponibilidade</button>`
   );
-  // Ativar/desabilitar inputs de horário conforme checkbox
-  setTimeout(() => {
-    document.querySelectorAll('[id^="disp-dia-"]').forEach(chk => {
-      chk.addEventListener('change', function() {
-        const val = this.id.replace('disp-dia-','');
-        const inp = document.getElementById('disp-hor-'+val);
-        if(inp) inp.disabled = !this.checked;
-      });
-    });
-  }, 50);
 }
+
+function toggleDispDia(val) {
+  const chk   = document.getElementById('disp-dia-'+val);
+  const chips = document.getElementById('disp-chips-'+val);
+  if(chips) chips.style.display = chk?.checked ? 'flex' : 'none';
+}
+
+function toggleDispChip(val, hora) {
+  if(!window._dispHorSel) window._dispHorSel = {};
+  if(!window._dispHorSel[val]) window._dispHorSel[val] = new Set();
+  const sel = window._dispHorSel[val];
+  const chipId = 'chip-'+val+'-'+hora.replace(':','-');
+  const btn = document.getElementById(chipId);
+  if(sel.has(hora)) {
+    sel.delete(hora);
+    if(btn){btn.style.background='var(--bg)';btn.style.color='var(--text)';btn.style.borderColor='var(--border)';}
+  } else {
+    sel.add(hora);
+    if(btn){btn.style.background='var(--primary)';btn.style.color='#fff';btn.style.borderColor='var(--primary)';}
+  }
+  const cnt = document.getElementById('disp-cnt-'+val);
+  if(cnt) cnt.textContent = sel.size > 0 ? sel.size+' horário(s)' : '';
+}
+
 
 function salvarConfiguracaoDisponibilidade() {
   const link    = $('disp-link')?.value?.trim() || '';
@@ -11011,22 +11048,15 @@ function salvarConfiguracaoDisponibilidade() {
   const dias    = {};
 
   vals.forEach(val => {
-    const chk = document.getElementById('disp-dia-'+val);
-    const inp = document.getElementById('disp-hor-'+val);
-    if(chk?.checked) {
-      const horarios = (inp?.value||'').split(',')
-        .map(h=>h.trim())
-        .filter(h=>/^\d{2}:\d{2}$/.test(h));
-      dias[val] = { ativo: true, horarios };
-    } else {
-      dias[val] = { ativo: false, horarios: [] };
-    }
+    const chk     = document.getElementById('disp-dia-'+val);
+    const horarios = chk?.checked ? [...(window._dispHorSel?.[val] || [])].sort() : [];
+    dias[val] = { ativo: !!chk?.checked, horarios };
   });
 
-  // Validar: ao menos um dia ativo com horários preenchidos
+  // Validar: ao menos um dia ativo com horários selecionados
   const diasValidos = Object.values(dias).filter(d => d.ativo && d.horarios.length > 0);
   if(diasValidos.length === 0) {
-    toast('Preencha pelo menos um horário nos dias marcados como disponíveis. Ex: 09:00, 14:00', 'er');
+    toast('Selecione pelo menos um horário em algum dia ativo.', 'er');
     return;
   }
 
@@ -11235,40 +11265,117 @@ function reagendarReuniao(reuId) {
 }
 
 function cancelarReuniao(reuId) {
-  abrirModal('Cancelar reunião',`
-    <div class="field" style="margin-bottom:12px">
-      <label>Justificativa <span style="color:var(--red)">*</span></label>
-      <textarea class="inp" id="canc-just" rows="3" placeholder="Motivo do cancelamento..."></textarea>
+  const lista = getReunioes();
+  const r     = lista.find(x => x.id === reuId);
+  if(!r) return;
+  const f = getDados().find(x => x.id === r.fid);
+
+  abrirModal('📅 Gerenciar reunião — ' + (f?.nome?.split(' ')[0]||''),`
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">
+      Reunião: <b>${r.data} às ${r.hora}</b> · Motivo: ${r.motivo||'—'}
     </div>
-    <div id="canc-ass-container"></div>
-  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>`);
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px">O que deseja fazer?</div>
+
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:8px;background:var(--bg)">
+      <input type="radio" name="canc-tipo" value="resolvida" style="margin-top:2px;accent-color:var(--green)">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--green)">✅ Problema resolvido — dispensar reunião</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">O franqueado será notificado que o assunto foi tratado e a reunião não é mais necessária.</div>
+      </div>
+    </label>
+
+    <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;margin-bottom:14px;background:var(--bg)">
+      <input type="radio" name="canc-tipo" value="reagendar" style="margin-top:2px;accent-color:var(--primary)">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary)">📅 Cancelar e pedir reagendamento</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">O franqueado será solicitado a escolher um novo horário.</div>
+      </div>
+    </label>
+
+    <div class="field">
+      <label>Observação <span style="color:var(--red)">*</span> <span style="font-weight:400;color:var(--text-dim)">(mínimo 10 caracteres)</span></label>
+      <textarea class="inp" id="canc-obs" rows="3" placeholder="Explique o motivo ou oriente o franqueado..."></textarea>
+    </div>
+    <div id="canc-ass-container" style="margin-top:12px"></div>
+  `,`<button class="btn" onclick="fecharModal()">Voltar</button>`);
 
   setTimeout(() => {
-    const ta = $('canc-just');
+    const ta  = $('canc-obs');
     let rendered = false;
-    ta?.addEventListener('input', () => {
-      if(ta.value.trim().length >= 10 && !rendered) {
+    const tentarRenderAss = () => {
+      const tipo = document.querySelector('input[name="canc-tipo"]:checked')?.value;
+      const obs  = ta?.value?.trim();
+      if(tipo && obs && obs.length >= 10 && !rendered) {
         rendered = true;
-        const decl = `Eu, ${SESSAO.nome}, declaro que cancelei a reunião ${reuId} em ${hoje()} às ${agora()}. Justificativa: ${ta.value.trim()}.`;
-        renderAssBox('canc-ass-container', decl, 'Assinar cancelamento', () => {
+        const decl = `Eu, ${SESSAO.nome}, ${tipo==='resolvida'?'dispensei a reunião por problema resolvido':'solicitei reagendamento'} da reunião ${reuId} em ${hoje()} às ${agora()}. Observação: ${obs}.`;
+        renderAssBox('canc-ass-container', decl, tipo==='resolvida'?'Assinar resolução':'Assinar cancelamento', () => {
           const hash = Math.abs(decl.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
-          const lista = getReunioes();
-          const r = lista.find(x => x.id === reuId);
-          if(!r) return;
-          r.status = 'cancelada';
-          r.justificativaCancelamento = ta.value.trim();
-          r.declaracaoGestor = decl; r.hashGestor = hash;
-          r.gestorNome = SESSAO.nome;
-          r.dataCancelamento = hoje() + ' às ' + agora();
+          const r2   = lista.find(x => x.id === reuId);
+          if(!r2) return;
+
+          // Registrar no histórico da reunião
+          if(!r2.historico) r2.historico = [];
+          r2.historico.push({
+            data:    hoje() + ' às ' + agora(),
+            autor:   SESSAO.nome,
+            tipo:    tipo,
+            obs:     obs,
+            hash:    hash,
+            declaracao: decl,
+          });
+
+          r2.status            = tipo === 'resolvida' ? 'cancelada' : 'cancelada';
+          r2.resolucao         = tipo;
+          r2.observacaoGestor  = obs;
+          r2.declaracaoGestor  = decl;
+          r2.hashGestor        = hash;
+          r2.gestorNome        = SESSAO.nome;
+          r2.dataCancelamento  = hoje() + ' às ' + agora();
+
           salvarReunioes(lista);
-          try { db.ref('reunioes_notif/'+r.fid).set({tipo:'cancelada',reuId,motivo:ta.value.trim(),data:hoje()}); } catch(e){}
+
+          // Notificar franqueado
+          const notifTipo = tipo === 'resolvida' ? 'resolvida_sem_reuniao' : 'cancelada';
+          try { db.ref('reunioes_notif/'+r2.fid).set({
+            tipo: notifTipo, reuId,
+            motivo: obs,
+            resolucao: obs,
+            data: hoje()
+          }); } catch(e){}
+
+          // Registrar evento no processo do franqueado
+          salvarEventoEtapa(r2.fid, r2.etapaAtual||0, {
+            tipo:   'reuniao_' + (tipo==='resolvida'?'resolvida':'cancelada'),
+            texto:  (tipo==='resolvida'?'Reunião dispensada pelo gestor (problema resolvido)':'Gestor solicitou reagendamento de reunião') + '. Observação: ' + obs,
+            autor:  SESSAO.nome,
+            hash,
+            data:   hoje(), hora: agora(), timestamp: Date.now(),
+          });
+
           fecharModal();
-          toast('Reunião cancelada e registrada.','or');
+          toast(tipo==='resolvida'?'Reunião dispensada — franqueado notificado.':'Cancelamento registrado — franqueado notificado para reagendar.', tipo==='resolvida'?'gn':'or');
           renderSubReunioes();
+          renderDashboard();
         });
+      } else if(tipo && obs && obs.length >= 10 && rendered) {
+        // Regenerar se o tipo mudou
+        rendered = false;
+        $('canc-ass-container').innerHTML = '';
+        tentarRenderAss();
       }
-    });
+    };
+    ta?.addEventListener('input', tentarRenderAss);
+    document.querySelectorAll('input[name="canc-tipo"]').forEach(r => r.addEventListener('change', () => { rendered = false; $('canc-ass-container').innerHTML = ''; tentarRenderAss(); }));
   }, 100);
+}
+
+
+function marcarReuniaoVista(reuId) {
+  const vistas = new Set(JSON.parse(localStorage.getItem('mo_reun_vistas')||'[]'));
+  vistas.add(reuId);
+  localStorage.setItem('mo_reun_vistas', JSON.stringify([...vistas]));
+  renderDashboard();
 }
 
 function atualizarBadgeReunioes() {
