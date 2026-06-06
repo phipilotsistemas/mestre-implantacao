@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · auto-etapa-v14','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · dossie-assinaturas-v15','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1676,6 +1676,23 @@ function iniciarApp() {
             if(proxEt && proxId <= ETAPAS.length) {
               const fid = n.fid;
               const ts  = Date.now();
+              // Registrar concordância do franqueado no localStorage (para o dossiê)
+              salvarEventoEtapa(fid, Number(n.etapa), {
+                tipo:    'concordancia_franqueado',
+                texto:   n.franqueado + ' (' + n.ticket + ') assinou a ciência da conclusão da Etapa ' + n.etapa + '.',
+                autor:   n.franqueado,
+                data:    n.data || hoje(), hora: n.hora || agora(),
+                dataHora:(n.data || hoje()) + ' ' + (n.hora || agora()),
+                timestamp: ts,
+              });
+              salvarEventoEtapa(fid, Number(n.etapa), {
+                tipo:    'etapa_concluida',
+                texto:   'Etapa ' + n.etapa + ' concluída com assinatura de ambas as partes.',
+                autor:   'Sistema',
+                data:    n.data || hoje(), hora: n.hora || agora(),
+                dataHora:(n.data || hoje()) + ' ' + (n.hora || agora()),
+                timestamp: ts + 1,
+              });
               try {
                 db.ref('notif_franqueado/' + fid).set({
                   tipo:       'etapa_iniciada',
@@ -3468,13 +3485,13 @@ async function executarValidacaoEtapa(fid, etapaId, declaracao) {
   const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
   const ts   = Date.now();
 
-  // 1. Registrar evento de validação
+  // 1. Registrar evento de validação — tipo assinatura_gestora para o dossiê
   salvarEventoEtapa(fid, etapaId, {
-    tipo:  'validacao_gestor',
-    texto: `Etapa ${etapaId} validada pelo gestor ${SESSAO.nome}. Franqueado notificado para assinar o fechamento.`,
+    tipo:  'assinatura_gestora',
+    texto: declaracao,
     autor: SESSAO.nome,
     hash,
-    data:  hoje(), hora: agora(), timestamp: ts,
+    data:  hoje(), hora: agora(), dataHora: hoje()+' '+agora(), timestamp: ts,
   });
 
   // 2. Notificar franqueado — etapa aprovada, assine para fechar
