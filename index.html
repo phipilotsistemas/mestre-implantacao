@@ -3706,8 +3706,10 @@ async function confirmarRespostaChamado(fid, chamadoId) {
     ch.gestorNome      = SESSAO.nome;
     ch.gestorToken     = SESSAO.token;
     ch.dataResposta    = hoje() + ' às ' + agora();
-    ch.status          = 'em_andamento';
+    ch.status          = 'em_andamento'; // sempre em_andamento ao responder
     ch.resolvidoGestor = false;
+    ch.retornoFranqueado = null; // limpar retorno após nova resposta
+    ch.dataRetorno       = null;
 
     // Salvar no Firebase (fonte da verdade) + cache local
     await db.ref('chamados/' + fid).set(lista);
