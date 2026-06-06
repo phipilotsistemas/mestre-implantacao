@@ -11242,6 +11242,12 @@ function renderSubDelegadas() {
 }
 
 // ── CRIAR PRAZO ──
+function atualizarEtapasPrazo(fid){
+  if(!fid) return;
+  var f = getDados().find(function(x){ return x.id===fid; });
+  var sel = document.getElementById('pz-etapa');
+  if(f && sel && f.etapaAtual){ sel.value = f.etapaAtual; }
+}
 function abrirNovoPrazo(fid, etId) {
   const dados  = getDados();
   const ativos = dados.filter(f=>f.processoIniciado&&f.etapaAtual<=ETAPAS.length&&f.status!=='desistencia');
