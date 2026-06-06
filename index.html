@@ -1335,10 +1335,10 @@ try {
   const appSecundario = firebase.initializeApp(firebaseConfig, 'portal-criacao');
   authSecundario = appSecundario.auth();
 } catch(e) {
-  console.warn('Firebase não disponível:', e.message);
+  console.info('Firebase: modo offline (localStorage). Recursos em tempo real desativados.');
   auth = { signInWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), onAuthStateChanged: (cb) => cb(null) };
   authSecundario = { createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), signOut: () => {} };
-  db   = { ref: () => ({ set: ()=>Promise.resolve(), on: ()=>{}, once: ()=>Promise.resolve({val:()=>null}), push: ()=>{} }) };
+  db   = { ref: () => ({ set: ()=>Promise.resolve(), on: ()=>{}, off: ()=>{}, once: ()=>Promise.resolve({val:()=>null}), push: ()=>Promise.resolve(), update: ()=>Promise.resolve() }) };
 }
 // ── APPS SCRIPT URL ──
 var APPS_SCRIPT_URL = localStorage.getItem('mo_apps_script_url') || 'https://script.google.com/macros/s/AKfycbxXkAERCOWTTzyuttwqvdCPrJyf2WmztdGIDZUn3skMkwR9E3SIQbO1ktdAYKZqw7Ys/exec';
@@ -1658,6 +1658,252 @@ const TITULOS = {
   relatorios:  'Relatórios Funcionais',
   contatos:    'Contatos Externos',
 };
+/* ══ DASHBOARD ══ */
+function renderDashboard() {
+  const dados    = getDados().filter(f => f.status !== 'arquivado');
+  const hoje2    = new Date(); hoje2.setHours(0,0,0,0);
+  const amanha   = new Date(hoje2); amanha.setDate(amanha.getDate()+1);
+  const em5dias  = new Date(hoje2); em5dias.setDate(hoje2.getDate()+5);
+  const prazos   = getPrazos().filter(p => !p.concluido);
+  const reunioes = getReunioes().filter(r => r.status === 'agendada');
+
+  const precisamAgora = [];
+  const atencao       = [];
+  const emDia         = [];
+
+  dados.forEach(f => {
+    const itens = [];
+    // Validação pendente
+    const valPend = f.etapasPendentes?.[f.etapaAtual]?.status === 'aguardando_franqueado';
+    if(valPend) itens.push({ tipo:'validacao', label:'Solicitou validação da etapa', urgencia:1 });
+    // Chamados abertos
+    try {
+      const chams = JSON.parse(localStorage.getItem('suporte_'+f.id)||'[]');
+      const abertos = chams.filter(c=>c.status==='aberto');
+      if(abertos.length) itens.push({ tipo:'chamado', label:`${abertos.length} chamado(s) sem resposta`, urgencia:1 });
+    } catch(e) {}
+    // Prazo vencido
+    const prazoVenc = prazos.filter(p => {
+      if(p.fid!==f.id||!p.dataISO) return false;
+      return new Date(p.dataISO+'T00:00') < hoje2;
+    });
+    if(prazoVenc.length) itens.push({ tipo:'atraso', label:`Prazo vencido: ${prazoVenc[0].titulo}`, urgencia:1 });
+    // Reunião hoje/amanhã
+    const reuProx = reunioes.filter(r => {
+      if(r.fid!==f.id) return false;
+      const [d,m,y] = (r.data||'').split('/').map(Number);
+      if(!d) return false;
+      const dr = new Date(y,m-1,d);
+      return dr <= amanha;
+    });
+    if(reuProx.length) itens.push({ tipo:'reuniao', label:`Reunião: ${reuProx[0].data} às ${reuProx[0].hora}`, urgencia:2 });
+    // Prazo próximo
+    const prazoProx = prazos.filter(p => {
+      if(p.fid!==f.id||!p.dataISO||prazoVenc.find(pv=>pv.id===p.id)) return false;
+      const dp = new Date(p.dataISO+'T00:00');
+      return dp > hoje2 && dp <= em5dias;
+    });
+    if(prazoProx.length) itens.push({ tipo:'prazo', label:`Prazo em breve: ${prazoProx[0].titulo}`, urgencia:2 });
+
+    if(itens.some(i=>i.urgencia===1))      precisamAgora.push({f,itens});
+    else if(itens.length>0)                 atencao.push({f,itens});
+    else if(f.processoIniciado)             emDia.push({f,itens});
+  });
+
+  const icones = {validacao:'✅',chamado:'💬',atraso:'🔴',reuniao:'📅',prazo:'⏱'};
+
+  function cardDb(f, itens, tipo) {
+    const borda = tipo==='urgente'?'#DC2626':tipo==='atencao'?'#D97706':'#16A34A';
+    const et    = ETAPAS.find(e=>e.id===Number(f.etapaAtual));
+    return `<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:8px;
+        border:1px solid var(--border);border-left:4px solid ${borda};
+        display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:800">${f.nome}</div>
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--bg);color:var(--text-dim)">${f.ticket}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Etapa ${f.etapaAtual}${et?' — '+et.nome:''}</div>
+        ${itens.map(i=>`<div style="font-size:12px;margin-bottom:3px">${icones[i.tipo]||'·'} ${i.label}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button onclick="abrirFicha('${f.id}')"
+          style="padding:7px 14px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
+          Abrir ficha
+        </button>
+        ${itens.some(i=>i.tipo==='chamado')?`<button onclick="ir('suporte',null)"
+          style="padding:7px 14px;border-radius:8px;background:#EFF6FF;color:var(--primary);border:1px solid #BFDBFE;cursor:pointer;font-size:12px;font-weight:700">
+          Suporte
+        </button>`:''}
+        ${itens.some(i=>i.tipo==='validacao')?`<button onclick="abrirEtapaProcesso('${f.id}',${f.etapaAtual})"
+          style="padding:7px 14px;border-radius:8px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:12px;font-weight:700">
+          Validar
+        </button>`:''}
+      </div>
+    </div>`;
+  }
+
+  $('content').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:20px;font-weight:800">Bom dia, ${SESSAO?.nome?.split(' ')[0]} 👋</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${hoje()} · ${dados.length} franqueado(s) em implantação</div>
+      </div>
+      <button onclick="renderDashboard()" class="btn sm">↻ Atualizar</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px">
+      ${[
+        {label:'Precisam de você',valor:precisamAgora.length,cor:'#DC2626',bg:'#FEE2E2',icon:'🔴'},
+        {label:'Atenção',valor:atencao.length,cor:'#D97706',bg:'#FEF3C7',icon:'🟡'},
+        {label:'Em dia',valor:emDia.length,cor:'#16A34A',bg:'#F0FDF4',icon:'🟢'},
+      ].map(s=>`<div style="background:${s.bg};border-radius:12px;padding:14px 16px">
+        <div style="font-size:22px;font-weight:800;color:${s.cor}">${s.icon} ${s.valor}</div>
+        <div style="font-size:11px;color:${s.cor};margin-top:2px;font-weight:600">${s.label}</div>
+      </div>`).join('')}
+    </div>
+    ${precisamAgora.length>0?`
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#DC2626;margin-bottom:10px">
+        🔴 Precisam de você agora (${precisamAgora.length})
+      </div>
+      ${precisamAgora.map(({f,itens})=>cardDb(f,itens,'urgente')).join('')}
+    </div>`:''}
+    ${atencao.length>0?`
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#D97706;margin-bottom:10px">
+        🟡 Atenção (${atencao.length})
+      </div>
+      ${atencao.map(({f,itens})=>cardDb(f,itens,'atencao')).join('')}
+    </div>`:''}
+    ${emDia.length>0?`
+    <details>
+      <summary style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#16A34A;cursor:pointer;user-select:none;margin-bottom:10px">
+        🟢 Em dia (${emDia.length}) — clique para ver
+      </summary>
+      <div style="margin-top:10px">${emDia.map(({f})=>cardDb(f,[],'emdia')).join('')}</div>
+    </details>`:''}
+    ${dados.length===0?`<div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <div style="font-size:48px;margin-bottom:16px">🏗</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">Nenhum franqueado em implantação</div>
+      <button class="btn primary" onclick="abrirCadastroFranqueado()">+ Novo franqueado</button>
+    </div>`:''}`;
+}
+
+/* ══ ALERTAS ══ */
+function renderAlertas() {
+  const dados   = getDados();
+  const hoje2   = new Date(); hoje2.setHours(0,0,0,0);
+  const agora2  = Date.now();
+  const alertas = [];
+
+  getPrazos().filter(p=>!p.concluido).forEach(p=>{
+    if(!p.dataISO) return;
+    const dias = Math.floor((new Date(p.dataISO+'T00:00')-hoje2)/(864e5));
+    if(dias<=0) alertas.push({
+      tipo:'prazo_vencido', cor:'var(--red)', icone:'📅',
+      titulo:`Prazo vencido: ${p.titulo}`,
+      sub: `Venceu ${Math.abs(dias)} dia(s) atrás`,
+      btnLabel:'Ver agenda', acao:()=>ir('agenda'),
+    });
+    else if(dias<=3) alertas.push({
+      tipo:'prazo_urgente', cor:'var(--amber)', icone:'⏱',
+      titulo:`Prazo em ${dias} dia(s): ${p.titulo}`,
+      sub:'Vence em breve', btnLabel:'Ver agenda', acao:()=>ir('agenda'),
+    });
+  });
+
+  dados.filter(f=>f.processoIniciado&&f.status!=='desistencia').forEach(f=>{
+    const evs   = getEventosEtapa(f.id,f.etapaAtual)||[];
+    const ultimo = evs.filter(e=>e.timestamp).sort((a,b)=>b.timestamp-a.timestamp)[0];
+    if(ultimo&&Math.floor((agora2-ultimo.timestamp)/(864e5))>=7) alertas.push({
+      tipo:'parado', cor:'var(--red)', icone:'😴',
+      titulo:`${f.ticket} ${f.nome.split(' ')[0]} parado há ${Math.floor((agora2-ultimo.timestamp)/(864e5))} dias`,
+      sub:`Etapa ${f.etapaAtual}`, btnLabel:'Ver ficha',
+      acao:()=>abrirFicha(f.id),
+    });
+  });
+
+  $('content').innerHTML =
+    `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:12px;color:var(--text-dim)">
+        ${alertas.length?alertas.length+' alerta'+(alertas.length>1?'s ativos':' ativo'):'Tudo em ordem'}
+      </div>
+      <button class="btn sm" onclick="renderAlertas()">↻ Atualizar</button>
+    </div>` +
+    (alertas.length===0
+      ? `<div class="card"><div style="text-align:center;padding:48px">
+          <div style="font-size:32px;margin-bottom:12px">✅</div>
+          <div style="font-size:14px;font-weight:700">Tudo em ordem</div>
+        </div></div>`
+      : alertas.map(a=>`
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;
+          border-radius:10px;margin-bottom:8px;cursor:pointer;
+          border:1px solid ${a.cor==='var(--red)'?'var(--red-border)':'var(--amber-border)'};
+          background:${a.cor==='var(--red)'?'var(--red-soft)':'var(--amber-soft)'}">
+          <div style="font-size:20px">${a.icone}</div>
+          <div style="flex:1">
+            <div style="font-size:12.5px;font-weight:700">${a.titulo}</div>
+            <div style="font-size:11px;color:var(--text-dim)">${a.sub}</div>
+          </div>
+          <button class="btn sm" onclick="(${a.acao.toString()})()">${a.btnLabel} →</button>
+        </div>`).join('')
+    );
+}
+
+
+/* ══ ALIASES DE COMPATIBILIDADE ══ */
+function abrirCadastroFranqueado() {
+  // Abre o drawer de cadastro de novo franqueado
+  ir('franqueados');
+  setTimeout(() => {
+    const btn = document.getElementById('btn-novo-frq');
+    if(btn) btn.click();
+    else {
+      // Fallback: abrir modal direto
+      abrirModalNovoFranqueado();
+    }
+  }, 200);
+}
+
+function abrirModalNovoFranqueado() {
+  abrirModal('Novo Franqueado',
+    `<div style="font-size:13px;color:var(--text-dim);padding:20px;text-align:center">
+      Acesse a aba <strong>Em implantação</strong> e clique em <strong>+ Novo franqueado</strong>.
+    </div>`, '');
+}
+
+function encerrarFranquia(fid) {
+  const f = getFranqueado(fid);
+  if(!confirm('Encerrar a franquia de ' + (f?.nome||fid) + '? Esta ação não pode ser desfeita.')) return;
+  atualizarFranqueado(fid, { status: 'desistencia', dataEncerramento: hoje() });
+  toast('Franquia encerrada.', 'rd');
+  renderFranqueados();
+}
+
+function abrirTrocaEmailPortal(fid) {
+  const f = getFranqueado(fid);
+  abrirModal('Trocar e-mail do portal',
+    `<div class="field">
+      <label>Novo e-mail</label>
+      <input class="inp" type="email" id="novo-email-portal" value="${f?.email||''}">
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);margin-top:8px">
+      O franqueado precisará usar este e-mail para acessar o portal.
+    </div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarTrocaEmailPortal('${fid}')">Salvar</button>`
+  );
+}
+
+function confirmarTrocaEmailPortal(fid) {
+  const novoEmail = document.getElementById('novo-email-portal')?.value?.trim().toLowerCase();
+  if(!novoEmail || !novoEmail.includes('@')) { toast('E-mail inválido.', 'rd'); return; }
+  atualizarFranqueado(fid, { email: novoEmail });
+  fecharModal();
+  toast('E-mail atualizado. Franqueado deve usar o novo e-mail no próximo acesso.', 'gn');
+}
+
+
 const RENDERS = {
   candidatos:      renderCandidatos,
   agenda:          renderAgenda,
@@ -1670,8 +1916,9 @@ const RENDERS = {
   equipe:          renderEquipe,
   relatorios:      renderRelatorios,
   contatos:        renderContatosExternos,
+  dashboard:       renderDashboard,
   suporte:         () => { renderSuportePainel(); },
-  dev:             renderDevTools,
+  dev:             () => { $('content').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-dim)">Dev Tools (apenas em desenvolvimento local)</div>'; },
 }
 // Armazena o fid do processo em visualização
 let _processoAtual = null;;
