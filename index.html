@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · diagnostico-clique-v2','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · loop-trace-v3','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1946,7 +1946,19 @@ function irFicha(fid) {
 }
 
 function ir(aba, btn, fid) {
-  console.log('%c[IR] clique aba=' + aba + ' | RENDERS tem? ' + (!!RENDERS[aba]) + ' | content existe? ' + (!!document.getElementById('content')), 'background:#1D9E75;color:#fff;padding:2px 8px;border-radius:3px');
+  // ── DIAGNOSTICO + GUARDA DE LOOP (temporario) ──
+  const _agora = Date.now();
+  if(!window.__irCount) window.__irCount = {};
+  if(_agora - (window.__irLast||0) > 1000) window.__irCount = {};
+  window.__irLast = _agora;
+  window.__irCount[aba] = (window.__irCount[aba]||0) + 1;
+  if(window.__irCount[aba] === 1)
+    console.log('%c[IR] aba=' + aba, 'background:#1D9E75;color:#fff;padding:2px 8px;border-radius:3px');
+  if(window.__irCount[aba] === 6) {
+    console.error('%c[IR] LOOP detectado em "' + aba + '" — pilha de quem chamou abaixo:', 'background:#c0392b;color:#fff;padding:2px 8px');
+    console.trace('[IR] ORIGEM DO LOOP');
+  }
+  if(window.__irCount[aba] > 8) { console.warn('[IR] loop barrado para "' + aba + '"'); return; }
   _abaAtual = aba;
   document.querySelectorAll('.sb-item').forEach(b=>b.classList.remove('ativo'));
   if(btn) btn.classList.add('ativo');
