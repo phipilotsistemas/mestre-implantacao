@@ -1925,9 +1925,25 @@ async function getChamados() {
   }
 }
 
+function sanitizarParaFirebase(obj) {
+  // Remove undefined e converte para null-safe recursivamente
+  if(Array.isArray(obj)) return obj.map(sanitizarParaFirebase).filter(x => x !== undefined);
+  if(obj && typeof obj === 'object') {
+    const out = {};
+    Object.keys(obj).forEach(k => {
+      const v = obj[k];
+      if(v === undefined) return; // omitir undefined
+      out[k] = sanitizarParaFirebase(v);
+    });
+    return out;
+  }
+  return obj ?? null;
+}
+
 function salvarChamados(lista) {
+  const listaLimpa = sanitizarParaFirebase(lista);
   // Salvar no Firebase (fonte da verdade)
-  db.ref('chamados/' + PORTAL.fid).set(lista)
+  db.ref('chamados/' + PORTAL.fid).set(listaLimpa)
     .catch(e => console.warn('salvarChamados Firebase:', e.message));
   // Cache local
   try { localStorage.setItem('suporte_' + PORTAL.fid, JSON.stringify(lista)); } catch(e) {}
@@ -2114,14 +2130,20 @@ async function confirmarReabertura(chamadoId) {
     if(!chamado) return;
 
     // Preservar histórico de respostas anteriores
+    // Sanitizar: Firebase rejeita campos undefined
     if(!chamado.historico) chamado.historico = [];
-    chamado.historico.push({
-      respostaGestor:  chamado.respostaGestor,
-      dataResposta:    chamado.dataResposta,
-      gestorNome:      chamado.gestorNome,
+    const entradaHistorico = {
+      respostaGestor:    chamado.respostaGestor    || null,
+      dataResposta:      chamado.dataResposta       || null,
+      gestorNome:        chamado.gestorNome         || null,
       retornoFranqueado: motivo,
-      dataRetorno:     hoje() + ' às ' + agora(),
+      dataRetorno:       hoje() + ' às ' + agora(),
+    };
+    // Remover chaves com null para não poluir o Firebase
+    Object.keys(entradaHistorico).forEach(k => {
+      if(entradaHistorico[k] === null) delete entradaHistorico[k];
     });
+    chamado.historico.push(entradaHistorico);
 
     // Reabrir
     chamado.status          = 'aberto';
