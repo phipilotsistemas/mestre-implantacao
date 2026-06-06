@@ -2748,6 +2748,8 @@ function processarNotifGestor(notif) {
   if(notif.tipo === 'etapa_iniciada') {
     // Atualizar dados locais
     PORTAL.etapaAtual = notif.etapa;
+    // Re-renderizar lista de etapas para desbloquear a etapa atual
+    if(typeof renderEtapas === 'function') try { renderEtapas(); } catch(e) {}
     // Mostrar banner de nova etapa
     mostrarBannerEtapaIniciada(notif);
     // Atualizar badge
