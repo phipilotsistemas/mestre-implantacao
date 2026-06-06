@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · agenda-disp-v19','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · agenda-horarios-v20','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -11022,6 +11022,13 @@ function salvarConfiguracaoDisponibilidade() {
       dias[val] = { ativo: false, horarios: [] };
     }
   });
+
+  // Validar: ao menos um dia ativo com horários preenchidos
+  const diasValidos = Object.values(dias).filter(d => d.ativo && d.horarios.length > 0);
+  if(diasValidos.length === 0) {
+    toast('Preencha pelo menos um horário nos dias marcados como disponíveis. Ex: 09:00, 14:00', 'er');
+    return;
+  }
 
   const disp = { link, duracao, dias, atualizadoEm: hoje() + ' às ' + agora() };
   salvarDisponibilidade(disp);
