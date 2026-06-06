@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · motivo-calendario-v27','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · motivo-fix-v29','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -10476,7 +10476,7 @@ function renderCalendario() {
       reusD.slice(0,2).map(r => {
         const dados2 = getDados();
         const f2 = dados2.find(x=>x.id===r.fid);
-        const assunto = r.motivo || r.descricao || 'Reunião';
+        const assunto = r.motivo || 'Reunião'; // mostrar só o motivo (dropdown), não a descrição
         return '<div class="cal-ev cal-ev-reuniao" onclick="event.stopPropagation();clicarDia(this.closest(\'.cal-day\'))"' +
           ' title="'+r.hora+' · '+(f2?.nome?.split(' ').slice(0,2).join(' ')||'')+' · '+assunto+'">' +
           '📞 '+r.hora+' — '+assunto+'</div>';
@@ -12279,7 +12279,7 @@ function abrirModalDia(key) {
         ${reunioes.map(r => {
           const f = dados.find(x=>x.id===r.fid);
           return `<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px;margin-bottom:6px">
-            <div style="font-size:12px;font-weight:700;color:#1E40AF">${r.hora} · ${f?.nome?.split(' ').slice(0,2).join(' ')||r.fid}</div>
+            <div style="font-size:12px;font-weight:700;color:#1E40AF">${r.hora} · ${r.motivo||'Reunião'} <span style="font-weight:400;opacity:.7;font-size:10px">· ${f?.nome?.split(' ').slice(0,2).join(' ')||''}</span></div>
             <div style="font-size:11px;color:#3B82F6;margin-top:2px">⏱ ${r.duracao||60}min · ${r.motivo||'—'}</div>
             <div style="margin-top:6px;display:flex;gap:6px">
               ${r.link?`<a href="${r.link}" target="_blank" style="font-size:10px;padding:3px 8px;border-radius:6px;background:#1E40AF;color:#fff;text-decoration:none">Entrar</a>`:''}
