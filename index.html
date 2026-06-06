@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · etapa-prazo-v10','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · alertas-chamados-v12','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1809,6 +1809,7 @@ function renderDashboard() {
 
 /* ══ ALERTAS ══ */
 function renderAlertas() {
+  // ── 1. Alertas síncronos (prazos + parados) ──
   const dados   = getDados();
   const hoje2   = new Date(); hoje2.setHours(0,0,0,0);
   const agora2  = Date.now();
@@ -1816,56 +1817,65 @@ function renderAlertas() {
 
   getPrazos().filter(p=>!p.concluido).forEach(p=>{
     if(!p.dataISO) return;
-    const dias = Math.floor((new Date(p.dataISO+'T00:00')-hoje2)/(864e5));
-    if(dias<=0) alertas.push({
-      tipo:'prazo_vencido', cor:'var(--red)', icone:'📅',
-      titulo:`Prazo vencido: ${p.titulo}`,
-      sub: `Venceu ${Math.abs(dias)} dia(s) atrás`,
-      btnLabel:'Ver agenda', acao:()=>ir('agenda'),
-    });
-    else if(dias<=3) alertas.push({
-      tipo:'prazo_urgente', cor:'var(--amber)', icone:'⏱',
-      titulo:`Prazo em ${dias} dia(s): ${p.titulo}`,
-      sub:'Vence em breve', btnLabel:'Ver agenda', acao:()=>ir('agenda'),
-    });
+    const dias = Math.floor((new Date(p.dataISO+"T00:00")-hoje2)/(864e5));
+    if(dias<=0) alertas.push({tipo:"prazo_vencido",cor:"var(--red)",icone:"📅",
+      titulo:"Prazo vencido: "+p.titulo, sub:"Venceu "+Math.abs(dias)+" dia(s) atrás",
+      btnLabel:"Ver agenda",acao:()=>ir("agenda")});
+    else if(dias<=3) alertas.push({tipo:"prazo_urgente",cor:"var(--amber)",icone:"⏱",
+      titulo:"Prazo em "+dias+" dia(s): "+p.titulo, sub:"Vence em breve",
+      btnLabel:"Ver agenda",acao:()=>ir("agenda")});
   });
 
-  dados.filter(f=>f.processoIniciado&&f.status!=='desistencia').forEach(f=>{
+  dados.filter(f=>f.processoIniciado&&f.status!=="desistencia").forEach(f=>{
     const evs   = getEventosEtapa(f.id,f.etapaAtual)||[];
     const ultimo = evs.filter(e=>e.timestamp).sort((a,b)=>b.timestamp-a.timestamp)[0];
     if(ultimo&&Math.floor((agora2-ultimo.timestamp)/(864e5))>=7) alertas.push({
-      tipo:'parado', cor:'var(--red)', icone:'😴',
-      titulo:`${f.ticket} ${f.nome.split(' ')[0]} parado há ${Math.floor((agora2-ultimo.timestamp)/(864e5))} dias`,
-      sub:`Etapa ${f.etapaAtual}`, btnLabel:'Ver ficha',
-      acao:()=>abrirFicha(f.id),
-    });
+      tipo:"parado",cor:"var(--red)",icone:"😴",
+      titulo:f.ticket+" "+f.nome.split(" ")[0]+" parado há "+Math.floor((agora2-ultimo.timestamp)/(864e5))+" dias",
+      sub:"Etapa "+f.etapaAtual, btnLabel:"Ver ficha", acao:()=>abrirFicha(f.id)});
   });
 
-  $('content').innerHTML =
-    `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div style="font-size:12px;color:var(--text-dim)">
-        ${alertas.length?alertas.length+' alerta'+(alertas.length>1?'s ativos':' ativo'):'Tudo em ordem'}
-      </div>
-      <button class="btn sm" onclick="renderAlertas()">↻ Atualizar</button>
-    </div>` +
-    (alertas.length===0
-      ? `<div class="card"><div style="text-align:center;padding:48px">
-          <div style="font-size:32px;margin-bottom:12px">✅</div>
-          <div style="font-size:14px;font-weight:700">Tudo em ordem</div>
-        </div></div>`
-      : alertas.map(a=>`
-        <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;
-          border-radius:10px;margin-bottom:8px;cursor:pointer;
-          border:1px solid ${a.cor==='var(--red)'?'var(--red-border)':'var(--amber-border)'};
-          background:${a.cor==='var(--red)'?'var(--red-soft)':'var(--amber-soft)'}">
-          <div style="font-size:20px">${a.icone}</div>
-          <div style="flex:1">
-            <div style="font-size:12.5px;font-weight:700">${a.titulo}</div>
-            <div style="font-size:11px;color:var(--text-dim)">${a.sub}</div>
-          </div>
-          <button class="btn sm" onclick="(${a.acao.toString()})()">${a.btnLabel} →</button>
-        </div>`).join('')
-    );
+  function montarHTML(lista) {
+    return "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'>" +
+        "<div style='font-size:12px;color:var(--text-dim)'>" +
+          (lista.length?lista.length+" alerta"+(lista.length>1?"s ativos":" ativo"):"Tudo em ordem") +
+        "</div><button class='btn sm' onclick='renderAlertas()'>↻ Atualizar</button></div>" +
+      (lista.length===0
+        ? "<div class='card'><div style='text-align:center;padding:48px'>" +
+            "<div style='font-size:32px;margin-bottom:12px'>✅</div>" +
+            "<div style='font-size:14px;font-weight:700'>Tudo em ordem</div>" +
+          "</div></div>"
+        : lista.map(a =>
+            "<div style='display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:10px;margin-bottom:8px;" +
+            "border:1px solid "+(a.cor==="var(--red)"?"var(--red-border)":"var(--amber-border)")+";"+
+            "background:"+(a.cor==="var(--red)"?"var(--red-soft)":"var(--amber-soft)")+"'>" +
+              "<div style='font-size:20px'>"+a.icone+"</div>" +
+              "<div style='flex:1'><div style='font-size:12.5px;font-weight:700'>"+a.titulo+"</div>" +
+              "<div style='font-size:11px;color:var(--text-dim)'>"+a.sub+"</div></div>" +
+              "<button class='btn sm' onclick='("+a.acao.toString()+")()'>"+a.btnLabel+" →</button>" +
+            "</div>").join(""));
+  }
+
+  // Renderiza imediatamente com dados síncronos
+  $("content").innerHTML = montarHTML(alertas);
+
+  // ── 2. Carrega chamados do Firebase e re-renderiza ──
+  db.ref("chamados").once("value").then(function(snap) {
+    const raw = snap.val();
+    if(!raw) return;
+    Object.entries(raw).forEach(function(entry) {
+      const fid = entry[0]; const fc = entry[1];
+      const lista = Array.isArray(fc)?fc.filter(Boolean):Object.values(fc).filter(Boolean);
+      const f = dados.find(x=>x.id===fid);
+      lista.filter(c=>c.status==="aberto"||c.status==="em_andamento").forEach(function(c) {
+        alertas.push({tipo:"chamado",cor:"var(--amber)",icone:"💬",
+          titulo:(c.id||"Chamado")+": "+(c.tipo||c.assunto||"Suporte"),
+          sub:(f?f.nome.split(" ")[0]+" · ":"")+"Aberto em "+(c.criadoEm||"—"),
+          btnLabel:"Ver chamados",acao:()=>ir("suporte")});
+      });
+    });
+    if($("content")) $("content").innerHTML = montarHTML(alertas);
+  }).catch(function(){});
 }
 
 
@@ -4028,7 +4038,7 @@ async function renderSuportePainel() {
   const concluidos= todosChamados.filter(c => c.status === 'concluido');
   const cancelados= todosChamados.filter(c => c.status === 'cancelado');
 
-  const badge = $('badge-suporte') || $('badge-alertas');
+  const badge = $('badge-chamados-nav') || $('badge-alertas');
   if(badge) {
     const n = abertos.length + andamento.length;
     badge.textContent = n || '0';
