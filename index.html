@@ -13101,9 +13101,8 @@ window.addEventListener('DOMContentLoaded', ()=>{
       : Object.values(raw).filter(Boolean);
     if(dados.length > 0) {
       localStorage.setItem('mo_franqueados', JSON.stringify(dados));
-      // Re-renderizar se estiver na tela de franqueados
-      const esteiraVisivel = document.querySelector('.esteira-tab');
-      if(esteiraVisivel) {
+      // Re-renderizar só se estiver na aba de franqueados
+      if(typeof _abaAtual !== 'undefined' && _abaAtual === 'franqueados') {
         renderFranqueados();
         atualizarBadges();
       }
