@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · assinatura-fix-v13','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · auto-etapa-v14','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1667,9 +1667,36 @@ function iniciarApp() {
       Object.values(raw).forEach(n => {
         if(!n.lido) {
           pendentes++;
-          // Se fechou o ciclo, mostrar resumo da etapa
+          // Se fechou o ciclo, mostrar resumo e auto-iniciar próxima etapa
           if(n.tipo === 'etapa_concluida_ciclo' && !n._visto) {
             mostrarResumoCicloEtapa(n);
+            // Iniciar próxima etapa automaticamente
+            const proxId = Number(n.etapa) + 1;
+            const proxEt = ETAPAS.find(e => e.id === proxId);
+            if(proxEt && proxId <= ETAPAS.length) {
+              const fid = n.fid;
+              const ts  = Date.now();
+              try {
+                db.ref('notif_franqueado/' + fid).set({
+                  tipo:       'etapa_iniciada',
+                  etapa:      proxId,
+                  nomeEtapa:  proxEt.nome,
+                  instrucoes: proxEt.instrucoes || proxEt.desc || '',
+                  docs:       proxEt.docs || [],
+                  tarefas:    proxEt.tarefas || [],
+                  prazo:      null,
+                  gestor:     SESSAO?.nome || 'Sistema',
+                  data:       hoje(), hora: agora(), timestamp: ts,
+                  lido:       false,
+                });
+                salvarEventoEtapa(fid, proxId, {
+                  tipo:  'etapa_iniciada',
+                  texto: 'Etapa ' + proxId + ' iniciada automaticamente após conclusão da Etapa ' + n.etapa + '.',
+                  autor: 'Sistema',
+                  data:  hoje(), hora: agora(), timestamp: ts,
+                });
+              } catch(e) { console.warn('Auto-início etapa:', e.message); }
+            }
           }
         }
       });
@@ -8165,16 +8192,16 @@ function abrirEtapaProcesso(fid, etapaId) {
   <!-- Validação pendente do franqueado -->
   <div id="div-val-pendente-${etapaId}"></div>
 
-  <!-- Botão concluir etapa — destaque quando é a etapa atual -->
+  <!-- Status da etapa atual + reenvio opcional de instruções -->
   ${atual && PERM.assinar ? `
   <div style="background:var(--primary);border-radius:12px;padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div>
       <div style="font-size:13px;font-weight:800;color:#fff">Etapa ${etapaId} em andamento</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">Quando todos os requisitos estiverem cumpridos, assine para avançar</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">Instruções enviadas automaticamente ao franqueado. Use o botão ao lado se precisar reenviar.</div>
     </div>
     <button onclick="abrirEtapa('${fid}',${etapaId})"
-      style="padding:10px 20px;border-radius:10px;background:#fff;color:var(--primary);border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
-      ✍ Iniciar etapa
+      style="padding:8px 16px;border-radius:10px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap">
+      📨 Reenviar instruções
     </button>
   </div>` : ''}
 
