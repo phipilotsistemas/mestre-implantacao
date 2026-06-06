@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · cadastro-direto-v5','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · cadastro-completo-v6','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1872,69 +1872,144 @@ function renderAlertas() {
 /* ══ ALIASES DE COMPATIBILIDADE ══ */
 function abrirCadastroFranqueado() {
   const proxNum = String(getDados().length + 1).padStart(3, '0');
-  abrirModal('Novo Franqueado',
+  const gestores = Object.entries(EQUIPE).filter(function(e){ return e[1].tipo==='gestor'; })
+    .map(function(e){ return '<option value="'+e[0]+'">'+e[1].nome+'</option>'; }).join('');
+
+  abrirModal('Cadastrar novo franqueado',
+    '<div style="max-height:70vh;overflow-y:auto;padding-right:6px">' +
+
+    // ── SEÇÃO 1: PESSOA FÍSICA ──
+    '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--primary);margin:0 0 10px;padding:8px 0 4px;border-bottom:2px solid var(--primary-soft)">Pessoa física</div>' +
     '<div class="grid-2">' +
-      '<div class="field"><label>Nome completo *</label>' +
-        '<input class="inp" id="nf-nome" placeholder="Nome do franqueado"></div>' +
-      '<div class="field"><label>Ticket / Matrícula</label>' +
-        '<input class="inp" id="nf-ticket" placeholder="Ex: MO-017" value="MO-' + proxNum + '"></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>Nome completo *</label>' +
+        '<input class="inp" id="nf-nome" placeholder="Nome completo do franqueado"></div>' +
       '<div class="field"><label>CPF</label>' +
         '<input class="inp" id="nf-cpf" placeholder="000.000.000-00" maxlength="14"></div>' +
-      '<div class="field"><label>Telefone</label>' +
+      '<div class="field"><label>Data de nascimento</label>' +
+        '<input class="inp" id="nf-nascimento" type="date"></div>' +
+      '<div class="field"><label>Estado civil</label>' +
+        '<select class="inp" id="nf-estado-civil">' +
+          '<option value="">— Selecione —</option>' +
+          '<option>Solteiro(a)</option><option>Casado(a)</option>' +
+          '<option>Divorciado(a)</option><option>Viúvo(a)</option>' +
+          '<option>União estável</option>' +
+        '</select></div>' +
+      '<div class="field"><label>Telefone *</label>' +
         '<input class="inp" id="nf-tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
-      '<div class="field"><label>E-mail</label>' +
-        '<input class="inp" id="nf-email" placeholder="email@email.com"></div>' +
-      '<div class="field"><label>Cidade / UF</label>' +
-        '<input class="inp" id="nf-cidade" placeholder="Ex: Ponta Grossa / PR"></div>' +
-      '<div class="field"><label>Modelo</label>' +
+      '<div class="field"><label>E-mail *</label>' +
+        '<input class="inp" id="nf-email" type="email" placeholder="email@email.com"></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>Endereço</label>' +
+        '<input class="inp" id="nf-endereco" placeholder="Rua, número, complemento"></div>' +
+      '<div class="field"><label>Bairro</label>' +
+        '<input class="inp" id="nf-bairro" placeholder="Bairro"></div>' +
+      '<div class="field"><label>CEP</label>' +
+        '<input class="inp" id="nf-cep" placeholder="00000-000" maxlength="9"></div>' +
+      '<div class="field"><label>Cidade</label>' +
+        '<input class="inp" id="nf-cidade" placeholder="Cidade"></div>' +
+      '<div class="field"><label>UF</label>' +
+        '<input class="inp" id="nf-uf" placeholder="UF" maxlength="2" style="text-transform:uppercase"></div>' +
+    '</div>' +
+
+    // ── SEÇÃO 2: PERFIL PROFISSIONAL ──
+    '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--primary);margin:18px 0 10px;padding:8px 0 4px;border-bottom:2px solid var(--primary-soft)">Perfil profissional</div>' +
+    '<div class="grid-2">' +
+      '<div class="field"><label>Profissão / ocupação atual</label>' +
+        '<input class="inp" id="nf-profissao" placeholder="Ex: Empresário, Engenheiro, Administrador"></div>' +
+      '<div class="field"><label>Renda mensal</label>' +
+        '<select class="inp" id="nf-renda">' +
+          '<option value="">— Selecione —</option>' +
+          '<option>Até R$ 5.000</option>' +
+          '<option>R$ 5.000 a R$ 10.000</option>' +
+          '<option>R$ 10.000 a R$ 20.000</option>' +
+          '<option>R$ 20.000 a R$ 50.000</option>' +
+          '<option>Acima de R$ 50.000</option>' +
+        '</select></div>' +
+    '</div>' +
+
+    // ── SEÇÃO 3: COMO FRANQUEADO ──
+    '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--primary);margin:18px 0 10px;padding:8px 0 4px;border-bottom:2px solid var(--primary-soft)">Dados da franquia</div>' +
+    '<div class="grid-2">' +
+      '<div class="field"><label>Como chegou até a rede?</label>' +
+        '<select class="inp" id="nf-canal">' +
+          '<option>A300 Franchising</option>' +
+          '<option>Indicação de franqueado</option>' +
+          '<option>Indicação direta</option>' +
+          '<option>Evento / feira</option>' +
+          '<option>Marketing digital</option>' +
+          '<option>Outro</option>' +
+        '</select></div>' +
+      '<div class="field"><label>Consultor A300 responsável</label>' +
+        '<input class="inp" id="nf-consultor" placeholder="Nome do consultor"></div>' +
+      '<div class="field"><label>Telefone do consultor</label>' +
+        '<input class="inp" id="nf-consultor-tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
+      '<div class="field"><label>E-mail do consultor</label>' +
+        '<input class="inp" id="nf-consultor-email" placeholder="consultor@a300.com.br"></div>' +
+      '<div class="field"><label>Cidade pretendida para a franquia *</label>' +
+        '<input class="inp" id="nf-cidade-franquia" placeholder="Ex: Ponta Grossa / PR"></div>' +
+      '<div class="field"><label>Modelo de interesse</label>' +
         '<select class="inp" id="nf-modelo">' +
-          '<option>Premium</option>' +
-          '<option>Smart</option>' +
+          '<option>Premium</option><option>Smart</option><option>A definir</option>' +
         '</select></div>' +
+      '<div class="field"><label>Meta de inauguração</label>' +
+        '<input class="inp" id="nf-meta" type="date"></div>' +
       '<div class="field"><label>Gestor responsável</label>' +
-        '<select class="inp" id="nf-gestor">' +
-          Object.entries(EQUIPE).filter(function(e){ return e[1].tipo==='gestor'; }).map(function(e){ return '<option value="'+e[0]+'">'+e[1].nome+'</option>'; }).join('') +
-        '</select></div>' +
-      '<div class="field" style="grid-column:1/-1"><label>Origem / Empresa captadora</label>' +
-        '<input class="inp" id="nf-origem" placeholder="Ex: A300 Franchising" value="A300 Franchising"></div>' +
-    '</div>',
+        '<select class="inp" id="nf-gestor">' + gestores + '</select></div>' +
+      '<div class="field"><label>Ticket / Matrícula</label>' +
+        '<input class="inp" id="nf-ticket" value="MO-' + proxNum + '"></div>' +
+    '</div>' +
+
+    '</div>', // fecha scroll container
     '<button class="btn" onclick="fecharModal()">Cancelar</button> ' +
-    '<button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar franqueado</button>'
+    '<button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar e liberar portal</button>'
   );
-  setTimeout(function(){ var m=$('modal'); if(m) m.style.maxWidth='580px'; }, 50);
+  setTimeout(function(){ var m=$('modal'); if(m) m.style.maxWidth='640px'; }, 50);
 }
 
-function confirmarCadastroFranqueado() {
+async function confirmarCadastroFranqueado() {
   var nome = ($('nf-nome')?.value||'').trim();
+  var email = ($('nf-email')?.value||'').trim().toLowerCase();
   if(!nome) { toast('Preencha o nome do franqueado.','rd'); return; }
-  var ticket  = ($('nf-ticket')?.value||'MO-000').trim();
-  var cpf     = ($('nf-cpf')?.value||'').trim();
-  var tel     = ($('nf-tel')?.value||'').trim();
-  var email   = ($('nf-email')?.value||'').trim();
-  var cidadeUF = ($('nf-cidade')?.value||'').split('/');
-  var modelo  = ($('nf-modelo')?.value||'Premium');
-  var gestor  = ($('nf-gestor')?.value||'');
-  var origem  = ($('nf-origem')?.value||'').trim();
+  if(!email) { toast('Preencha o e-mail (será o login do portal).','rd'); return; }
 
+  var cidadeFranquia = ($('nf-cidade-franquia')?.value||'').split('/');
+  var ticket  = ($('nf-ticket')?.value||'MO-000').trim();
+
+  // Montar objeto franqueado
   var novo = {
     id:               'frq_' + Date.now(),
     ticket:           ticket,
     nome:             nome,
-    cpf:              cpf,
-    tel:              tel,
+    cpf:              ($('nf-cpf')?.value||'').trim(),
+    nascimento:       ($('nf-nascimento')?.value||''),
+    estadoCivil:      ($('nf-estado-civil')?.value||''),
+    tel:              ($('nf-tel')?.value||'').trim(),
     email:            email,
-    cidade:           (cidadeUF[0]||'').trim(),
-    uf:               (cidadeUF[1]||'').trim(),
-    modelo:           modelo,
-    gestor:           gestor,
+    endereco:         ($('nf-endereco')?.value||'').trim(),
+    bairro:           ($('nf-bairro')?.value||'').trim(),
+    cep:              ($('nf-cep')?.value||'').trim(),
+    cidadeResidencia: ($('nf-cidade')?.value||'').trim(),
+    ufResidencia:     ($('nf-uf')?.value||'').trim().toUpperCase(),
+    profissao:        ($('nf-profissao')?.value||'').trim(),
+    renda:            ($('nf-renda')?.value||''),
+    cidade:           (cidadeFranquia[0]||'').trim(),
+    uf:               (cidadeFranquia[1]||'').trim().toUpperCase(),
+    modelo:           ($('nf-modelo')?.value||'Premium'),
+    gestor:           ($('nf-gestor')?.value||''),
+    metaInauguracao:  ($('nf-meta')?.value||''),
     processoIniciado: false,
     etapaAtual:       1,
-    portalLiberado:   false,
+    portalLiberado:   true,
+    portalLogin:      email,
     dataEntrada:      hoje(),
     dataInicioProcesso: '',
-    origem:           { empresa: origem, responsavel: '', tel: '', email: '' },
+    origem: {
+      canal:          ($('nf-canal')?.value||''),
+      consultor:      ($('nf-consultor')?.value||'').trim(),
+      consultorTel:   ($('nf-consultor-tel')?.value||'').trim(),
+      consultorEmail: ($('nf-consultor-email')?.value||'').trim()
+    },
     historico: [
-      { data: hoje(), texto: 'Franqueado cadastrado diretamente no painel.', autor: SESSAO?.nome || 'Sistema' }
+      { data: hoje(), texto: 'Franqueado cadastrado no painel. Portal liberado com senha padrão.', autor: SESSAO?.nome || 'Sistema' }
     ],
     pastas: {},
     assinaturas: {},
@@ -1942,12 +2017,36 @@ function confirmarCadastroFranqueado() {
     status: 'ativo'
   };
 
+  // ── Criar usuário no Firebase Auth (portal) ──
+  try {
+    var cred = await authSecundario.createUserWithEmailAndPassword(email, '123456');
+    novo.portalUid = cred.user.uid;
+    // Registrar no nó portal_usuarios
+    await db.ref('portal_usuarios/' + cred.user.uid).set({
+      email: email,
+      nome: nome,
+      franqueadoId: novo.id,
+      ticket: ticket,
+      criadoEm: hoje(),
+      senhaAlterada: false
+    });
+    await authSecundario.signOut();
+  } catch(e) {
+    console.warn('Erro ao criar usuário do portal:', e.message);
+    if(e.code === 'auth/email-already-in-use') {
+      toast('Este e-mail já possui conta no portal. O franqueado será cadastrado, mas o acesso existente será mantido.','am');
+    } else {
+      toast('Aviso: não foi possível criar o acesso ao portal agora (' + e.message + '). O franqueado será cadastrado e você pode liberar o portal depois.','am');
+    }
+  }
+
+  // ── Salvar franqueado ──
   var franqueados = getDados();
   franqueados.push(novo);
   salvarDados(franqueados);
 
   fecharModal();
-  toast(nome + ' cadastrado como ' + ticket + '.', 'gn');
+  toast(nome + ' cadastrado como ' + ticket + '. Acesso ao portal: ' + email + ' / senha: 123456','gn');
 
   setTimeout(function(){
     var btnEsteira = document.querySelector('.sb-item[onclick*="franqueados"]');
