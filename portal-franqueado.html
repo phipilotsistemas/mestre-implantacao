@@ -2482,7 +2482,10 @@ function renderMihaReuniao(r, notif) {
     ${notif ? renderNotifGestor(notif) : ''}
     <div style="background:#fff;border-radius:16px;padding:20px;border:1px solid var(--border);border-top:4px solid var(--primary)">
       <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px">Sua reunião agendada</div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px">${r.id}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">${r.id}</div>
+      <div style="font-size:11px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 10px;margin-bottom:14px">
+        ⚠️ Você já tem uma reunião agendada. Para agendar uma nova, cancele a atual primeiro.
+      </div>
 
       <div style="display:grid;gap:10px;margin-bottom:16px">
         <div style="display:flex;gap:10px;align-items:center">
