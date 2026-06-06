@@ -1166,7 +1166,7 @@ auth.onAuthStateChanged(user => {
         const dados = snap.val();
         if(!dados) return; // não é franqueado
         const uid = Object.keys(dados)[0];
-        const fid = dados[uid]?.fid;
+        const fid = dados[uid]?.fid || dados[uid]?.franqueadoId;
         if(!fid) return;
 
         // Buscar dados do franqueado
@@ -1541,8 +1541,9 @@ function fazerLogin() {
       // Buscar mapeamento uid → fid no Firebase DB
       return db.ref('portal_usuarios/' + uid).once('value').then(snap => {
         const dados = snap.val();
-        if(!dados || !dados.fid) throw new Error('Cadastro não encontrado. Fale com sua gestora.');
-        return dados.fid;
+        const fid = dados?.fid || dados?.franqueadoId;
+        if(!fid) throw new Error('Cadastro não encontrado. Fale com sua gestora.');
+        return fid;
       });
     })
     .then(fid => {
