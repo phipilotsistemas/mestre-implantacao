@@ -1670,7 +1670,7 @@ const RENDERS = {
   equipe:          renderEquipe,
   relatorios:      renderRelatorios,
   contatos:        renderContatosExternos,
-  suporte:         renderSuportePainel,
+  suporte:         () => { renderSuportePainel(); },
   dev:             renderDevTools,
 }
 // Armazena o fid do processo em visualização
@@ -3528,1340 +3528,362 @@ function renderEsteiraArquivados() {
    Responde, define prazo, resolve sem reunião
 ══════════════════════════════════════════════════════════════ */
 
-function renderSuportePainel() {
-  $('content').innerHTML = '<div style="text-align:center;padding:60px">⏳ Carregando...</div>';
-  const dados    = getDados();
-  // Coletar todos os chamados de todos os franqueados
-  let todosChamados = [];
-  dados.forEach(f => {
-    try {
-      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-      lista.forEach(c => {
-        todosChamados.push({ ...c, _franqueado: f });
-      });
-    } catch(e) {}
-  });
+/* ══════════════════════════════════════════════════
+   MÓDULO DE SUPORTE — PAINEL DO GESTOR
+   Lê do Firebase, exibe chamados e permite ações
+══════════════════════════════════════════════════ */
 
-  // Ordenar por timestamp desc
+function sanitizarFirebase(obj) {
+  if(Array.isArray(obj)) return obj.map(sanitizarFirebase).filter(x => x !== undefined);
+  if(obj && typeof obj === 'object') {
+    const out = {};
+    Object.keys(obj).forEach(k => {
+      const v = obj[k];
+      if(v === undefined) return;
+      out[k] = sanitizarFirebase(v);
+    });
+    return out;
+  }
+  return obj ?? null;
+}
+
+async function renderSuportePainel() {
+  $('content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">⏳</div><div style="font-size:13px">Carregando chamados...</div></div>';
+
+  const dados = getDados();
+  let todosChamados = [];
+
+  try {
+    const snap = await db.ref('chamados').once('value');
+    const raw  = snap.val();
+    if(raw) {
+      Object.entries(raw).forEach(([fid, lista]) => {
+        const f   = dados.find(x => x.id === fid);
+        const arr = Array.isArray(lista) ? lista : Object.values(lista);
+        arr.filter(Boolean).forEach(ch => {
+          todosChamados.push({ ...ch, _franqueado: f || { id: fid, nome: ch.franqueado, ticket: ch.ticket } });
+        });
+      });
+    }
+  } catch(e) {
+    dados.forEach(f => {
+      try {
+        const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
+        lista.forEach(c => todosChamados.push({ ...c, _franqueado: f }));
+      } catch(e2) {}
+    });
+  }
+
   todosChamados.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
 
   const abertos   = todosChamados.filter(c => c.status === 'aberto');
   const andamento = todosChamados.filter(c => c.status === 'em_andamento');
   const concluidos= todosChamados.filter(c => c.status === 'concluido');
+  const cancelados= todosChamados.filter(c => c.status === 'cancelado');
 
-  // Atualizar badge no nav
-  const badgeNav = $('badge-chamados-nav');
-  const nAbertos = abertos.length + andamento.length;
-  if(badgeNav) {
-    badgeNav.style.display = nAbertos > 0 ? 'inline-block' : 'none';
-    badgeNav.textContent   = nAbertos;
+  const badge = $('badge-suporte') || $('badge-alertas');
+  if(badge) {
+    const n = abertos.length + andamento.length;
+    badge.textContent = n || '0';
+    badge.style.background = n ? 'var(--red)' : 'var(--accent)';
+    badge.style.color = n ? '#fff' : 'var(--primary-dark)';
+    badge.style.display = '';
   }
 
-  $('content').innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <div>
-        <div style="font-size:18px;font-weight:800;color:var(--text)">Central de Suporte</div>
-        <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${todosChamados.length} chamados no total · ${nAbertos} pendentes</div>
-      </div>
-    </div>
+  const corStatus  = {aberto:'var(--red)', em_andamento:'var(--amber)', concluido:'var(--green)', cancelado:'var(--text-muted)'};
+  const lblStatus  = {aberto:'Aberto', em_andamento:'Em andamento', concluido:'Concluído', cancelado:'Cancelado'};
 
-    <!-- Abas de status -->
-    <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0">
-      <button class="esteira-tab ativa" onclick="filtrarChamadosPainel('aberto',this)" style="font-size:12px">
-        🔴 Abertos <span style="background:#DC2626;color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;margin-left:4px">${abertos.length}</span>
-      </button>
-      <button class="esteira-tab" onclick="filtrarChamadosPainel('em_andamento',this)" style="font-size:12px">
-        🟡 Em andamento <span style="background:#D97706;color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;margin-left:4px">${andamento.length}</span>
-      </button>
-      <button class="esteira-tab" onclick="filtrarChamadosPainel('concluido',this)" style="font-size:12px">
-        🟢 Concluídos <span style="background:#16A34A;color:#fff;font-size:9px;padding:1px 6px;border-radius:10px;margin-left:4px">${concluidos.length}</span>
-      </button>
-    </div>
+  function cardChamadoGestor(c) {
+    const fNome  = c._franqueado?.nome || c.franqueado || '—';
+    const fTick  = c._franqueado?.ticket || c.ticket || '—';
+    const fid    = c._franqueado?.id || c.fid || '';
+    const cor    = corStatus[c.status] || 'var(--border)';
+    const hist   = c.historico || [];
 
-    <div id="lista-chamados-painel">
-      ${abertos.length === 0 && andamento.length === 0 ?
-        `<div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
-          <div style="font-size:36px;margin-bottom:12px">✅</div>
-          <div style="font-size:14px;font-weight:700">Nenhum chamado pendente</div>
-          <div style="font-size:12px;margin-top:6px">Todos os chamados estão resolvidos.</div>
-        </div>`
-        : [...abertos, ...andamento].map(c => cardChamadoPainel(c)).join('')}
-    </div>
-  `;
-}
-
-function filtrarChamadosPainel(status, btn) {
-  document.querySelectorAll('.esteira-tab').forEach(b => b.classList.remove('ativa'));
-  btn.classList.add('ativa');
-
-  const dados = getDados();
-  let todosChamados = [];
-  dados.forEach(f => {
-    try {
-      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-      lista.forEach(c => todosChamados.push({ ...c, _franqueado: f }));
-    } catch(e) {}
-  });
-
-  const filtrados = todosChamados
-    .filter(c => c.status === status)
-    .sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
-
-  $('lista-chamados-painel').innerHTML = filtrados.length === 0
-    ? `<div style="text-align:center;padding:48px 20px;color:var(--text-dim)">
-        <div style="font-size:32px;margin-bottom:10px">📭</div>
-        <div style="font-size:13px">Nenhum chamado com este status.</div>
-      </div>`
-    : filtrados.map(c => cardChamadoPainel(c)).join('');
-}
-
-function cardChamadoPainel(c) {
-  const f    = c._franqueado || {};
-  const cor  = {aberto:'#DC2626', em_andamento:'#D97706', concluido:'#16A34A', cancelado:'#94A3B8'};
-  const lbl  = {aberto:'Aberto', em_andamento:'Em andamento', concluido:'Concluído', cancelado:'Cancelado'};
-  return `
-    <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:10px;border:1px solid var(--border);border-left:4px solid ${cor[c.status]||'var(--border)'}">
+    return `<div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:10px;
+        border:1px solid var(--border);border-left:4px solid ${cor}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
         <div>
-          <div style="font-size:13px;font-weight:800;color:var(--text)">${c.id} · ${c.titulo}</div>
+          <div style="font-size:12px;font-weight:800;color:var(--text)">${c.id} · ${c.titulo}</div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
-            ${f.nome||c.franqueado||'—'} (${f.ticket||c.ticket||'—'}) · ${c.nomeEtapa||'—'} · ${c.dataAbertura||'—'}
+            ${fTick} · ${fNome.split(' ')[0]} · Aberto em ${c.dataAbertura} às ${c.horaAbertura}
           </div>
         </div>
-        <span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:${cor[c.status]||'var(--border)'}22;color:${cor[c.status]||'var(--text-muted)'}">
-          ${lbl[c.status]||c.status}
+        <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;
+          background:${cor}22;color:${cor};white-space:nowrap">
+          ${lblStatus[c.status]||c.status}
         </span>
       </div>
-      <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:10px;padding:8px;background:var(--bg);border-radius:6px">
-        ${c.descricao}
+
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:8px">
+        ${c.descricao?.slice(0,120)||''}${(c.descricao?.length||0)>120?'...':''}
       </div>
-      ${c.prazoGestor ? `<div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:8px">⏱ Prazo definido: ${c.prazoGestor}</div>` : ''}
-      ${c.respostaGestor ? `<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ Resposta enviada em ${c.dataResposta}</div>` : ''}
-      ${c.assinaturaFranqueado ? `<div style="font-size:11px;color:var(--green);font-weight:700">✓ Confirmado pelo franqueado em ${c.dataAssinatura} · Tempo: ${c.tempAtendimento}</div>` : ''}
-      <!-- Ações do gestor -->
+
+      ${hist.length > 0 ? `
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;color:var(--text-dim);cursor:pointer">📋 Histórico de trocas (${hist.length})</summary>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+          ${hist.map((h,i) => `
+          <div style="border-radius:8px;border:1px solid var(--border);overflow:hidden">
+            <div style="background:#F0FDF4;padding:5px 10px;font-size:10px;font-weight:700;color:var(--green)">
+              Rodada ${i+1} — Sua resposta · ${h.dataResposta||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:var(--text)">${h.respostaGestor||'—'}</div>
+            ${h.retornoFranqueado ? `
+            <div style="background:#FEF9C3;padding:5px 10px;font-size:10px;font-weight:700;color:#92400E">
+              Retorno do franqueado · ${h.dataRetorno||''}
+            </div>
+            <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${h.retornoFranqueado}</div>
+            ` : ''}
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+
+      ${c.retornoFranqueado ? `
+      <div style="border-radius:8px;border:1px solid #FDE68A;overflow:hidden;margin-bottom:8px">
+        <div style="background:#FEF3C7;padding:5px 10px;font-size:10px;font-weight:700;color:#92400E">
+          ↩ Retorno do franqueado · ${c.dataRetorno||''}
+        </div>
+        <div style="padding:8px 10px;font-size:12px;color:#92400E;background:#FFFBEB">${c.retornoFranqueado}</div>
+      </div>` : ''}
+
+      ${c.respostaGestor && !c.retornoFranqueado ? `
+      <div style="border-radius:8px;border:1px solid #BBF7D0;overflow:hidden;margin-bottom:8px">
+        <div style="background:#F0FDF4;padding:5px 10px;font-size:10px;font-weight:700;color:var(--green)">
+          Sua resposta · ${c.dataResposta||''}
+        </div>
+        <div style="padding:8px 10px;font-size:12px;color:var(--text)">${c.respostaGestor}</div>
+        ${c.status==='concluido'&&c.assinaturaFranqueado ? `
+        <div style="padding:6px 10px;font-size:10px;color:var(--green);font-weight:700;background:#F0FDF4">
+          ✓ Confirmado pelo franqueado em ${c.dataAssinatura||''}
+        </div>` : ''}
+      </div>` : ''}
+
       ${c.status !== 'concluido' && c.status !== 'cancelado' ? `
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-        <button onclick="responderChamado('${c.fid}','${c.id}')"
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <button onclick="abrirResponderChamado('${fid}','${c.id}')"
           style="padding:7px 14px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
-          💬 Responder
+          ${c.retornoFranqueado ? '↩ Responder retorno' : '💬 Responder'}
         </button>
-        <button onclick="definirPrazoChamado('${c.fid}','${c.id}')"
-          style="padding:7px 14px;border-radius:8px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;cursor:pointer;font-size:12px;font-weight:700">
-          📅 Definir prazo
-        </button>
-        <button onclick="resolverSemReuniaChamado('${c.fid}','${c.id}')"
-          style="padding:7px 14px;border-radius:8px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0;cursor:pointer;font-size:12px;font-weight:700">
+        <button onclick="abrirResolverChamado('${fid}','${c.id}')"
+          style="padding:7px 14px;border-radius:8px;background:#F0FDF4;color:var(--green);border:1px solid var(--green-border);cursor:pointer;font-size:12px;font-weight:700">
           ✓ Resolver
         </button>
-        <button onclick="cancelarChamado('${c.fid}','${c.id}')"
-          style="padding:7px 14px;border-radius:8px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;cursor:pointer;font-size:12px;font-weight:700">
+        <button onclick="cancelarChamadoGestor('${fid}','${c.id}')"
+          style="padding:7px 14px;border-radius:8px;background:#FEE2E2;color:var(--red);border:1px solid var(--red-border);cursor:pointer;font-size:12px;font-weight:700">
           ✕ Cancelar
         </button>
       </div>` : ''}
     </div>`;
-}
+  }
 
-function responderChamado(fid, chamadoId) {
-  abrirModal('Responder chamado',`
-    <div class="field" style="margin-bottom:12px">
-      <label>Resposta ao franqueado <span style="color:var(--red)">*</span></label>
-      <textarea class="inp" id="resp-texto" rows="4"
-        placeholder="Descreva as orientações, providências tomadas ou próximos passos..."
-        style="resize:vertical"></textarea>
+  $('content').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--text)">Central de Suporte</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${todosChamados.length} chamado(s) · ${abertos.length} aberto(s) · ${andamento.length} em andamento</div>
+      </div>
+      <button onclick="renderSuportePainel()" class="btn sm">↻ Atualizar</button>
     </div>
-  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" onclick="confirmarRespostaChamado('${fid}','${chamadoId}')">Enviar resposta</button>`
-  );
+
+    ${todosChamados.length === 0 ? `
+    <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <div style="font-size:36px;margin-bottom:12px">🎯</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text)">Nenhum chamado</div>
+      <div style="font-size:12px;margin-top:6px">Os chamados abertos pelos franqueados aparecerão aqui.</div>
+    </div>` : ''}
+
+    ${abertos.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px">
+        🔴 Abertos — aguardando resposta (${abertos.length})
+      </div>
+      ${abertos.map(c => cardChamadoGestor(c)).join('')}
+    </div>` : ''}
+
+    ${andamento.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);margin-bottom:10px">
+        🟡 Em andamento (${andamento.length})
+      </div>
+      ${andamento.map(c => cardChamadoGestor(c)).join('')}
+    </div>` : ''}
+
+    ${concluidos.length > 0 ? `
+    <details>
+      <summary style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--green);cursor:pointer;user-select:none;margin-bottom:10px">
+        🟢 Concluídos (${concluidos.length}) — clique para ver
+      </summary>
+      <div style="margin-top:10px">${concluidos.map(c => cardChamadoGestor(c)).join('')}</div>
+    </details>` : ''}
+  `;
 }
 
-async function confirmarRespostaChamado(fid, chamadoId) {
+async function abrirResponderChamado(fid, chamadoId) {
+  // Buscar chamado do Firebase para ter dados mais recentes
+  let chamado = null;
+  try {
+    const snap = await db.ref('chamados/' + fid).once('value');
+    const raw  = snap.val();
+    const arr  = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    chamado = arr.find(c => c.id === chamadoId);
+  } catch(e) {}
+
+  const f = getFranqueado(fid);
+
+  abrirModal(`Responder chamado ${chamadoId}`, `
+    <div style="background:#EFF6FF;border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">${chamado?.titulo||chamadoId}</div>
+      <div style="font-size:11px;color:var(--text-dim)">${f?.nome||fid} · ${chamado?.descricao?.slice(0,100)||''}</div>
+    </div>
+    ${chamado?.retornoFranqueado ? `
+    <div style="background:#FEF3C7;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#92400E">
+      <b>Retorno do franqueado:</b> ${chamado.retornoFranqueado}
+    </div>` : ''}
+    <div class="field">
+      <label>Sua resposta <span style="color:var(--red)">*</span></label>
+      <textarea class="inp" id="resp-texto" rows="4"
+        placeholder="Digite sua resposta para o franqueado..."></textarea>
+    </div>
+  `,
+  `<button class="btn" onclick="fecharModal()">Cancelar</button>
+   <button class="btn primary" onclick="confirmarRespostaChamadoGestor('${fid}','${chamadoId}')">Enviar resposta</button>`);
+}
+
+async function confirmarRespostaChamadoGestor(fid, chamadoId) {
   const texto = $('resp-texto')?.value?.trim();
-  if(!texto) { toast('Digite a resposta.','rd'); return; }
+  if(!texto) { toast('Digite a resposta.', 'rd'); return; }
 
   try {
-    // Sempre ler do Firebase — fonte da verdade
     const snap  = await db.ref('chamados/' + fid).once('value');
     const raw   = snap.val();
     const lista = Array.isArray(raw) ? raw.filter(Boolean)
                 : raw ? Object.values(raw).filter(Boolean) : [];
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.', 'rd'); return; }
 
-    const ch = lista.find(x => x.id === chamadoId);
-    if(!ch) { toast('Chamado não encontrado.','rd'); return; }
-
-    // Preservar histórico da resposta anterior se houver retorno do franqueado
-    if(ch.retornoFranqueado) {
+    // Arquivar troca anterior no histórico — apenas se há resposta E retorno
+    if(ch.respostaGestor && ch.retornoFranqueado) {
       if(!ch.historico) ch.historico = [];
-      ch.historico.push({
-        respostaGestor:    ch.respostaGestor,
-        dataResposta:      ch.dataResposta,
-        gestorNome:        ch.gestorNome,
-        retornoFranqueado: ch.retornoFranqueado,
-        dataRetorno:       ch.dataRetorno,
-      });
-      ch.retornoFranqueado = null;
-      ch.dataRetorno       = null;
+      const entrada = {
+        respostaGestor:    ch.respostaGestor    || null,
+        dataResposta:      ch.dataResposta       || null,
+        gestorNome:        ch.gestorNome         || null,
+        retornoFranqueado: ch.retornoFranqueado  || null,
+        dataRetorno:       ch.dataRetorno        || null,
+      };
+      // Remover nulls antes de salvar no Firebase
+      Object.keys(entrada).forEach(k => { if(entrada[k] === null) delete entrada[k]; });
+      ch.historico.push(entrada);
     }
 
-    ch.respostaGestor  = texto;
-    ch.gestorNome      = SESSAO.nome;
-    ch.gestorToken     = SESSAO.token;
-    ch.dataResposta    = hoje() + ' às ' + agora();
-    ch.status          = 'em_andamento'; // sempre em_andamento ao responder
-    ch.resolvidoGestor = false;
-    ch.retornoFranqueado = null; // limpar retorno após nova resposta
+    // Nova resposta
+    ch.respostaGestor    = texto;
+    ch.gestorNome        = SESSAO.nome;
+    ch.gestorToken       = SESSAO.token;
+    ch.dataResposta      = hoje() + ' às ' + agora();
+    ch.status            = 'em_andamento';
+    ch.resolvidoGestor   = false;
+    ch.retornoFranqueado = null;
     ch.dataRetorno       = null;
 
-    // Salvar no Firebase (fonte da verdade) + cache local
-    await db.ref('chamados/' + fid).set(lista);
+    // Sanitizar toda a lista antes de salvar
+    const listaLimpa = sanitizarFirebase(lista);
+    await db.ref('chamados/' + fid).set(listaLimpa);
     localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
 
     fecharModal();
-    toast('Resposta enviada. Franqueado será notificado.', 'gn');
+    toast('Resposta enviada. Franqueado notificado.', 'gn');
     renderSuportePainel();
   } catch(e) {
     toast('Erro ao salvar: ' + e.message, 'rd');
   }
 }
 
-function definirPrazoChamado(fid, chamadoId) {
-  abrirModal('Definir prazo',`
-    <div class="field" style="margin-bottom:12px">
-      <label>Data limite para resolução</label>
-      <input class="inp" type="date" id="prazo-data" min="${hoje().split('/').reverse().join('-')}">
-    </div>
-    <div class="field">
-      <label>Observação (opcional)</label>
-      <input class="inp" id="prazo-obs" placeholder="Ex: aguardando documento do franqueado">
-    </div>
-  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" onclick="confirmarPrazoChamado('${fid}','${chamadoId}')">Definir prazo</button>`
-  );
-}
-
-function confirmarPrazoChamado(fid, chamadoId) {
-  const dataISO = $('prazo-data')?.value;
-  if(!dataISO) { toast('Selecione uma data.','rd'); return; }
-  const [y,m,d]  = dataISO.split('-');
-  const prazoFmt = d + '/' + m + '/' + y;
-
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
-
-  c.prazoGestor = prazoFmt;
-  c.prazoObs    = $('prazo-obs')?.value?.trim() || '';
-
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
-
-  // Adicionar na agenda
-  try {
-    const eventos = JSON.parse(localStorage.getItem('mo_agenda_eventos') || '[]');
-    eventos.push({
-      id:     'chamado_' + chamadoId,
-      tipo:   'prazo',
-      titulo: 'Prazo: ' + (c.titulo||chamadoId),
-      data:   prazoFmt,
-      fid,
-      chamadoId,
-      franqueado: c.franqueado,
-      ticket:     c.ticket,
-      cor:        'cal-ev-prazo',
-    });
-    localStorage.setItem('mo_agenda_eventos', JSON.stringify(eventos));
-  } catch(e) {}
-
-  fecharModal();
-  toast('Prazo definido: ' + prazoFmt + '. Evento adicionado à agenda.', 'gn');
-  renderSuportePainel();
-}
-
-function resolverSemReuniaChamado(fid, chamadoId) {
-  abrirModal('Resolver chamado',`
-    <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:4px">✓ Marcar como resolvido</div>
-      <div style="font-size:11px;color:var(--text-dim)">Informe como o problema foi resolvido. O franqueado receberá a resposta e precisará confirmar o atendimento.</div>
+async function abrirResolverChamado(fid, chamadoId) {
+  abrirModal(`Resolver chamado ${chamadoId}`, `
+    <div style="background:#F0FDF4;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#166534">
+      ✓ Descreva a solução adotada. O franqueado precisará confirmar que foi resolvido.
     </div>
     <div class="field">
       <label>Como foi resolvido <span style="color:var(--red)">*</span></label>
       <textarea class="inp" id="resolv-texto" rows="3"
-        placeholder="Descreva a solução aplicada..."></textarea>
+        placeholder="Descreva o que foi feito para resolver..."></textarea>
     </div>
-  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" onclick="confirmarResolucaoChamado('${fid}','${chamadoId}')">Marcar como resolvido</button>`
-  );
-}
-
-function confirmarResolucaoChamado(fid, chamadoId) {
-  const texto = $('resolv-texto')?.value?.trim();
-  if(!texto) { toast('Descreva a solução.','rd'); return; }
-
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
-
-  c.respostaGestor  = texto;
-  c.gestorNome      = SESSAO.nome;
-  c.dataResposta    = hoje() + ' às ' + agora();
-  c.status          = 'em_andamento'; // concluído só após franqueado assinar
-  c.resolvidoGestor = true;
-
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
-
-  fecharModal();
-  toast('Chamado marcado como resolvido. Aguardando confirmação do franqueado.', 'gn');
-  renderSuportePainel();
-}
-
-function cancelarChamado(fid, chamadoId) {
-  abrirModal('Cancelar chamado',`
-    <div class="field">
-      <label>Motivo do cancelamento <span style="color:var(--red)">*</span></label>
-      <textarea class="inp" id="cancel-motivo" rows="3"
-        placeholder="Explique o motivo do cancelamento..."></textarea>
-    </div>
-  `,`<button class="btn" onclick="fecharModal()">Voltar</button>
-     <button class="btn red" onclick="confirmarCancelamentoChamado('${fid}','${chamadoId}')">Cancelar chamado</button>`
-  );
-}
-
-function confirmarCancelamentoChamado(fid, chamadoId) {
-  const motivo = $('cancel-motivo')?.value?.trim();
-  if(!motivo) { toast('Informe o motivo.','rd'); return; }
-
-  const lista = JSON.parse(localStorage.getItem('suporte_' + fid) || '[]');
-  const c     = lista.find(x => x.id === chamadoId);
-  if(!c) return;
-
-  c.status           = 'cancelado';
-  c.motivoCancelamento = motivo;
-  c.canceladoPor     = SESSAO.nome;
-  c.dataCancelamento = hoje() + ' às ' + agora();
-
-  localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
-  try { db.ref('chamados/' + fid).set(lista); } catch(e) {}
-
-  fecharModal();
-  toast('Chamado cancelado e registrado.', 'or');
-  renderSuportePainel();
-}
-
-function atualizarBadgeChamados() {
-  const dados = getDados();
-  let total = 0;
-  dados.forEach(f => {
-    try {
-      const lista = JSON.parse(localStorage.getItem('suporte_' + f.id) || '[]');
-      total += lista.filter(c => c.status === 'aberto' || c.status === 'em_andamento').length;
-    } catch(e) {}
-  });
-  const badge = $('badge-chamados-nav');
-  if(badge) {
-    badge.style.display = total > 0 ? 'inline-block' : 'none';
-    badge.textContent   = total;
-  }
-}
-
-
-/* ══════════════════════════════════════════════════════════════
-   BLOCO D — TROCA DE E-MAIL DO PORTAL
-   Disponível SOMENTE quando senha ainda é provisória (123456)
-   Após troca de senha pelo franqueado, fluxo é bloqueado
-   Gestor assina documento formal de solicitação de alteração
-══════════════════════════════════════════════════════════════ */
-
-function abrirTrocaEmailPortal(fid) {
-  const f = getFranqueado(fid);
-  if(!f) return;
-
-  const senhaTrocada = localStorage.getItem('senha_trocada_' + fid) === '1';
-  if(senhaTrocada) {
-    toast('Troca de e-mail bloqueada. O franqueado já alterou a senha — somente ele pode autorizar mudanças de acesso.', 'rd');
-    return;
-  }
-
-  abrirModal('Corrigir e-mail de acesso ao portal', `
-    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:12px 14px;margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:4px">⚠ Atenção — Operação sensível</div>
-      <div style="font-size:11px;color:#92400E;line-height:1.6">
-        Esta operação só é permitida <b>antes</b> do franqueado trocar a senha provisória.<br>
-        Após a troca, apenas o franqueado pode autorizar alterações de acesso.<br>
-        A ação gera um <b>documento formal assinado</b> que fica no dossiê.
-      </div>
-    </div>
-
-    <div style="display:grid;gap:12px;margin-bottom:14px">
-      <div>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">E-mail atual (incorreto)</div>
-        <div style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:13px;font-weight:700;color:var(--red)">${f.email || '—'}</div>
-      </div>
-      <div class="field">
-        <label>Novo e-mail correto <span style="color:var(--red)">*</span></label>
-        <input class="inp" type="email" id="novo-email-portal" placeholder="novoemail@exemplo.com">
-      </div>
-      <div class="field">
-        <label>Confirmar novo e-mail <span style="color:var(--red)">*</span></label>
-        <input class="inp" type="email" id="conf-email-portal" placeholder="Repita o e-mail">
-      </div>
-    </div>
-
-    <div style="background:#FEE2E2;border-radius:8px;padding:10px 12px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:#DC2626;margin-bottom:4px">🔑 Confirme sua identidade</div>
-      <div style="font-size:11px;color:#DC2626;margin-bottom:8px">Digite a senha provisória do portal (<b>123456</b>) para autorizar esta operação:</div>
-      <input class="inp" type="password" id="senha-confirm-troca" placeholder="Digite 123456">
-    </div>
-
-    <div id="troca-email-ass-container"></div>
-    <div id="troca-email-erro" style="display:none;color:var(--red);font-size:11px;margin-top:8px"></div>
   `,
   `<button class="btn" onclick="fecharModal()">Cancelar</button>
-   <button class="btn primary" onclick="verificarETrocaEmail('${fid}')">Verificar e prosseguir</button>`
-  );
+   <button class="btn primary" onclick="confirmarResolucaoChamado('${fid}','${chamadoId}')">Marcar como resolvido</button>`);
 }
 
-function verificarETrocaEmail(fid) {
-  const novoEmail  = $('novo-email-portal')?.value?.trim().toLowerCase();
-  const confEmail  = $('conf-email-portal')?.value?.trim().toLowerCase();
-  const senha      = $('senha-confirm-troca')?.value;
-  const erroEl     = $('troca-email-erro');
-  const assContainer = $('troca-email-ass-container');
-
-  erroEl.style.display = 'none';
-
-  if(!novoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novoEmail)) {
-    erroEl.style.display='block'; erroEl.textContent='E-mail inválido.'; return;
-  }
-  if(novoEmail !== confEmail) {
-    erroEl.style.display='block'; erroEl.textContent='Os e-mails não coincidem.'; return;
-  }
-  if(senha !== '123456') {
-    erroEl.style.display='block'; erroEl.textContent='Senha provisória incorreta. Use 123456.'; return;
-  }
-
-  const f = getFranqueado(fid);
-  const declaracao = `Eu, ${SESSAO.nome}, na qualidade de ${SESSAO.cargo||'Gestor'} da ${CONFIG_EMPRESA?.nome||'Mestre da Obra Franquias Ltda'}, declaro para todos os fins legais que o e-mail de acesso ao portal do franqueado ${f.nome} (${f.ticket}) foi alterado de "${f.email||'—'}" para "${novoEmail}", em ${hoje()} às ${agora()}, com confirmação da senha provisória de acesso. Esta operação é realizada antes da primeira troca de senha pelo franqueado, conforme registro do sistema. A presente declaração possui validade jurídica nos termos da Lei n.º 14.063/2020.`;
-
-  if(assContainer) {
-    assContainer.innerHTML = '';
-    renderAssBox('troca-email-ass-container', declaracao, 'Assinar e confirmar alteração de e-mail', async () => {
-      await confirmarTrocaEmail(fid, novoEmail, declaracao);
-    });
-  }
-}
-
-async function confirmarTrocaEmail(fid, novoEmail, declaracao) {
-  const f    = getFranqueado(fid);
-  const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
-  const emailAntigo = f.email;
+async function confirmarResolucaoChamado(fid, chamadoId) {
+  const texto = $('resolv-texto')?.value?.trim();
+  if(!texto) { toast('Descreva a solução.', 'rd'); return; }
 
   try {
-    // 1. Buscar uid do usuário no Firebase
-    const snap = await db.ref('portal_usuarios').once('value');
-    const usuarios = snap.val() || {};
-    let uidAntigo = null;
-    Object.entries(usuarios).forEach(([uid, dados]) => {
-      if(dados.fid === fid) uidAntigo = uid;
-    });
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw.filter(Boolean)
+                : raw ? Object.values(raw).filter(Boolean) : [];
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) { toast('Chamado não encontrado.', 'rd'); return; }
 
-    // 2. Criar novo usuário com e-mail correto (app secundário)
-    const novaCred = await authSecundario.createUserWithEmailAndPassword(novoEmail, '123456');
-    const novoUid  = novaCred.user.uid;
-
-    // 3. Salvar mapeamento novo uid → fid
-    await db.ref('portal_usuarios/' + novoUid).set({ fid, email: novoEmail });
-
-    // 4. Remover mapeamento antigo se existir
-    if(uidAntigo) {
-      await db.ref('portal_usuarios/' + uidAntigo).remove();
+    if(ch.respostaGestor && ch.retornoFranqueado) {
+      if(!ch.historico) ch.historico = [];
+      const entrada = {
+        respostaGestor:    ch.respostaGestor   || null,
+        dataResposta:      ch.dataResposta      || null,
+        gestorNome:        ch.gestorNome        || null,
+        retornoFranqueado: ch.retornoFranqueado || null,
+        dataRetorno:       ch.dataRetorno       || null,
+      };
+      Object.keys(entrada).forEach(k => { if(entrada[k] === null) delete entrada[k]; });
+      ch.historico.push(entrada);
     }
 
-    // 5. Deslogar do app secundário
-    await authSecundario.signOut();
+    ch.respostaGestor    = texto;
+    ch.gestorNome        = SESSAO.nome;
+    ch.dataResposta      = hoje() + ' às ' + agora();
+    ch.status            = 'em_andamento';
+    ch.resolvidoGestor   = true;
+    ch.retornoFranqueado = null;
+    ch.dataRetorno       = null;
 
-    // 6. Atualizar ficha do franqueado
-    const registro = {
-      tipo:         'troca_email',
-      emailAntigo,
-      emailNovo:    novoEmail,
-      por:          SESSAO.nome,
-      cargo:        SESSAO.cargo,
-      token:        SESSAO.token,
-      declaracao,
-      hash,
-      data:         hoje(),
-      hora:         agora(),
-      timestamp:    Date.now(),
-    };
-
-    const novoHist = [...(f.historico||[]), {
-      data:  hoje(),
-      texto: `E-mail de acesso alterado de "${emailAntigo}" para "${novoEmail}" por ${SESSAO.nome}. Hash: ${hash}`,
-      autor: SESSAO.nome,
-    }];
-
-    atualizarFranqueado(fid, {
-      email:        novoEmail,
-      historico:    novoHist,
-      trocaEmail:   registro,
-    });
-
-    // 7. Gerar PDF do documento formal no Drive
-    const f2 = getFranqueado(fid);
-    const pastaId99 = f2?.drivePasstas?.pasta_et99_id;
-    if(pastaId99) {
-      gerarPDFNoDrive('arquivamento', pastaId99, {
-        ticket:         f.ticket,
-        nomeFranqueado: f.nome,
-        por:            SESSAO.nome,
-        cargo:          SESSAO.cargo,
-        justificativa:  `Alteração de e-mail de acesso de "${emailAntigo}" para "${novoEmail}".`,
-        declaracao,
-        hash,
-        data:           hoje(),
-        hora:           agora(),
-      }).catch(()=>{});
-    }
+    const listaLimpa = sanitizarFirebase(lista);
+    await db.ref('chamados/' + fid).set(listaLimpa);
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
 
     fecharModal();
-    fecharDrawer();
-    toast(`E-mail alterado para ${novoEmail}. Documento formal gerado.`, 'gn');
-    renderFranqueados();
-
-  } catch(err) {
-    const erroEl = $('troca-email-erro');
-    if(erroEl) {
-      erroEl.style.display = 'block';
-      if(err.code === 'auth/email-already-in-use') {
-        erroEl.textContent = 'Este e-mail já está cadastrado no sistema.';
-      } else {
-        erroEl.textContent = 'Erro: ' + (err.message || 'tente novamente.');
-      }
-    }
+    toast('Chamado marcado como resolvido. Aguardando confirmação do franqueado.', 'gn');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, 'rd');
   }
 }
 
-
-/* ══════════════════════════════════════════════════════════════
-   DEV TOOLS — Painel de desenvolvedor
-   Visível APENAS para ADM-PHILLIPE
-   Operações destrutivas com confirmação de senha
-══════════════════════════════════════════════════════════════ */
-function renderDevTools() {
-  if(SESSAO?.token !== 'ADM-PHILLIPE') {
-    toast('Acesso negado.', 'rd');
-    return;
-  }
-
-  const dados    = getDados();
-  const equipe   = getEquipe();
-  const chamados = dados.reduce((acc,f) => {
-    try { return acc + JSON.parse(localStorage.getItem('suporte_'+f.id)||'[]').length; } catch(e) { return acc; }
-  }, 0);
-  const reunioes = getReunioes().length;
-
-  $('content').innerHTML = `
-    <div style="max-width:720px">
-      <!-- Header -->
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-        <div style="width:44px;height:44px;border-radius:12px;background:#DC2626;display:flex;align-items:center;justify-content:center;font-size:20px">⚙</div>
-        <div>
-          <div style="font-size:18px;font-weight:800;color:var(--text)">Dev Tools</div>
-          <div style="font-size:11px;color:var(--text-dim)">Acesso restrito · ${SESSAO.nome} · ${hoje()} às ${agora()}</div>
-        </div>
-      </div>
-
-      <!-- Estado atual -->
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px">Estado atual do sistema</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-          ${[
-            {label:'Franqueados', valor: dados.length, cor:'var(--primary)'},
-            {label:'Equipe', valor: equipe.length, cor:'var(--green)'},
-            {label:'Chamados', valor: chamados, cor:'var(--amber)'},
-            {label:'Reuniões', valor: reunioes, cor:'#7C3AED'},
-          ].map(s=>`
-            <div style="text-align:center;padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
-              <div style="font-size:24px;font-weight:800;color:${s.cor}">${s.valor}</div>
-              <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${s.label}</div>
-            </div>`).join('')}
-        </div>
-      </div>
-
-      <!-- Operações por franqueado -->
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px">Franqueados cadastrados</div>
-        ${dados.length === 0
-          ? '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px">Nenhum franqueado cadastrado.</div>'
-          : `<table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead>
-                <tr style="border-bottom:2px solid var(--border)">
-                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">Ticket</th>
-                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">Nome</th>
-                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">Status</th>
-                  <th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:700">E-mail</th>
-                  <th style="padding:6px 8px"></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${dados.map(f=>`
-                <tr style="border-bottom:1px solid var(--border)">
-                  <td style="padding:8px;font-weight:700;color:var(--primary)">${f.ticket}</td>
-                  <td style="padding:8px">${f.nome}</td>
-                  <td style="padding:8px"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${f.status==='arquivado'?'#F1F5F9':f.processoIniciado?'#DBEAFE':'#FEF3C7'};color:${f.status==='arquivado'?'#64748B':f.processoIniciado?'#1E40AF':'#92400E'}">${f.status==='arquivado'?'Arquivado':f.processoIniciado?'Em implantação':'Aguardando'}</span></td>
-                  <td style="padding:8px;color:var(--text-dim)">${f.email||'—'}</td>
-                  <td style="padding:8px">
-                    <button onclick="devExcluirFranqueado('${f.id}','${f.nome}')"
-                      style="padding:4px 10px;border-radius:6px;background:#FEE2E2;color:#DC2626;border:1px solid #FECACA;cursor:pointer;font-size:11px;font-weight:700">
-                      Excluir
-                    </button>
-                  </td>
-                </tr>`).join('')}
-              </tbody>
-            </table>`}
-      </div>
-
-      <!-- Operações em lote -->
-      <div class="card" style="margin-bottom:16px;border:1.5px solid #FECACA">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#DC2626;margin-bottom:14px">⚠ Operações destrutivas</div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#FEF2F2;border-radius:8px">
-            <div>
-              <div style="font-size:12px;font-weight:700;color:var(--text)">Limpar todos os franqueados</div>
-              <div style="font-size:10.5px;color:var(--text-dim)">Remove todos os ${dados.length} franqueados do localStorage</div>
-            </div>
-            <button onclick="devLimparTodos('franqueados')"
-              style="padding:6px 14px;border-radius:8px;background:#DC2626;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
-              Limpar
-            </button>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#FEF2F2;border-radius:8px">
-            <div>
-              <div style="font-size:12px;font-weight:700;color:var(--text)">Limpar chamados de suporte</div>
-              <div style="font-size:10.5px;color:var(--text-dim)">Remove todos os registros de chamados</div>
-            </div>
-            <button onclick="devLimparTodos('chamados')"
-              style="padding:6px 14px;border-radius:8px;background:#DC2626;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
-              Limpar
-            </button>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#FEF2F2;border-radius:8px">
-            <div>
-              <div style="font-size:12px;font-weight:700;color:var(--text)">Limpar reuniões</div>
-              <div style="font-size:10.5px;color:var(--text-dim)">Remove todos os agendamentos</div>
-            </div>
-            <button onclick="devLimparTodos('reunioes')"
-              style="padding:6px 14px;border-radius:8px;background:#DC2626;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
-              Limpar
-            </button>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#7C0000;border-radius:8px">
-            <div>
-              <div style="font-size:12px;font-weight:700;color:#fff">Reset completo do sistema</div>
-              <div style="font-size:10.5px;color:#FCA5A5">Apaga TODOS os dados do localStorage</div>
-            </div>
-            <button onclick="devResetCompleto()"
-              style="padding:6px 14px;border-radius:8px;background:#fff;color:#7C0000;border:none;cursor:pointer;font-size:12px;font-weight:800">
-              RESET
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Export/Import -->
-      <div class="card">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:14px">Backup e exportação</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button onclick="devExportarDados()"
-            style="padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700">
-            📥 Exportar JSON completo
-          </button>
-          <button onclick="devVerLocalStorage()"
-            style="padding:8px 16px;border-radius:8px;background:var(--bg);color:var(--text);border:1.5px solid var(--border);cursor:pointer;font-size:12px;font-weight:700">
-            🔍 Inspecionar localStorage
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function devExcluirFranqueado(fid, nome) {
-  abrirModal('Excluir franqueado', `
-    <div style="background:#FEE2E2;border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;color:#DC2626">⚠ Excluir permanentemente</div>
-      <div style="font-size:11px;color:#DC2626;margin-top:4px">Esta ação não pode ser desfeita. Todos os dados de <b>${nome}</b> serão removidos.</div>
-    </div>
-    <div class="field">
-      <label>Digite <b>EXCLUIR</b> para confirmar</label>
-      <input class="inp" id="dev-confirm-excluir" placeholder="EXCLUIR">
-    </div>
-  `,`<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn" style="background:#DC2626;color:#fff;border:none" onclick="devConfirmarExclusao('${fid}','${nome}')">Excluir definitivamente</button>`
-  );
-}
-
-function devConfirmarExclusao(fid, nome) {
-  const conf = $('dev-confirm-excluir')?.value?.trim();
-  if(conf !== 'EXCLUIR') { toast('Digite EXCLUIR para confirmar.', 'rd'); return; }
-
-  // Remover do localStorage
-  const lista = getDados().filter(f => f.id !== fid);
-  salvarDados(lista);
-
-  // Remover dados associados
-  localStorage.removeItem('suporte_' + fid);
-  localStorage.removeItem('mo_ficha_' + fid);
-  localStorage.removeItem('senha_trocada_' + fid);
-  localStorage.removeItem('senha_trocada_data_' + fid);
-  localStorage.removeItem('termo_assinado_' + fid);
-  localStorage.removeItem('portal_t_' + fid);
-
-  // Remover do Firebase
+async function cancelarChamadoGestor(fid, chamadoId) {
+  if(!confirm('Cancelar este chamado?')) return;
   try {
-    db.ref('franqueados/' + fid).remove();
-    db.ref('chamados/' + fid).remove();
-    db.ref('reunioes_notif/' + fid).remove();
-  } catch(e) {}
-
-  fecharModal();
-  toast(nome + ' excluído definitivamente.', 'or');
-  renderDevTools();
-}
-
-function devLimparTodos(tipo) {
-  const confirmMsg = {
-    franqueados: 'Limpar TODOS os franqueados? Esta ação é irreversível.',
-    chamados:    'Limpar TODOS os chamados de suporte?',
-    reunioes:    'Limpar TODOS os agendamentos de reunião?',
-  };
-  if(!confirm(confirmMsg[tipo])) return;
-
-  if(tipo === 'franqueados') {
-    getDados().forEach(f => {
-      localStorage.removeItem('suporte_' + f.id);
-      localStorage.removeItem('mo_ficha_' + f.id);
-      localStorage.removeItem('senha_trocada_' + f.id);
-      localStorage.removeItem('termo_assinado_' + f.id);
-    });
-    localStorage.removeItem('mo_franqueados');
-    try { db.ref('franqueados').remove(); db.ref('chamados').remove(); } catch(e) {}
-  }
-  if(tipo === 'chamados') {
-    getDados().forEach(f => localStorage.removeItem('suporte_' + f.id));
-    try { db.ref('chamados').remove(); } catch(e) {}
-  }
-  if(tipo === 'reunioes') {
-    localStorage.removeItem('mo_reunioes');
-    try { db.ref('reunioes').remove(); } catch(e) {}
-  }
-
-  toast('Dados limpos com sucesso.', 'gn');
-  renderDevTools();
-}
-
-function devResetCompleto() {
-  if(!confirm('ATENÇÃO: Reset completo apaga TODOS os dados. Tem certeza absoluta?')) return;
-  if(!confirm('Segunda confirmação: isso apagará franqueados, equipe, agenda, chamados e reuniões. Continuar?')) return;
-
-  const chavesManter = ['mo_impl_sessao']; // manter só a sessão atual
-  const chaves = Object.keys(localStorage);
-  chaves.forEach(k => {
-    if(!chavesManter.includes(k)) localStorage.removeItem(k);
-  });
-
-  try {
-    db.ref('franqueados').remove();
-    db.ref('chamados').remove();
-    db.ref('reunioes').remove();
-    db.ref('portal_usuarios').remove();
-  } catch(e) {}
-
-  toast('Reset completo realizado.', 'or');
-  setTimeout(() => location.reload(), 1500);
-}
-
-function devExportarDados() {
-  const backup = {
-    exportadoEm:  hoje() + ' às ' + agora(),
-    exportadoPor: SESSAO.nome,
-    franqueados:  getDados(),
-    equipe:       getEquipe(),
-    reunioes:     getReunioes(),
-  };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url;
-  a.download = 'backup_mestre_' + new Date().toISOString().slice(0,10) + '.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('Backup exportado!', 'gn');
-}
-
-function devVerLocalStorage() {
-  const dados = {};
-  Object.keys(localStorage).forEach(k => {
-    try { dados[k] = JSON.parse(localStorage.getItem(k)); }
-    catch(e) { dados[k] = localStorage.getItem(k); }
-  });
-  abrirModal('localStorage atual',`
-    <pre style="font-size:10px;max-height:400px;overflow:auto;background:#0F172A;color:#E2E8F0;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-all">
-${JSON.stringify(dados, null, 2).slice(0, 8000)}${JSON.stringify(dados).length > 8000 ? '\n... (truncado)' : ''}
-    </pre>
-  `, `<button class="btn primary" onclick="fecharModal()">Fechar</button>`);
-}
-
-
-/* ══════════════════════════════════════════════════════════════
-   VALIDAÇÃO DE ETAPA — Gestor confirma ou rejeita conclusão
-   solicitada pelo franqueado
-══════════════════════════════════════════════════════════════ */
-async function verificarValidacaoPendente(fid, etapaId) {
-  try {
-    const snap = await db.ref(`validacoes/${fid}/et${etapaId}`).once('value');
-    return snap.val();
-  } catch(e) { return null; }
-}
-
-function confirmarValidacaoEtapa(fid, etapaId) {
-  const f  = getFranqueado(fid);
-  const et = ETAPAS.find(e => e.id === Number(etapaId));
-
-  const declaracao = `Eu, ${SESSAO.nome}, valido a conclusão da Etapa ${etapaId} — "${et?.nome||''}" — pelo franqueado ${f?.nome} (${f?.ticket}), confirmando que todos os requisitos foram cumpridos. Data: ${hoje()} às ${agora()}.`;
-
-  abrirModal('Confirmar conclusão de etapa', `
-    <div style="background:#F0FDF4;border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:800;color:var(--green)">✓ Validar conclusão da Etapa ${etapaId}</div>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${f?.nome} · ${f?.ticket}</div>
-    </div>
-    <div id="val-ass-container"></div>
-    <button onclick="fecharModal()" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">Cancelar</button>
-  `, '');
-
-  setTimeout(() => {
-    renderAssBox('val-ass-container', declaracao, 'Assinar e confirmar avanço', async () => {
-      const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
-      const ts   = Date.now();
-      const proxEtapa = Number(etapaId) + 1;
-
-      try {
-        // 1. Avançar etapa do franqueado
-        atualizarFranqueado(fid, { etapaAtual: proxEtapa });
-
-        // 2. Registrar evento na etapa
-        salvarEventoEtapa(fid, etapaId, {
-          tipo:  'etapa_concluida',
-          texto: `Etapa ${etapaId} validada e concluída por ${SESSAO.nome}. Franqueado avança para Etapa ${proxEtapa}.`,
-          autor: SESSAO.nome,
-          hash,
-          data:  hoje(),
-          hora:  agora(),
-        });
-
-        // 3. Notificar franqueado via Firebase
-        await db.ref(`validacoes/${fid}/et${etapaId}`).update({
-          status:          'aprovada',
-          validadoPor:     SESSAO.nome,
-          dataValidacao:   hoje(),
-          horaValidacao:   agora(),
-          declaracaoGestor: declaracao,
-          hashGestor:      hash,
-        });
-
-        // 4. Registrar no histórico central
-        registrarEvento(fid, 'etapa_concluida', {
-          texto:  `Etapa ${etapaId} concluída. Franqueado avança para Etapa ${proxEtapa}.`,
-          etapa:  etapaId,
-          hash,
-        });
-
-        // 5. Marcar notificação como lida
-        await db.ref(`notif_gestor/${fid}`).update({ lido: true });
-
-        fecharModal();
-        toast(`Etapa ${etapaId} validada! ${f?.nome?.split(' ')[0]} avança para Etapa ${proxEtapa}.`, 'gn');
-        renderFranqueados();
-      } catch(e) {
-        toast('Erro ao validar: ' + e.message, 'rd');
-      }
-    });
-  }, 150);
-}
-
-async function rejeitarValidacaoEtapa(fid, etapaId) {
-  abrirModal('Rejeitar validação', `
-    <div class="field">
-      <label>Motivo da rejeição <span style="color:var(--red)">*</span></label>
-      <textarea class="inp" id="rej-motivo" rows="3"
-        placeholder="Informe o que falta para concluir esta etapa..."></textarea>
-    </div>
-  `, `<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" onclick="confirmarRejeicaoEtapa('${fid}',${etapaId})">Rejeitar e notificar</button>`);
-}
-
-async function confirmarRejeicaoEtapa(fid, etapaId) {
-  const motivo = $('rej-motivo')?.value?.trim();
-  if(!motivo) { toast('Informe o motivo.','rd'); return; }
-  const f = getFranqueado(fid);
-
-  try {
-    await db.ref(`validacoes/${fid}/et${etapaId}`).update({
-      status:        'rejeitada',
-      motivoRejeicao: motivo,
-      rejeitadoPor:  SESSAO.nome,
-      dataRejeicao:  hoje(),
-    });
-
-    salvarEventoEtapa(fid, etapaId, {
-      tipo:  'validacao_rejeitada',
-      texto: `Validação da Etapa ${etapaId} rejeitada por ${SESSAO.nome}. Motivo: ${motivo}`,
-      autor: SESSAO.nome,
-      data:  hoje(),
-      hora:  agora(),
-    });
-
-    await db.ref(`notif_gestor/${fid}`).update({ lido: true });
-
-    fecharModal();
-    toast('Rejeição registrada. Franqueado será notificado.', 'or');
+    const snap  = await db.ref('chamados/' + fid).once('value');
+    const raw   = snap.val();
+    const lista = Array.isArray(raw) ? raw.filter(Boolean)
+                : raw ? Object.values(raw).filter(Boolean) : [];
+    const ch    = lista.find(x => x.id === chamadoId);
+    if(!ch) return;
+    ch.status         = 'cancelado';
+    ch.canceladoPor   = SESSAO.nome;
+    ch.dataCancelamento = hoje() + ' às ' + agora();
+    const listaLimpa = sanitizarFirebase(lista);
+    await db.ref('chamados/' + fid).set(listaLimpa);
+    localStorage.setItem('suporte_' + fid, JSON.stringify(lista));
+    toast('Chamado cancelado.', 'or');
+    renderSuportePainel();
   } catch(e) {
     toast('Erro: ' + e.message, 'rd');
   }
 }
 
-function encerrarFranquia(fid) {
-  if(!PERM.assinar){ toast('Sem permissão.','rd'); return; }
-  const f = getFranqueado(fid);
-  const declaracao = `Eu, ${SESSAO.nome}, declaro o encerramento do processo de implantação do franqueado ${f.nome} (${f.ticket}). Esta ação é registrada com validade jurídica. Data: ${hoje()} às ${agora()}.`;
 
-  abrirModal('Encerrar franquia',
-    `<div style="background:var(--red-soft);border:1px solid var(--red-border);border-radius:8px;padding:14px;margin-bottom:14px">
-       <div style="font-weight:700;color:var(--red);margin-bottom:6px">⚠ Atenção — ação irreversível</div>
-       <div style="font-size:12px;color:var(--red)">O encerramento registra o fim do contrato de implantação e gera dossiê funcional completo. Esta ação não pode ser desfeita.</div>
-     </div>
-     <div id="ass-enc-container"></div>`,
-    `<button class="btn" onclick="fecharModal()">Cancelar</button>`
-  );
-  setTimeout(()=>{
-    renderAssBox('ass-enc-container', declaracao, 'Confirmar encerramento', async ()=>{
-      await assinarDigital(`implantacao/${fid}/encerramento`, declaracao);
-      fecharModal();
-      toast('Franquia encerrada e dossiê gerado.','rd');
 
-      // Gerar PDF do Registro de Encerramento no Drive
-      (async () => {
-        try {
-          const fEnc = getFranqueado(fid);
-          const pastaId = fEnc?.drivePasstas?.pasta_et99_id;
-          if(pastaId) {
-            const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
-            await gerarPDFNoDrive('encerramento', pastaId, {
-              ticket:         fEnc.ticket,
-              nomeFranqueado: fEnc.nome,
-              por:            SESSAO.nome,
-              cargo:          SESSAO.cargo,
-              motivo:         '—',
-              declaracao,
-              hash,
-              data:           hoje(),
-              hora:           agora(),
-            });
-          }
-        } catch(e) { console.warn('Drive encerramento:', e.message); }
-      })();
-    });
-  },100);
-}
-
-/* ══════════════════════════════════════════════════
-   CADASTRO DE NOVO FRANQUEADO
-══════════════════════════════════════════════════ */
-function abrirCadastroFranqueado() {
-  if(!PERM.cadastrar){ toast('Sem permissão para cadastrar.','rd'); return; }
-
-  const gestores = Object.entries(EQUIPE)
-    .filter(([,u])=>u.tipo==='gestor')
-    .map(([tk,u])=>`<option value="${tk}">${u.nome.split(' ').slice(0,2).join(' ')}</option>`)
-    .join('');
-
-  abrirModal('Cadastrar novo franqueado',
-    `<div style="display:flex;flex-direction:column;gap:0">
-       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Dados pessoais</div>
-       <div class="grid-2" style="margin-bottom:12px">
-         <div class="field"><label>Nome completo *</label><input class="inp" id="nf-nome" placeholder="Nome do franqueado"></div>
-         <div class="field"><label>CPF *</label><input class="inp" id="nf-cpf" data-mask="cpf" placeholder="000.000.000-00" inputmode="numeric"></div>
-         <div class="field"><label>Data de nascimento</label><input class="inp" type="date" id="nf-nascimento"></div>
-         <div class="field"><label>Estado civil</label>
-           <select class="inp" id="nf-civil">
-             <option value="">Selecionar</option>
-             <option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União estável</option>
-           </select>
-         </div>
-         <div class="field"><label>Profissão atual</label><input class="inp" id="nf-profissao" placeholder="Ex: Engenheiro, Empresário..."></div>
-         <div class="field"><label>Renda mensal declarada</label><input class="inp" id="nf-renda" data-mask="money" placeholder="R$ 0,00" inputmode="numeric"></div>
-       </div>
-       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Contato e acesso</div>
-       <div class="grid-2" style="margin-bottom:12px">
-         <div class="field"><label>Telefone / WhatsApp *</label><input class="inp" id="nf-tel" data-mask="tel" placeholder="(11) 99999-0000" inputmode="numeric"></div>
-         <div class="field"><label>E-mail *</label><input class="inp" id="nf-email" placeholder="email@email.com"></div>
-         <div class="field"><label>Senha inicial do portal *</label><input class="inp" id="nf-senha" value="123456" placeholder="Senha para o portal"></div>
-       </div>
-       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Localização da unidade</div>
-       <div class="grid-2" style="margin-bottom:12px">
-         <div class="field"><label>Cidade *</label><input class="inp" id="nf-cidade" placeholder="Cidade"></div>
-         <div class="field"><label>UF *</label>
-           <select class="inp" id="nf-uf">
-             ${['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(u=>`<option>${u}</option>`).join('')}
-           </select>
-         </div>
-       </div>
-       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Dados da franquia</div>
-       <div class="grid-2" style="margin-bottom:12px">
-         <div class="field"><label>Modelo *</label>
-           <select class="inp" id="nf-modelo"><option>Premium</option><option>Smart</option></select>
-         </div>
-         <div class="field"><label>Gestor responsável *</label>
-           <select class="inp" id="nf-gestor">${gestores}</select>
-         </div>
-         <div class="field"><label>Capital disponível</label><input class="inp" id="nf-capital" data-mask="money" placeholder="R$ 0,00" inputmode="numeric"></div>
-         <div class="field"><label>Valor investido até hoje</label><input class="inp" id="nf-investido" data-mask="money" placeholder="R$ 0,00" inputmode="numeric"></div>
-         <div class="field" style="grid-column:1/-1"><label>Ponto comercial em vista</label><input class="inp" id="nf-ponto" placeholder="Endereço ou descrição do ponto"></div>
-         <div class="field" style="grid-column:1/-1"><label>Observações</label><textarea class="inp" id="nf-obs" rows="2" placeholder="Anotações relevantes..."></textarea></div>
-       </div>
-       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--primary);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">Origem / indicação</div>
-       <div class="grid-2">
-         <div class="field"><label>Empresa de origem *</label><input class="inp" id="nf-origem-empresa" placeholder="Ex: A300 Consultoria"></div>
-         <div class="field"><label>Responsável *</label><input class="inp" id="nf-origem-responsavel" placeholder="Nome do responsável"></div>
-         <div class="field"><label>Telefone</label><input class="inp" id="nf-origem-tel" data-mask="tel" placeholder="(11) 99999-0000" inputmode="numeric"></div>
-         <div class="field"><label>E-mail</label><input class="inp" id="nf-origem-email" placeholder="email@origem.com"></div>
-       </div>
-     </div>`,
-    `<button class="btn" onclick="fecharModal()">Cancelar</button>
-     <button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar franqueado</button>`
-  );
-  // Aplicar máscaras nos campos numéricos após o modal renderizar
-  aplicarMascaras();
-}
-
-function confirmarCadastroFranqueado() {
-  const nome      = $('nf-nome')?.value?.trim();
-  const cpf       = $('nf-cpf')?.value?.trim();
-  const tel       = $('nf-tel')?.value?.trim();
-  const email     = $('nf-email')?.value?.trim();
-  const cidade    = $('nf-cidade')?.value?.trim();
-  const uf        = $('nf-uf')?.value;
-  const modelo    = $('nf-modelo')?.value;
-  const gestor    = $('nf-gestor')?.value;
-  const nascimento= $('nf-nascimento')?.value || '';
-  const civil     = $('nf-civil')?.value || '';
-  const profissao = $('nf-profissao')?.value?.trim() || '';
-  const renda     = $('nf-renda')?.value?.trim() || '';
-  const capital   = $('nf-capital')?.value?.trim() || '';
-  const investido = $('nf-investido')?.value?.trim() || '';
-  const ponto     = $('nf-ponto')?.value?.trim() || '';
-  const obs       = $('nf-obs')?.value?.trim() || '';
-
-  const origemEmpresa    = $('nf-origem-empresa')?.value.trim();
-  const origemResponsavel= $('nf-origem-responsavel')?.value.trim();
-  const origemTel        = $('nf-origem-tel')?.value.trim();
-  const origemEmail      = $('nf-origem-email')?.value.trim();
-
-  if(!nome||!cpf||!tel||!email||!cidade){ toast('Preencha todos os campos obrigatórios.','rd'); return; }
-  if(!origemEmpresa||!origemResponsavel){ toast('Informe a empresa e o responsável de origem.','rd'); return; }
-
-  // Salvar/atualizar contato externo automaticamente
-  if(origemEmpresa && origemResponsavel) {
-    salvarContatoExterno({ empresa:origemEmpresa, responsavel:origemResponsavel, tel:origemTel, email:origemEmail });
-  }
-
-  const dados = getDados();
-  const fid   = 'frq_' + Date.now();
-  const novo  = {
-    id: fid,
-    ticket: gerarTicket(),
-    nome, cpf, tel, email, cidade, uf, modelo,
-    gestorToken: gestor,
-    nascimento: nascimento || '',
-    civil:      civil || '',
-    profissao:  profissao || '',
-    renda:      renda || '',
-    capital:    capital || '',
-    investido:  investido || '',
-    ponto:      ponto || '',
-    obs:        obs || '',
-    origemEmpresa: origemEmpresa || '',
-    origemResponsavel: origemResponsavel || '',
-    origemTel: origemTel || '',
-    origemEmail: origemEmail || '',
-    etapaAtual: 0,
-    status: 'em_implantacao',
-    portalLiberado: true,
-    processoIniciado: false,
-    dataInicio: hoje(),
-    etapas: [],
-    historico: [{
-      tipo: 'cadastro',
-      descricao: 'Franqueado cadastrado. Acesso ao portal liberado automaticamente.',
-      data: hoje(), hora: agora(),
-      autor: SESSAO.nome,
-    }],
-    pastas: {},
-    assinaturas: {},
-  };
-  // Coletar senha ANTES de fechar o modal
-  const senha = $('nf-senha')?.value?.trim() || '123456';
-  novo.email = email;
-  novo.senha = senha;
-
-  // Capturar valores dos campos ANTES de fechar o modal
-  // (após fecharModal os inputs são removidos do DOM)
-  const _fichaData = {
-    ticket:            novo.ticket,
-    nome,
-    cpf:               $('nf-cpf')?.value?.trim()              || novo.cpf || '',
-    tel,
-    email,
-    cidade,
-    uf:                $('nf-uf')?.value                        || '',
-    modelo:            $('nf-modelo')?.value                    || '',
-    gestor:            Object.values(EQUIPE).find(e=>e.token===gestor||e.id===gestor)?.nome || gestor || '',
-    dataCadastro:      hoje(),
-    estadoCivil:       $('nf-civil')?.value                     || '',
-    profissao:         $('nf-profissao')?.value?.trim()         || '',
-    renda:             $('nf-renda')?.value?.trim()             || '',
-    capital:           $('nf-capital')?.value?.trim()           || '',
-    investido:         $('nf-investido')?.value?.trim()         || '',
-    ponto:             $('nf-ponto')?.value?.trim()             || '',
-    obs:               $('nf-obs')?.value?.trim()               || '',
-    origemEmpresa:     origemEmpresa  || '',
-    origemResponsavel: origemResponsavel || '',
-    origemTel:         origemTel     || '',
-    origemEmail:       origemEmail   || '',
-  };
-  const _fid = novo.id;
-
-  dados.push(novo);
-  salvarDados(dados);
-  fecharModal();
-  atualizarBadges();
-  renderFranqueados();
-  toast(`${nome} cadastrado! Ticket: ${novo.ticket}`, 'gn');
-
-  // Criar pastas no Drive e gerar Ficha Cadastral
-  // (assíncrono — não bloqueia o fluxo)
-  (async () => {
-    try {
-      toast('☁ Criando pastas no Drive...', 'or');
-
-      // 1. Criar estrutura de pastas
-      const pastas = await appsGet({
-        action: 'criarPastas',
-        fid:    _fid,
-        nome:   _fichaData.nome,
-        ticket: _fichaData.ticket,
-      });
-
-      if(!pastas || pastas.erro) throw new Error(pastas?.erro || 'Sem resposta do Apps Script');
-      if(!pastas.pasta_et00_id)  throw new Error('Pasta 00_Cadastro não retornada');
-
-      // Salvar IDs das pastas na ficha do franqueado
-      atualizarFranqueado(_fid, { drivePasstas: pastas });
-
-      // Salvar também no Firebase para o portal ler
-      try { db.ref('franqueados/' + _fid + '/drivePasstas').set(pastas); } catch(e2) {}
-
-      // Sincronizar links automaticamente na aba "Acesso e documentos"
-      sincronizarPastasDriveNaFicha(_fid, pastas);
-
-      toast('📄 Gerando Ficha Cadastral...', 'or');
-
-      // 2. Gerar Ficha Cadastral na pasta 00_Cadastro
-      const pdfResult = await gerarPDFNoDrive('ficha_cadastral', pastas.pasta_et00_id, _fichaData);
-
-      if(pdfResult?.ok) {
-        toast('✓ Drive: pastas e Ficha Cadastral criadas!', 'gn');
-      } else {
-        console.warn('PDF não gerado:', pdfResult);
-        toast('Pastas criadas. Ficha Cadastral falhou — veja o console.', 'or');
-      }
-    } catch(e) {
-      console.error('Drive/PDF erro:', e.message);
-      toast('Drive: ' + e.message, 'rd');
-    }
-  })();
-
-  // Criar usuário no Firebase Auth usando app secundário isolado
-  // Isso evita que o Firebase troque a sessão do gestor logado
-  authSecundario.createUserWithEmailAndPassword(email, senha)
-    .then(cred => {
-      // Salvar mapeamento uid → fid no banco
-      return db.ref('portal_usuarios/' + cred.user.uid).set({ fid: novo.id, email })
-        .then(() => {
-          // Deslogar do app secundário — nunca afeta o gestor
-          authSecundario.signOut();
-          toast('Portal liberado para ' + nome.split(' ')[0] + '!', 'gn');
-        });
-    })
-    .catch(err => {
-      if(err.code === 'auth/email-already-in-use') {
-        toast('E-mail já cadastrado no portal.', 'or');
-      } else {
-        console.warn('Firebase Auth (portal):', err.message);
-        toast('Atenção: conta no portal não criada. Verifique o e-mail.', 'or');
-      }
-    });
-}
-
-/* ══════════════════════════════════════════════════
-   ALERTAS
-══════════════════════════════════════════════════ */
-function renderAlertas() {
-  const dados   = getDados();
-  const hoje2   = new Date(); hoje2.setHours(0,0,0,0);
-  const agora2  = Date.now();
-  const alertas = [];
-
-  // ── 1. Prazos vencidos (franqueadora) ──
-  getPrazos().filter(p=>!p.concluido).forEach(p=>{
-    const d = new Date(p.data+'T00:00');
-    const dias = Math.floor((d-hoje2)/(864e5));
-    if(dias < 0) {
-      const f = p.franqueadoId ? getFranqueado(p.franqueadoId) : null;
-      alertas.push({
-        tipo:'prazo_vencido', cor:'var(--red)', icone:'⏰',
-        titulo: 'Prazo vencido — '+p.titulo,
-        sub:    (f?f.nome.split(' ').slice(0,2).join(' ')+' · ':'')+'Venceu há '+Math.abs(dias)+'d ('+new Date(p.data+'T00:00').toLocaleDateString('pt-BR')+')',
-        acao: ()=>abrirPrazo(p.id),
-        btnLabel:'Ver prazo',
-      });
-    } else if(dias<=2) {
-      const f = p.franqueadoId ? getFranqueado(p.franqueadoId) : null;
-      alertas.push({
-        tipo:'prazo_urgente', cor:'var(--amber)', icone:'⏰',
-        titulo: 'Prazo vencendo — '+p.titulo,
-        sub:    (f?f.nome.split(' ').slice(0,2).join(' ')+' · ':'')+( dias===0?'Vence hoje':dias===1?'Vence amanhã':'Vence em '+dias+'d'),
-        acao: ()=>abrirPrazo(p.id),
-        btnLabel:'Ver prazo',
-      });
-    }
-  });
-
-  // ── 2. Tarefas sem ciência > 12h ──
-  getTarefas().filter(t=>!t.ciencia&&t.status!=='concluida'&&t.criadoTs).forEach(t=>{
-    const horas = Math.floor((agora2-t.criadoTs)/3600000);
-    if(horas >= 12) {
-      const resp = Object.values(EQUIPE).find(e=>e.token===t.responsavelToken);
-      const p    = t.prazoId ? getPrazos().find(x=>x.id===t.prazoId) : null;
-      alertas.push({
-        tipo:'sem_ciencia', cor:'var(--amber)', icone:'👁',
-        titulo: (resp?.nome.split(' ')[0]||'—')+' não confirmou ciência — '+t.titulo,
-        sub:    horas+'h sem resposta'+(p?' · Prazo: '+p.titulo:''),
-        acao: ()=>{ ir('agenda',document.querySelector('[onclick*=agenda]')); setTimeout(()=>trocarSubAgenda('delegadas',document.querySelector('[data-sub=delegadas]')),200); },
-        btnLabel:'Ver delegadas',
-      });
-    }
-  });
-
-  // ── 3. Processos parados > 7 dias na mesma etapa ──
-  dados.filter(f=>f.processoIniciado&&f.etapaAtual<=ETAPAS.length&&f.status!=='desistencia').forEach(f=>{
-    const evs = getEventosEtapa(f.id, f.etapaAtual)||[];
-    const ultimo = evs.filter(e=>e.timestamp).sort((a,b)=>b.timestamp-a.timestamp)[0];
-    if(ultimo) {
-      const dias = Math.floor((agora2-ultimo.timestamp)/(864e5));
-      if(dias>=7) alertas.push({
-        tipo:'parado', cor:'var(--red)', icone:'🔴',
-        titulo: f.nome.split(' ').slice(0,2).join(' ')+' parado há '+dias+' dias',
-        sub:    f.ticket+' · Etapa '+f.etapaAtual+' — '+( ETAPAS.find(e=>e.id===f.etapaAtual)?.nome||''),
-        acao: ()=>ir('processo',null,f.id),
-        btnLabel:'Ver processo',
-      });
-    }
-  });
-
-  // ── 4. Documentos rejeitados aguardando reenvio ──
-  dados.filter(f=>f.processoIniciado&&f.status!=='desistencia').forEach(f=>{
-    for(let et=1; et<=ETAPAS.length; et++) {
-      const docs = StorageAdapter.listarDocumentos(f.id, et)||[];
-      const rejeit = docs.filter(d=>d.status==='rejeitado');
-      if(rejeit.length) alertas.push({
-        tipo:'doc_rejeitado', cor:'var(--red)', icone:'📄',
-        titulo: rejeit.length+' documento'+(rejeit.length>1?'s':'')+' rejeitado'+(rejeit.length>1?'s':'')+' — '+f.nome.split(' ')[0],
-        sub:    f.ticket+' · Etapa '+et+' · Aguardando reenvio',
-        acao: ()=>ir('processo',null,f.id),
-        btnLabel:'Ver processo',
-      });
-    }
-  });
-
-  // ── 5. Reuniões hoje sem confirmação de todos ──
-  const hoje_str = hoje2.toISOString().split('T')[0];
-  getEventosAgenda().filter(e=>e.tipo==='reuniao'&&e.data===hoje_str).forEach(ev=>{
-    const pendentes = (ev.participantes||[]).filter(tk=>ev.confirmacoes?.[tk]===null||ev.confirmacoes?.[tk]===undefined);
-    if(pendentes.length) alertas.push({
-      tipo:'reuniao_hoje', cor:'var(--primary)', icone:'📞',
-      titulo: 'Reunião hoje sem confirmação — '+ev.titulo,
-      sub:    (ev.hora?ev.hora+' · ':'')+pendentes.length+' participante'+(pendentes.length>1?'s':'')+' sem resposta',
-      acao: ()=>abrirEvento(ev.id),
-      btnLabel:'Ver reunião',
-    });
-  });
-
-  // ── Ordenar: vermelho primeiro, depois âmbar, depois azul ──
-  const ordem = {'prazo_vencido':0,'parado':1,'doc_rejeitado':2,'sem_ciencia':3,'prazo_urgente':4,'reuniao_hoje':5};
-  alertas.sort((a,b)=>(ordem[a.tipo]??9)-(ordem[b.tipo]??9));
-
-  // ── Atualizar badge ──
-  const badge = $('badge-alertas');
-  if(badge) {
-    badge.textContent = alertas.length||'0';
-    badge.style.background = alertas.length?'var(--red)':'var(--accent)';
-    badge.style.color = alertas.length?'#fff':'var(--primary-dark)';
-    badge.style.display = '';
-  }
-
-  // ── Render ──
-  const grupos = {
-    prazo_vencido:  {label:'Prazos vencidos',           cor:'var(--red)'},
-    parado:         {label:'Processos parados',          cor:'var(--red)'},
-    doc_rejeitado:  {label:'Documentos rejeitados',      cor:'var(--red)'},
-    sem_ciencia:    {label:'Aguardando ciência (+12h)',   cor:'var(--amber)'},
-    prazo_urgente:  {label:'Prazos urgentes',            cor:'var(--amber)'},
-    reuniao_hoje:   {label:'Reuniões hoje',              cor:'var(--primary)'},
-  };
-
-  $('content').innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-      '<div style="font-size:12px;color:var(--text-dim)">' +
-        (alertas.length ? alertas.length+' alerta'+(alertas.length>1?'s ativos':' ativo') : 'Nenhum alerta — tudo em ordem') +
-      '</div>' +
-      '<button class="btn sm" onclick="renderAlertas()">↻ Atualizar</button>' +
-    '</div>' +
-    (alertas.length===0
-      ? '<div class="card"><div style="text-align:center;padding:48px">' +
-          '<div style="font-size:32px;margin-bottom:12px">✅</div>' +
-          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Tudo em ordem</div>' +
-          '<div style="font-size:12px;color:var(--text-dim)">Nenhum prazo vencido, processo parado ou tarefa sem ciência.</div>' +
-        '</div></div>'
-      : alertas.map(a =>
-          '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;' +
-            'border:1px solid '+(a.cor==='var(--red)'?'var(--red-border)':a.cor==='var(--amber)'?'var(--amber-border)':'var(--primary-border)')+';' +
-            'background:'+(a.cor==='var(--red)'?'var(--red-soft)':a.cor==='var(--amber)'?'var(--amber-soft)':'var(--primary-soft)')+';' +
-            'border-radius:10px;margin-bottom:8px;transition:all .15s">' +
-            '<div style="font-size:18px;flex-shrink:0;margin-top:1px">'+a.icone+'</div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:2px">'+a.titulo+'</div>' +
-              '<div style="font-size:11px;color:var(--text-dim)">'+a.sub+'</div>' +
-            '</div>' +
-            '<button class="btn sm" style="flex-shrink:0;font-size:11px" onclick="('+a.acao.toString()+')()">' +
-              a.btnLabel+'→' +
-            '</button>' +
-          '</div>'
-        ).join('')
-    );
-}
-
-// Atualizar badge de alertas ao abrir o sistema
 function atualizarBadgeAlertas() {
   const dados   = getDados();
   const hoje2   = new Date(); hoje2.setHours(0,0,0,0);
