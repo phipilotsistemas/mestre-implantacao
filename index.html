@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · cadastro-completo-v6','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · portal-pastas-v7','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -2025,7 +2025,7 @@ async function confirmarCadastroFranqueado() {
     await db.ref('portal_usuarios/' + cred.user.uid).set({
       email: email,
       nome: nome,
-      franqueadoId: novo.id,
+      fid: novo.id,
       ticket: ticket,
       criadoEm: hoje(),
       senhaAlterada: false
@@ -2047,6 +2047,9 @@ async function confirmarCadastroFranqueado() {
 
   fecharModal();
   toast(nome + ' cadastrado como ' + ticket + '. Acesso ao portal: ' + email + ' / senha: 123456','gn');
+
+  // Criar pastas no Drive via Apps Script
+  try { criarPastasAgora(novo.id); } catch(e) { console.warn('Pastas Drive:', e.message); }
 
   setTimeout(function(){
     var btnEsteira = document.querySelector('.sb-item[onclick*="franqueados"]');
