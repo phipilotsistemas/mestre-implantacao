@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · data-format-v26','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · motivo-calendario-v27','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -10476,9 +10476,10 @@ function renderCalendario() {
       reusD.slice(0,2).map(r => {
         const dados2 = getDados();
         const f2 = dados2.find(x=>x.id===r.fid);
-        return '<div class="cal-ev cal-ev-reuniao" onclick="event.stopPropagation();fecharModal();cancelarReuniao(\"'+r.id+'\")"' +
-          ' title="'+r.hora+' · '+(f2?.nome?.split(' ')[0]||'Reunião')+' · '+r.motivo+'">' +
-          '📞 '+r.hora+' — '+(f2?.nome?.split(' ')[0]||'Franqueado')+'</div>';
+        const assunto = r.motivo || r.descricao || 'Reunião';
+        return '<div class="cal-ev cal-ev-reuniao" onclick="event.stopPropagation();clicarDia(this.closest(\'.cal-day\'))"' +
+          ' title="'+r.hora+' · '+(f2?.nome?.split(' ').slice(0,2).join(' ')||'')+' · '+assunto+'">' +
+          '📞 '+r.hora+' — '+assunto+'</div>';
       }).join('') +
       // popup substituído por modal (clicarDia → abrirModalDia)
       '' +
