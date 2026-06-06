@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · validado-headless-v1','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · diagnostico-clique-v2','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1946,6 +1946,7 @@ function irFicha(fid) {
 }
 
 function ir(aba, btn, fid) {
+  console.log('%c[IR] clique aba=' + aba + ' | RENDERS tem? ' + (!!RENDERS[aba]) + ' | content existe? ' + (!!document.getElementById('content')), 'background:#1D9E75;color:#fff;padding:2px 8px;border-radius:3px');
   _abaAtual = aba;
   document.querySelectorAll('.sb-item').forEach(b=>b.classList.remove('ativo'));
   if(btn) btn.classList.add('ativo');
@@ -1958,7 +1959,20 @@ function ir(aba, btn, fid) {
   }
   $('topbar-title').textContent = TITULOS[aba]||aba;
   const fn = RENDERS[aba];
-  if(fn) fn();
+  if(fn) {
+    try {
+      const _c = document.getElementById('content');
+      const _antes = _c ? _c.innerHTML.length : -1;
+      fn();
+      const _dps = _c ? _c.innerHTML.length : -1;
+      console.log('[IR] render "' + aba + '" OK — content ' + _antes + ' -> ' + _dps + ' chars');
+    } catch(err) {
+      console.error('[IR] ERRO no render de "' + aba + '":', err);
+      alert('Erro ao abrir ' + aba + ': ' + err.message);
+    }
+  } else {
+    console.warn('[IR] SEM render para aba "' + aba + '" (RENDERS nao tem essa chave)');
+  }
   setTimeout(()=>{ try{ if(window.lucide) lucide.createIcons(); }catch(e){} }, 50);
 }
 
