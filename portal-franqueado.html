@@ -1647,6 +1647,15 @@ function entrarNoPortal() {
   $('topbar-ticket').textContent = PORTAL.ticket || PORTAL.fid || '';
   irAba('inicio', document.querySelector('[data-aba=inicio]'));
   atualizarBadges();
+  // Listener para notificações do gestor
+  try {
+    db.ref('notif_franqueado/' + PORTAL.fid).on('value', snap => {
+      const notif = snap.val();
+      if(!notif || notif.lido) return;
+      processarNotifGestor(notif);
+    });
+  } catch(e) {}
+
   // Listener em tempo real: atualizar dados do franqueado
   try {
     db.ref('franqueados/' + PORTAL.fid).on('value', snap => {
@@ -2030,7 +2039,17 @@ function cardChamado(c) {
           ${c.assinaturaFranqueado ? '✓ Resposta final' : 'Resposta do gestor'} · ${c.dataResposta}
         </div>
         <div style="padding:10px;font-size:12px;color:var(--text)">${c.respostaGestor}</div>
-        ${c.status === 'em_andamento' && !c.assinaturaFranqueado ? `
+        ${(c.status === 'em_andamento' && !c.assinaturaFranqueado) ? `
+        <div style="padding:0 10px 10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="assinarConclusaoChamado('${c.id}')"
+            style="padding:8px 16px;border-radius:8px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:12px;font-weight:800">
+            ✓ Confirmar atendimento
+          </button>
+          <button onclick="reabrirChamado('${c.id}')"
+            style="padding:8px 16px;border-radius:8px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;cursor:pointer;font-size:12px;font-weight:700">
+            ↩ Não resolvido
+          </button>
+        </div>` : (c.status === 'aberto' && c.respostaGestor && !c.retornoFranqueado) ? `
         <div style="padding:0 10px 10px;display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="assinarConclusaoChamado('${c.id}')"
             style="padding:8px 16px;border-radius:8px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:12px;font-weight:800">
@@ -2106,8 +2125,7 @@ async function confirmarReabertura(chamadoId) {
 
     // Reabrir
     chamado.status          = 'aberto';
-    chamado.respostaGestor  = null;
-    chamado.dataResposta    = null;
+    // Manter respostaGestor visível no histórico mas marcar como reaberto
     chamado.resolvidoGestor = false;
     chamado.retornoFranqueado = motivo;
     chamado.dataRetorno     = hoje() + ' às ' + agora();
@@ -2693,6 +2711,150 @@ function renderInicio() {
 }
 
 /* ══ ETAPAS ══ */
+
+/* ══════════════════════════════════════════════════════════════
+   NOTIFICAÇÕES DO GESTOR → FRANQUEADO
+══════════════════════════════════════════════════════════════ */
+function processarNotifGestor(notif) {
+  if(!notif || notif._processado) return;
+
+  if(notif.tipo === 'etapa_iniciada') {
+    // Atualizar dados locais
+    PORTAL.etapaAtual = notif.etapa;
+    // Mostrar banner de nova etapa
+    mostrarBannerEtapaIniciada(notif);
+    // Atualizar badge
+    const badge = document.getElementById('badge-etapas-p');
+    if(badge) { badge.style.display='block'; badge.textContent='1'; }
+    // Marcar como lido
+    try { db.ref('notif_franqueado/' + PORTAL.fid).update({ lido: true, _processado: true }); } catch(e) {}
+  }
+
+  if(notif.tipo === 'etapa_aprovada') {
+    mostrarBannerEtapaAprovada(notif);
+    try { db.ref('notif_franqueado/' + PORTAL.fid).update({ lido: true, _processado: true }); } catch(e) {}
+  }
+
+  if(notif.tipo === 'etapa_rejeitada') {
+    mostrarBannerEtapaRejeitada(notif);
+    try { db.ref('notif_franqueado/' + PORTAL.fid).update({ lido: true, _processado: true }); } catch(e) {}
+  }
+}
+
+function mostrarBannerEtapaIniciada(notif) {
+  // Banner persistente na tela
+  const banner = document.getElementById('banner-notif') || (() => {
+    const b = document.createElement('div');
+    b.id = 'banner-notif';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 16px;background:var(--primary);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    document.body.prepend(b);
+    return b;
+  })();
+  banner.innerHTML = `
+    <span>🔔 Nova etapa iniciada pelo gestor — Etapa ${notif.etapa}: ${notif.nomeEtapa}</span>
+    <button onclick="irAba('etapas',null);this.parentElement.remove()"
+      style="padding:6px 14px;border-radius:8px;background:#fff;color:var(--primary);border:none;cursor:pointer;font-size:12px;font-weight:800">
+      Ver etapa
+    </button>`;
+}
+
+function mostrarBannerEtapaAprovada(notif) {
+  const banner = document.getElementById('banner-notif') || (() => {
+    const b = document.createElement('div');
+    b.id = 'banner-notif';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 16px;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    document.body.prepend(b);
+    return b;
+  })();
+  banner.style.background = '#16A34A';
+  banner.innerHTML = `
+    <span>✅ Etapa ${notif.etapa} aprovada pelo gestor! Assine para fechar o ciclo.</span>
+    <button onclick="abrirCienciaAprovacao(${notif.etapa});this.parentElement.remove()"
+      style="padding:6px 14px;border-radius:8px;background:#fff;color:#16A34A;border:none;cursor:pointer;font-size:12px;font-weight:800">
+      Assinar ciência
+    </button>`;
+}
+
+function mostrarBannerEtapaRejeitada(notif) {
+  const banner = document.getElementById('banner-notif') || (() => {
+    const b = document.createElement('div');
+    b.id = 'banner-notif';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:12px 16px;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    document.body.prepend(b);
+    return b;
+  })();
+  banner.style.background = '#DC2626';
+  banner.innerHTML = `
+    <span>⚠ Etapa ${notif.etapa} precisa de correções: ${notif.motivo}</span>
+    <button onclick="irAba('etapas',null);this.parentElement.remove()"
+      style="padding:6px 14px;border-radius:8px;background:#fff;color:#DC2626;border:none;cursor:pointer;font-size:12px;font-weight:800">
+      Ver correções
+    </button>`;
+}
+
+// PASSO 4: Franqueado assina ciência da aprovação (fecha o ciclo)
+function abrirCienciaAprovacao(etId) {
+  const declaracao = `Eu, ${PORTAL.nome} (${PORTAL.ticket}), declaro ter recebido a notificação de aprovação da Etapa ${etId} pelo gestor e concordo com o avanço para a próxima etapa do processo de implantação. Data: ${hoje()} às ${agora()}.`;
+
+  abrirModal(`✅ Etapa ${etId} aprovada — Assinar ciência`, `
+    <div style="background:#F0FDF4;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:800;color:var(--green)">🎉 Parabéns! O gestor aprovou a Etapa ${etId}.</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Assine abaixo para confirmar a ciência e avançar para a próxima etapa.</div>
+    </div>
+    <div id="ciencia-ass-container"></div>
+    <button onclick="fecharModal()" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;background:none;border:1.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text-dim)">Fechar</button>
+  `, '');
+
+  setTimeout(() => {
+    renderAssBox('ciencia-ass-container', declaracao, '✍ Assinar ciência e avançar', async () => {
+      const hash = Math.abs(declaracao.split('').reduce((h,ch)=>((h<<5)-h)+ch.charCodeAt(0),0)).toString(16);
+      const ts   = Date.now();
+      const proxEtapa = Number(etId) + 1;
+
+      try {
+        // Registrar assinatura de ciência no Firebase
+        await db.ref(`validacoes/${PORTAL.fid}/et${etId}`).update({
+          cienciaFranqueado:    true,
+          declaracaoCiencia:    declaracao,
+          hashCiencia:          hash,
+          dataCiencia:          hoje(),
+          horaCiencia:          agora(),
+        });
+
+        // Registrar evento
+        await db.ref(`etapas/${PORTAL.fid}/et${etId}/eventos/${ts}`).set({
+          tipo:  'ciencia_franqueado',
+          texto: `Franqueado assinou ciência da aprovação da Etapa ${etId}. Processo avança para Etapa ${proxEtapa}.`,
+          autor: PORTAL.nome,
+          hash,
+          data:  hoje(), hora: agora(),
+        });
+
+        // Notificar gestor com resumo da etapa concluída
+        await db.ref(`notif_gestor/${PORTAL.fid}`).set({
+          tipo:       'etapa_concluida_ciclo',
+          etapa:      etId,
+          franqueado: PORTAL.nome,
+          ticket:     PORTAL.ticket,
+          fid:        PORTAL.fid,
+          data:       hoje(), hora: agora(), lido: false,
+          timestamp:  ts,
+        });
+
+        // Marcar notificação como processada
+        await db.ref(`notif_franqueado/${PORTAL.fid}`).update({ lido: true, _processado: true });
+
+        fecharModal();
+        toast(`🎉 Etapa ${etId} concluída! Avançando para Etapa ${proxEtapa}.`, 'gn');
+        renderEtapas();
+
+      } catch(e) {
+        toast('Erro: ' + e.message, 'rd');
+      }
+    }, '#F5A623', '#1B3F8B');
+  }, 150);
+}
+
 function renderEtapas() {
   const pct = Math.round(((Math.max(1,PORTAL.etapaAtual)-1)/ETAPAS_P.length)*100);
   let html = `
@@ -2759,7 +2921,15 @@ function abrirDetalheEtapa(etId) {
       </div>
       ${docs.map(d=>docRow(d,etId,atual)).join('')}
     </div>`,
-    (atual?`<button class="btn-validar" onclick="solicitarValidacao(${etId})"><i class="fi fi-sr-badge-check"></i> Solicitar validação desta etapa</button>`:'') +
+    (atual?`
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <button class="btn-validar" onclick="solicitarValidacao(${etId})" style="flex:1">
+      <i class="fi fi-sr-badge-check"></i> Concluí esta etapa
+    </button>
+    <button onclick="irAba('suporte',null)" style="padding:10px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
+      💬 Tenho dúvidas
+    </button>
+  </div>`:'') +
     `<button class="btn" style="width:100%;margin-top:8px" onclick="fecharModal()">Fechar</button>`
   );
 }
