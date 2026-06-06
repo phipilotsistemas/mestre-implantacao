@@ -2511,11 +2511,17 @@ function renderMihaReuniao(r, notif) {
         </div>
       </div>
 
-      ${r.link ? `
-      <a href="${r.link}" target="_blank"
-        style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:12px;background:var(--primary);color:#fff;text-decoration:none;font-size:14px;font-weight:800;margin-bottom:12px">
+      <button onclick="entrarNaReuniao('${r.id}','${r.link||''}')"
+        style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;width:100%;border-radius:12px;background:var(--primary);color:#fff;font-size:14px;font-weight:800;margin-bottom:12px;border:none;cursor:pointer;font-family:inherit">
         🔗 Entrar na reunião
-      </a>` : ''}
+      </button>
+      <div id="conclusao-reun-${r.id}" style="display:none;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:12px;margin-bottom:10px;font-size:12px;color:#166534">
+        ✅ Reunião iniciada — registrada em <span id="hora-entrou-${r.id}"></span>.<br>
+        <button onclick="abrirRegistroConclusao('${r.id}')"
+          style="margin-top:8px;padding:6px 14px;border-radius:8px;background:#166534;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">
+          📝 Registrar conclusão da reunião
+        </button>
+      </div>
 
       <button onclick="cancelarReuniaoPortal('${r.id}')"
         style="width:100%;padding:10px;border-radius:10px;background:none;border:1.5px solid #FECACA;color:#DC2626;cursor:pointer;font-size:12px;font-weight:700">
@@ -2527,9 +2533,10 @@ function renderMihaReuniao(r, notif) {
 
 function renderNotifGestor(notif) {
   const tipos = {
-    cancelada: { icon:'❌', cor:'#FEE2E2', txtCor:'#DC2626', msg:'Sua reunião foi cancelada pelo gestor.' },
-    reagendada:{ icon:'📅', cor:'#EFF6FF', txtCor:'#1E40AF', msg:`Sua reunião foi reagendada para ${notif.novaData} às ${notif.horaV}.` },
-    resolvida_sem_reuniao:{ icon:'✅', cor:'#F0FDF4', txtCor:'#166534', msg:`Seu pedido foi resolvido pelo gestor sem necessidade de reunião.` },
+    cancelada:             { icon:'❌', cor:'#FEE2E2', txtCor:'#DC2626', msg:'Sua reunião foi cancelada pelo gestor.' },
+    reagendada:            { icon:'📅', cor:'#EFF6FF', txtCor:'#1E40AF', msg:`Sua reunião foi reagendada para ${notif.novaData} às ${notif.horaV}.` },
+    resolvida_sem_reuniao: { icon:'✅', cor:'#F0FDF4', txtCor:'#166534', msg:`Seu pedido foi resolvido pelo gestor sem necessidade de reunião.` },
+    realizada:             { icon:'📝', cor:'#F0FDF4', txtCor:'#166534', msg:`Reunião registrada como realizada pelo gestor.${notif.resumo?' Resumo: '+notif.resumo:''}` },
   };
   const t = tipos[notif.tipo];
   if(!t) return '';
@@ -2673,6 +2680,22 @@ async function confirmarAgendamento(data, hora, link, duracao) {
     await db.ref('reunioes').set(novaLista);
     // Limpar notificação anterior
     await db.ref('reunioes_notif/' + PORTAL.fid).remove();
+    // Notificar gestor sobre nova reunião agendada
+    const gestorToken = PORTAL.gestor?.token || '';
+    if(gestorToken) {
+      await db.ref('reunioes_nova_notif/' + gestorToken + '/' + id).set({
+        tipo:       'nova_reuniao',
+        reuId:      id,
+        fid:        PORTAL.fid,
+        franqueado: PORTAL.nome,
+        ticket:     PORTAL.ticket,
+        data,
+        hora,
+        motivo,
+        agendadoEm: hoje() + ' às ' + agora(),
+        lido:       false,
+      });
+    }
   } catch(e) {
     erroEl.style.display='block';
     erroEl.textContent='Erro ao salvar. Tente novamente.';
@@ -2681,6 +2704,127 @@ async function confirmarAgendamento(data, hora, link, duracao) {
 
   fecharModal();
   toast('Reunião agendada! ' + formatarDataExtenso(data) + ' às ' + hora, 'gn');
+  renderAgendaReunioes();
+}
+
+async function entrarNaReuniao(reuId, link) {
+  // Abrir link da reunião
+  if(link) window.open(link, '_blank');
+
+  // Registrar entrada no Firebase
+  const agora2 = new Date();
+  const horaStr = agora2.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  try {
+    db.ref('reunioes_entrada/' + PORTAL.fid + '/' + reuId).set({
+      fid:        PORTAL.fid,
+      franqueado: PORTAL.nome,
+      ticket:     PORTAL.ticket,
+      reuId:      reuId,
+      entradaEm:  hoje() + ' às ' + horaStr,
+      timestamp:  Date.now(),
+    });
+  } catch(e) {}
+
+  // Mostrar bloco de conclusão
+  const bloco = document.getElementById('conclusao-reun-' + reuId);
+  if(bloco) { bloco.style.display = 'block'; }
+  const spanHora = document.getElementById('hora-entrou-' + reuId);
+  if(spanHora) spanHora.textContent = horaStr;
+}
+
+function abrirRegistroConclusao(reuId) {
+  const todasReunioes = JSON.parse(localStorage.getItem('mo_reunioes_portal') || '[]');
+  const r = todasReunioes.find(x => x.id === reuId);
+  const duracaoSugerida = r?.duracao || 45;
+
+  const corpo = `
+    <div style="min-width:300px">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px">
+        Preencha o que quiser — esses dados ficam registrados para você e para o gestor.
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label>Duração real da reunião (minutos)</label>
+        <input class="inp" id="conc-duracao" type="number" min="5" max="240" value="${duracaoSugerida}" style="width:100px">
+      </div>
+      <div class="field">
+        <label>Resumo <span style="font-weight:400;color:var(--text-dim)">(opcional)</span></label>
+        <textarea class="inp" id="conc-resumo" rows="4"
+          placeholder="Descreva brevemente o que foi tratado na reunião, decisões tomadas, próximos passos..."></textarea>
+      </div>
+    </div>`;
+
+  // Usar modal simples inline
+  const overlay = document.createElement('div');
+  overlay.id = 'conc-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px;max-width:420px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.25)">
+      <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:16px">📝 Registrar conclusão da reunião</div>
+      ${corpo}
+      <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+        <button onclick="document.getElementById('conc-overlay').remove()"
+          style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-family:inherit;font-size:13px">
+          Pular
+        </button>
+        <button onclick="confirmarConclusaoReuniao('${reuId}')"
+          style="padding:8px 16px;border-radius:8px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">
+          ✅ Confirmar e registrar
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function confirmarConclusaoReuniao(reuId) {
+  const duracao = parseInt(document.getElementById('conc-duracao')?.value) || 0;
+  const resumo  = document.getElementById('conc-resumo')?.value?.trim() || '';
+  document.getElementById('conc-overlay')?.remove();
+
+  const registro = {
+    reuId,
+    fid:           PORTAL.fid,
+    franqueado:    PORTAL.nome,
+    ticket:        PORTAL.ticket,
+    duracaoReal:   duracao,
+    resumoFranqueado: resumo,
+    registradoEm:  hoje() + ' às ' + agora(),
+    timestamp:     Date.now(),
+  };
+
+  // Salvar no Firebase
+  try {
+    await db.ref('reunioes_conclusao/' + reuId + '/franqueado').set(registro);
+    // Atualizar status da reunião
+    const reunioes = await db.ref('reunioes').once('value');
+    const lista = reunioes.val() || [];
+    const arr = Array.isArray(lista) ? lista : Object.values(lista);
+    const r = arr.find(x => x.id === reuId);
+    if(r) {
+      r.status           = 'realizada';
+      r.duracaoReal      = duracao;
+      r.resumoFranqueado = resumo;
+      r.dataRealizacao   = hoje() + ' às ' + agora();
+      await db.ref('reunioes').set(arr);
+    }
+  } catch(e) { console.warn('Erro ao registrar conclusão:', e); }
+
+  // Notificar gestor
+  try {
+    db.ref('reunioes_notif_gestor/' + reuId).set({
+      tipo:      'realizada',
+      reuId,
+      franqueado: PORTAL.nome,
+      ticket:    PORTAL.ticket,
+      duracaoReal: duracao,
+      resumo,
+      data: hoje(),
+    });
+  } catch(e) {}
+
+  // Feedback visual
+  const bloco = document.getElementById('conclusao-reun-' + reuId);
+  if(bloco) bloco.innerHTML = '<div style="color:#166534;font-weight:700;font-size:13px">✅ Reunião registrada com sucesso!</div>';
+
   renderAgendaReunioes();
 }
 
