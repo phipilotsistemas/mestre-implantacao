@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · listener-reunioes-v25','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · data-format-v26','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1787,12 +1787,14 @@ function renderDashboard() {
       return new Date(p.dataISO+'T00:00') < hoje2;
     });
     if(prazoVenc.length) itens.push({ tipo:'atraso', label:`Prazo vencido: ${prazoVenc[0].titulo}`, urgencia:1 });
-    // Reunião hoje/amanhã
+    // Reunião hoje/amanhã — suporta YYYY-MM-DD (portal) e DD/MM/YYYY (painel)
     const reuProx = reunioes.filter(r => {
       if(r.fid!==f.id) return false;
-      const [d,m,y] = (r.data||'').split('/').map(Number);
-      if(!d) return false;
-      const dr = new Date(y,m-1,d);
+      const raw = r.data||'';
+      let dr;
+      if(raw.includes('-')) { dr = new Date(raw+'T00:00'); }          // YYYY-MM-DD
+      else { const [d,m,y]=raw.split('/').map(Number); dr=new Date(y,m-1,d); } // DD/MM/YYYY
+      if(isNaN(dr)) return false;
       return dr <= amanha;
     });
     if(reuProx.length) {
@@ -10438,11 +10440,16 @@ function renderCalendario() {
     const isHoje = data.getTime() === hoje2.getTime();
     const evsD   = evs.filter(e=>e.data===key);
     const tipo   = TIPOS_EVENTO.find(t=>t.id===evsD[0]?.tipo);
-    // Reuniões agendadas neste dia (converte DD/MM/YYYY → YYYY-MM-DD)
+    // Reuniões agendadas neste dia — r.data pode ser YYYY-MM-DD (portal) ou DD/MM/YYYY (painel)
     const reusD  = getReunioes().filter(r => {
       if(r.status !== 'agendada') return false;
-      const [d2,m2,y2] = (r.data||'').split('/').map(Number);
-      return `${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}` === key;
+      const d = r.data || '';
+      // Formato YYYY-MM-DD (portal)
+      if(d === key) return true;
+      // Formato DD/MM/YYYY (painel)
+      const [d2,m2,y2] = d.split('/').map(Number);
+      if(y2) return `${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}` === key;
+      return false;
     });
 
     return '<div class="cal-day'+(outroMes?' outro-mes':'')+(isHoje?' hoje':'')+'" ' +
@@ -12252,8 +12259,11 @@ function abrirModalDia(key) {
   const evs      = getEventosAgenda().filter(e => e.data === key);
   const reunioes = getReunioes().filter(r => {
     if(r.status !== 'agendada') return false;
-    const [d,m,y] = (r.data||'').split('/').map(Number);
-    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}` === key;
+    const d = r.data || '';
+    if(d === key) return true; // YYYY-MM-DD direto
+    const [d2,m2,y2] = d.split('/').map(Number);
+    if(y2) return `${y2}-${String(m2).padStart(2,'0')}-${String(d2).padStart(2,'0')}` === key;
+    return false;
   });
   const prazos = getPrazos().filter(p => p.data === key && !p.concluido);
   const dados  = getDados();
