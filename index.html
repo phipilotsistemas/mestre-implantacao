@@ -843,9 +843,9 @@ select.inp{cursor:pointer}
     </div>
     <div class="sb-nav">
 
-      <!-- NEGOCIAÇÃO -->
-      <div class="sb-group">NEGOCIAÇÃO</div>
-      <button class="sb-item" onclick="ir('candidatos',this)">
+      <!-- NEGOCIAÇÃO (oculto — franqueados sao cadastrados diretamente) -->
+      <div class="sb-group" style="display:none">NEGOCIAÇÃO</div>
+      <button class="sb-item" onclick="ir('candidatos',this)" style="display:none">
         <span>Candidatos</span>
         <span class="badge" id="badge-cand" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · recursao-corrigida-v4','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · cadastro-direto-v5','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1871,12 +1871,88 @@ function renderAlertas() {
 
 /* ══ ALIASES DE COMPATIBILIDADE ══ */
 function abrirCadastroFranqueado() {
-  // CORRECAO DO LOOP: antes esta funcao clicava no proprio botao btn-novo-frq,
-  // cujo onclick e abrirCadastroFranqueado() -> recursao infinita que travava o painel.
-  // Um novo franqueado nasce de um candidato (Negociacao) e depois "migrar para a esteira".
-  const b = document.querySelector('.sb-item[onclick*="candidatos"]');
-  ir('candidatos', b);
-  setTimeout(() => { if(typeof abrirNovoCandidato === 'function') abrirNovoCandidato(); }, 250);
+  const proxNum = String(getDados().length + 1).padStart(3, '0');
+  abrirModal('Novo Franqueado',
+    '<div class="grid-2">' +
+      '<div class="field"><label>Nome completo *</label>' +
+        '<input class="inp" id="nf-nome" placeholder="Nome do franqueado"></div>' +
+      '<div class="field"><label>Ticket / Matrícula</label>' +
+        '<input class="inp" id="nf-ticket" placeholder="Ex: MO-017" value="MO-' + proxNum + '"></div>' +
+      '<div class="field"><label>CPF</label>' +
+        '<input class="inp" id="nf-cpf" placeholder="000.000.000-00" maxlength="14"></div>' +
+      '<div class="field"><label>Telefone</label>' +
+        '<input class="inp" id="nf-tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
+      '<div class="field"><label>E-mail</label>' +
+        '<input class="inp" id="nf-email" placeholder="email@email.com"></div>' +
+      '<div class="field"><label>Cidade / UF</label>' +
+        '<input class="inp" id="nf-cidade" placeholder="Ex: Ponta Grossa / PR"></div>' +
+      '<div class="field"><label>Modelo</label>' +
+        '<select class="inp" id="nf-modelo">' +
+          '<option>Premium</option>' +
+          '<option>Smart</option>' +
+        '</select></div>' +
+      '<div class="field"><label>Gestor responsável</label>' +
+        '<select class="inp" id="nf-gestor">' +
+          Object.entries(EQUIPE).filter(function(e){ return e[1].tipo==='gestor'; }).map(function(e){ return '<option value="'+e[0]+'">'+e[1].nome+'</option>'; }).join('') +
+        '</select></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>Origem / Empresa captadora</label>' +
+        '<input class="inp" id="nf-origem" placeholder="Ex: A300 Franchising" value="A300 Franchising"></div>' +
+    '</div>',
+    '<button class="btn" onclick="fecharModal()">Cancelar</button> ' +
+    '<button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar franqueado</button>'
+  );
+  setTimeout(function(){ var m=$('modal'); if(m) m.style.maxWidth='580px'; }, 50);
+}
+
+function confirmarCadastroFranqueado() {
+  var nome = ($('nf-nome')?.value||'').trim();
+  if(!nome) { toast('Preencha o nome do franqueado.','rd'); return; }
+  var ticket  = ($('nf-ticket')?.value||'MO-000').trim();
+  var cpf     = ($('nf-cpf')?.value||'').trim();
+  var tel     = ($('nf-tel')?.value||'').trim();
+  var email   = ($('nf-email')?.value||'').trim();
+  var cidadeUF = ($('nf-cidade')?.value||'').split('/');
+  var modelo  = ($('nf-modelo')?.value||'Premium');
+  var gestor  = ($('nf-gestor')?.value||'');
+  var origem  = ($('nf-origem')?.value||'').trim();
+
+  var novo = {
+    id:               'frq_' + Date.now(),
+    ticket:           ticket,
+    nome:             nome,
+    cpf:              cpf,
+    tel:              tel,
+    email:            email,
+    cidade:           (cidadeUF[0]||'').trim(),
+    uf:               (cidadeUF[1]||'').trim(),
+    modelo:           modelo,
+    gestor:           gestor,
+    processoIniciado: false,
+    etapaAtual:       1,
+    portalLiberado:   false,
+    dataEntrada:      hoje(),
+    dataInicioProcesso: '',
+    origem:           { empresa: origem, responsavel: '', tel: '', email: '' },
+    historico: [
+      { data: hoje(), texto: 'Franqueado cadastrado diretamente no painel.', autor: SESSAO?.nome || 'Sistema' }
+    ],
+    pastas: {},
+    assinaturas: {},
+    etapasPendentes: {},
+    status: 'ativo'
+  };
+
+  var franqueados = getDados();
+  franqueados.push(novo);
+  salvarDados(franqueados);
+
+  fecharModal();
+  toast(nome + ' cadastrado como ' + ticket + '.', 'gn');
+
+  setTimeout(function(){
+    var btnEsteira = document.querySelector('.sb-item[onclick*="franqueados"]');
+    ir('franqueados', btnEsteira);
+  }, 300);
 }
 
 function abrirModalNovoFranqueado() {
