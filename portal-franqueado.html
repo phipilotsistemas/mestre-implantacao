@@ -3150,15 +3150,13 @@ function abrirDetalheEtapa(etId) {
       ${docs.map(d=>docRow(d,etId,atual)).join('')}
     </div>`,
     (atual?`
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
     <button class="btn-validar" onclick="solicitarValidacao(${etId})" style="flex:1">
       <i class="fi fi-sr-badge-check"></i> Concluí esta etapa
     </button>
-    <button onclick="irAba('suporte',null)" style="padding:10px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
+    <button onclick="fecharModal();irAba('suporte')" style="padding:10px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
       💬 Tenho dúvidas
-    </button>
-  </div>`:'') +
-    `<button class="btn" style="width:100%;margin-top:8px" onclick="fecharModal()">Fechar</button>`
+    </button>`:'') +
+    `<button class="btn" onclick="fecharModal()">Fechar</button>`
   );
 }
 
