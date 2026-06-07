@@ -957,7 +957,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · ui-sidebar-v30','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · sidebar-audit-v30','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -2370,7 +2370,7 @@ function atualizarBadges() {
   }
   // Alertas: etapas com prazo vencido (simulado)
   const alertas = dados.filter(f=>f.etapaAtual>=3&&f.etapaAtual<10&&!f.portalLiberado).length;
-  if(alertas>0){$('badge-alertas').textContent=alertas;$('badge-alertas').style.display='';}
+  if(alertas>0){const _ba=$('badge-alertas');if(_ba){_ba.textContent=alertas;_ba.style.display='';}}
 }
 
 /* ══════════════════════════════════════════════════
