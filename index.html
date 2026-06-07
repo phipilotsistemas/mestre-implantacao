@@ -816,7 +816,7 @@ select.inp{cursor:pointer}
       <input class="inp" type="password" id="painel-senha" placeholder="••••••••"
         onkeydown="if(event.key==='Enter')logarFirebase()">
     </div>
-    <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em" onclick="logarFirebase()">Entrar</button>
+    <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra</div>
   </div>
 </div>
@@ -865,9 +865,9 @@ select.inp{cursor:pointer}
         <span>Em implantação</span>
         <span class="badge" id="badge-frq" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
-      <button class="sb-item" onclick="ir('inaugurados',this)" id="sb-frq-inaugurados">
-        <div class="dot"></div>
-        <span>Inaugurados</span>
+      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
+        <div class="dot"></div><span>Chamados</span>
+        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
       </button>
 
       <!-- AGENDA -->
@@ -876,17 +876,9 @@ select.inp{cursor:pointer}
         <span>Agenda</span>
         <span class="badge" id="badge-agenda" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
-      <button class="sb-item" onclick="ir('alertas',this)">
-        <span>Alertas</span>
-        <span class="badge" id="badge-alertas" style="background:var(--accent);color:var(--primary-dark)">0</span>
-      </button>
 
       <!-- SUPORTE -->
       <div class="sb-group">SUPORTE</div>
-      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
-        <div class="dot"></div><span>Chamados</span>
-        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
-      </button>
       <button class="sb-item" onclick="ir('onboarding_ref',this)">
         <div class="dot"></div><span>Onboarding</span>
       </button>
@@ -965,7 +957,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · motivo-fix-v29','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · ui-sidebar-v30','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1671,6 +1663,7 @@ function iniciarApp() {
 
   // Listener para notificações do franqueado → gestor
   try {
+    db.ref('notif_gestor').off(); // evitar listeners duplicados
     db.ref('notif_gestor').on('value', snap => {
       const raw = snap.val();
       if(!raw) return;
@@ -2388,14 +2381,16 @@ function renderFranqueados() {
   const dados = getDados();
   $('content').innerHTML = `
     <div class="esteira-tabs">
-      <button class="esteira-tab ativa" data-aba="painel"      onclick="trocarAbaEsteira('painel',this)">Painel</button>
-      <button class="esteira-tab"       data-aba="lista"       onclick="trocarAbaEsteira('lista',this)">Franqueados</button>
-      <button class="esteira-tab"       data-aba="arquivados"  onclick="trocarAbaEsteira('arquivados',this)" style="color:var(--text-muted)">🗄 Arquivados</button>
+      <button class="esteira-tab ativa" data-aba="painel"        onclick="trocarAbaEsteira('painel',this)">Painel</button>
+      <button class="esteira-tab"       data-aba="lista"         onclick="trocarAbaEsteira('lista',this)">Franqueados</button>
+      <button class="esteira-tab"       data-aba="inaugurados"   onclick="trocarAbaEsteira('inaugurados',this)">Inaugurados</button>
+      <button class="esteira-tab"       data-aba="arquivados"    onclick="trocarAbaEsteira('arquivados',this)" style="color:var(--text-muted)">Arquivados</button>
     </div>
-    <div id="esteira-aba-painel"     class="esteira-aba ativa"></div>
-    <div id="esteira-aba-onboarding" class="esteira-aba"></div>
-    <div id="esteira-aba-lista"      class="esteira-aba"></div>
-    <div id="esteira-aba-arquivados" class="esteira-aba"></div>
+    <div id="esteira-aba-painel"       class="esteira-aba ativa"></div>
+    <div id="esteira-aba-onboarding"   class="esteira-aba"></div>
+    <div id="esteira-aba-lista"        class="esteira-aba"></div>
+    <div id="esteira-aba-inaugurados"  class="esteira-aba"></div>
+    <div id="esteira-aba-arquivados"   class="esteira-aba"></div>
   `;
   // Aguardar o browser processar o DOM antes de injetar o conteúdo
   requestAnimationFrame(() => { if($('esteira-aba-painel')) renderEsteiraPainel(); });
@@ -2409,10 +2404,11 @@ function trocarAbaEsteira(aba, btn) {
   const elAba = $('esteira-aba-'+aba);
   if(elAba) elAba.classList.add('ativa');
   const fns = {
-    onboarding:  renderEsteiraOnboarding,
-    painel:      renderEsteiraPainel,
-    lista:       renderEsteiraLista,
-    arquivados:  renderEsteiraArquivados,
+    onboarding:   renderEsteiraOnboarding,
+    painel:       renderEsteiraPainel,
+    lista:        renderEsteiraLista,
+    inaugurados:  renderEsteiraInaugurados,
+    arquivados:   renderEsteiraArquivados,
   };
   // Sempre re-renderiza para garantir dados atualizados
   if(fns[aba]) requestAnimationFrame(() => { if($('esteira-aba-'+aba)) fns[aba](); });
@@ -3980,6 +3976,32 @@ async function confirmarDesarquivamento(fid, justificativa, declaracao) {
 }
 
 /* ── RENDER: ABA ARQUIVADOS ── */
+function renderEsteiraInaugurados() {
+  const el   = $('esteira-aba-inaugurados');
+  if(!el) return;
+  const dados = getDados();
+  const inaugurados = dados.filter(f => f.etapaAtual > ETAPAS.length && f.dataInauguracao && f.status !== 'arquivado');
+  el.innerHTML = inaugurados.length === 0
+    ? `<div style="padding:24px;text-align:center;color:var(--text-dim)">
+        <div style="font-size:32px;margin-bottom:8px">🏪</div>
+        <div style="font-size:14px;font-weight:700">Nenhum franqueado inaugurado ainda</div>
+        <div style="font-size:12px;margin-top:4px">Franqueados que concluírem todas as etapas aparecerão aqui.</div>
+      </div>`
+    : inaugurados.map(f => `
+      <div class="franq-card" onclick="ir('processo',null,'${f.id}')" style="cursor:pointer;padding:14px 16px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar" style="background:var(--green);color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0">
+            ${f.nome?.charAt(0)||'?'}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--text)">${f.nome}</div>
+            <div style="font-size:11px;color:var(--text-dim)">${f.ticket} · ${f.cidade||'—'}/${f.estado||'—'} · Inaugurado em ${f.dataInauguracao||'—'}</div>
+          </div>
+          <span style="font-size:10px;padding:3px 10px;border-radius:20px;background:var(--green-soft);color:var(--green);font-weight:700;flex-shrink:0">✓ Inaugurado</span>
+        </div>
+      </div>`).join('');
+}
+
 function renderEsteiraArquivados() {
   const dados      = getDados();
   const arquivados = dados.filter(f => f.status === 'arquivado');
@@ -8451,7 +8473,12 @@ function abrirEtapaProcesso(fid, etapaId) {
           <div class="feed-corpo">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:2px">${(ev.tipo||'registro').replace(/_/g,' ')}</div>
             <div class="feed-txt">${ev.texto||''}</div>
-            <div class="feed-meta">${ev.data||''} ${ev.hora||''} · ${ev.autor||''}</div>
+            <div class="feed-meta">${(() => {
+              const d = ev.data||''; const h = ev.hora||'';
+              // Converter YYYY-MM-DD para DD/MM/YYYY se necessário
+              const df = d.includes('-') ? d.split('-').reverse().join('/') : d;
+              return df + (h?' às '+h:'') + (ev.autor?' · '+ev.autor:'');
+            })()}</div>
             ${ev.hash?`<div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--text-muted);margin-top:3px">hash: ${ev.hash}</div>`:''}
           </div>
         </div>`).join('')
