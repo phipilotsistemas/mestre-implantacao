@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · credenciais-cargo-v46','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · regenerar-acesso-v48','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -3557,7 +3557,7 @@ function renderDrawerFoot(f) {
     : portalBloqueado
       ? `<button class="btn" disabled style="opacity:.4;cursor:not-allowed;font-size:11px" title="Conclua a Etapa 1 — Boas-vindas para liberar">🔒 Portal bloqueado</button>`
       : f.portalLiberado
-        ? '<span class="badge badge-green" style="padding:6px 12px">✓ Portal liberado</span>'
+        ? '<span class="badge badge-green" style="padding:6px 12px">✓ Portal liberado</span>' + (PERM.assinar?`<button class="btn" style="font-size:11px;margin-left:6px" onclick="regenerarAcessoPortal('${f.id}')" title="Recria a conta ou redefine a senha para 123456">🔑 Regenerar acesso</button>`:'')
         : '';
   const btnEncerrar = PERM.assinar
     ? `<button class="btn red" style="margin-left:auto" onclick="encerrarFranquia('${f.id}')">⚠ Encerrar franquia</button>`
@@ -4005,6 +4005,76 @@ function notificarFranqueadoEtapa(fid, etapaId, f) {
 /* ══════════════════════════════════════════════════
    LIBERAR PORTAL / ENCERRAR
 ══════════════════════════════════════════════════ */
+function regenerarAcessoPortal(fid) {
+  if(!PERM.assinar){ toast('Sem permissão.','rd'); return; }
+  const f = getFranqueado(fid);
+  if(!f) return;
+  if(!f.email) { toast('Este franqueado não tem e-mail cadastrado. Edite o cadastro primeiro.','rd'); return; }
+
+  abrirModal('🔑 Regenerar acesso ao portal — ' + f.nome, `
+    <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:14px">
+      Use esta opção quando:
+      <ul style="margin:8px 0;padding-left:18px;font-size:12px;color:var(--text-dim)">
+        <li>O acesso não foi criado no cadastro (erro de conexão na época)</li>
+        <li>O franqueado perdeu a senha e precisa de uma nova</li>
+      </ul>
+    </div>
+    <div style="background:#EFF6FF;border:1px solid var(--blue-border);border-radius:8px;padding:12px;font-size:12px;color:var(--blue)">
+      E-mail: <b>${f.email}</b><br>
+      A senha será redefinida para <b>123456</b>. O franqueado troca no primeiro acesso.
+    </div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn primary" onclick="confirmarRegenerarAcesso('${fid}')">Regenerar acesso</button>`
+  );
+}
+
+async function confirmarRegenerarAcesso(fid) {
+  const f = getFranqueado(fid);
+  if(!f || !f.email) return;
+  const btn = event?.target;
+  if(btn){ btn.disabled = true; btn.textContent = 'Processando...'; }
+
+  try {
+    // Tentar criar a conta (caso não exista)
+    let uid = null;
+    try {
+      const cred = await authSecundario.createUserWithEmailAndPassword(f.email, '123456');
+      uid = cred.user.uid;
+      await authSecundario.signOut();
+      toast('Conta criada com senha 123456.','gn');
+    } catch(e) {
+      if(e.code === 'auth/email-already-in-use') {
+        // Conta já existe → enviar e-mail de redefinição de senha
+        await auth.sendPasswordResetEmail(f.email);
+        toast('Conta já existia. Enviado e-mail de redefinição de senha para '+f.email,'gn');
+      } else {
+        throw e;
+      }
+    }
+
+    // Registrar/atualizar mapeamento portal_usuarios
+    if(uid) {
+      await db.ref('portal_usuarios/' + uid).set({
+        email: f.email, nome: f.nome, fid: f.id, ticket: f.ticket,
+        criadoEm: hoje(), senhaAlterada: false, regeneradoEm: hoje()+' às '+agora(),
+      });
+      atualizarFranqueado(fid, { portalUid: uid, portalLiberado: true });
+    }
+
+    // Registrar no histórico
+    salvarEventoEtapa(fid, f.etapaAtual||1, {
+      tipo:'acesso_regenerado',
+      texto:'Acesso ao portal regenerado por '+SESSAO.nome+'. '+(uid?'Conta criada/senha 123456.':'E-mail de redefinição enviado.'),
+      autor:SESSAO.nome, data:hoje(), hora:agora(), timestamp:Date.now(),
+    });
+
+    fecharModal();
+  } catch(e) {
+    if(btn){ btn.disabled=false; btn.textContent='Regenerar acesso'; }
+    toast('Erro ao regenerar: '+(e.message||e.code),'rd');
+  }
+}
+
 function liberarPortal(fid) {
   if(!PERM.assinar){ toast('Sem permissão.','rd'); return; }
   const f = getFranqueado(fid);
@@ -6468,6 +6538,7 @@ async function buscarCEP(cep) {
 }
 
 function salvarColaborador(id) {
+  const col     = getEquipe().find(c => c.id === id) || null;
   const nome    = $('fc-nome')?.value.trim();
   const cpf     = $('fc-cpf')?.value.trim();
   const email   = $('fc-email')?.value.trim();
