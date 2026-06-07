@@ -901,6 +901,9 @@ select.inp{cursor:pointer}
       <button class="sb-item" id="sb-equipe" onclick="ir('equipe',this)" style="display:none">
         <div class="dot"></div><span>Equipe</span>
       </button>
+      <button class="sb-item" id="sb-config-equipe" onclick="ir('config_equipe',this)" style="display:none">
+        <div class="dot"></div><span>Equipe das etapas</span>
+      </button>
       <button class="sb-item" id="sb-contatos" onclick="ir('contatos',this)" style="display:none">
         <div class="dot"></div><span>Contatos externos</span>
       </button>
@@ -963,7 +966,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · dossie-hist-fix-v35','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · equipe-etapas-v36','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1026,6 +1029,10 @@ const EQUIPE = {
   'GES-002':      { nome:'Rafael Torres',         cargo:'Consultor de Implantação',tipo:'gestor',    cor:'#1E40AF', email:'rafael@mestrework.com'   },
   'EST-001':      { nome:'Beatriz Oliveira',       cargo:'Estagiária',             tipo:'estagiario',cor:'#16A34A', email:'beatriz@mestrework.com'  },
   'AUX-001':      { nome:'Lucas Pereira',          cargo:'Auxiliar Administrativo',tipo:'auxiliar',  cor:'#7C3AED', email:'lucas@mestrework.com'    },
+  'EQ-VANESSA':   { nome:'Vanessa',                cargo:'Projeto, Layout e Fachada',tipo:'projeto', cor:'#0891B2', email:'vanessa@mestrework.com'  },
+  'EQ-PRISCILA':  { nome:'Priscila',               cargo:'Compras',                 tipo:'compras',  cor:'#CA8A04', email:'priscila@mestrework.com' },
+  'EQ-ERICA':     { nome:'Érica',                  cargo:'Treinamento',             tipo:'treinamento',cor:'#DB2777',email:'erica@mestrework.com'   },
+  'EQ-LEANDRO':   { nome:'Leandro',                cargo:'Marketing',               tipo:'marketing',cor:'#9333EA', email:'leandro@mestrework.com'  },
 };
 
 /* Permissões por tipo */
@@ -1633,6 +1640,7 @@ function iniciarApp() {
   if(PERM.verEquipe) {
     $('sb-group-admin').style.display = '';
     $('sb-equipe').style.display = '';
+    $('sb-config-equipe').style.display = '';
     $('sb-contatos').style.display = '';
   }
   if(PERM.verRelatorios) $('sb-relatorios').style.display = '';
@@ -1722,6 +1730,8 @@ function iniciarApp() {
                   autor: 'Sistema',
                   data:  hoje(), hora: agora(), timestamp: ts,
                 });
+                // Disparar tarefas da equipe designada para a próxima etapa
+                try { dispararTarefasEtapa(fid, proxId); } catch(e) {}
               } catch(e) { console.warn('Auto-início etapa:', e.message); }
             }
           }
@@ -1752,6 +1762,7 @@ const TITULOS = {
   chat:        'Chat Interno',
   equipe:      'Equipe Interna',
   relatorios:  'Relatórios Funcionais',
+  config_equipe: 'Equipe das Etapas',
   contatos:    'Contatos Externos',
 };
 /* ══ DASHBOARD ══ */
@@ -2269,6 +2280,7 @@ const RENDERS = {
   chat:            renderChat,
   equipe:          renderEquipe,
   relatorios:      renderRelatorios,
+  config_equipe:   () => renderConfigEquipeEtapas(),
   contatos:        renderContatosExternos,
   dashboard:       renderDashboard,
   suporte:         () => { renderSuportePainel(); },
@@ -5235,6 +5247,266 @@ function aplicarMascaras(container) {
    DADOS DA EQUIPE
    Persistência em localStorage (+ Firebase)
 ══════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════
+   EQUIPE POR ETAPA — Template global + override por processo
+══════════════════════════════════════════════════ */
+
+// Lê o template global (membros padrão por etapa)
+function getEquipeEtapasTemplate() {
+  try {
+    const s = localStorage.getItem('mo_equipe_etapas_template');
+    if(s) return JSON.parse(s);
+  } catch(e) {}
+  return {};
+}
+
+function salvarEquipeEtapasTemplate(tpl) {
+  try {
+    localStorage.setItem('mo_equipe_etapas_template', JSON.stringify(tpl));
+    db.ref('equipe_etapas_template').set(tpl).catch(()=>{});
+  } catch(e) {}
+}
+
+// Lê a equipe efetiva de uma etapa para um franqueado:
+// usa o override do processo se existir, senão o template global
+function getEquipeEtapa(fid, etapaId) {
+  const f = getFranqueado(fid);
+  const override = f?.equipeEtapas;
+  const tpl = getEquipeEtapasTemplate();
+  const fonte = (override && override[etapaId]) ? override[etapaId] : (tpl[etapaId] || {});
+  return {
+    membros: fonte.membros || [],
+    itens:   fonte.itens   || {},
+  };
+}
+
+// Membros que recebem tarefas (exclui acesso puramente administrativo opcional)
+function membrosDelegaveis() {
+  const eq = getEquipe();
+  // getEquipe retorna array; converter para [{token, nome, cargo, tipo, cor}]
+  return eq.map(m => ({ token: m.token||m.id, nome: m.nome, cargo: m.cargo, tipo: m.tipo, cor: m.cor }))
+           .filter(m => m.token && m.nome);
+}
+
+// ── TELA: Configurar equipe das etapas (template global) ──
+function renderConfigEquipeEtapas(fid) {
+  // Se fid fornecido → modo override (por processo); senão → template global
+  const modoOverride = !!fid;
+  const f = fid ? getFranqueado(fid) : null;
+  const tpl = getEquipeEtapasTemplate();
+  const override = f?.equipeEtapas || {};
+  const membros = membrosDelegaveis();
+
+  const titulo = modoOverride
+    ? 'Equipe da implantação — ' + (f?.nome||'')
+    : 'Configurar equipe das etapas (padrão)';
+  const subtitulo = modoOverride
+    ? 'Ajustes aqui valem apenas para esta unidade. O padrão geral não é alterado.'
+    : 'Defina os membros que atuam em cada etapa. Vale como padrão para todo novo processo.';
+
+  const corpo = `
+    <div style="max-width:760px;margin:0 auto">
+      <div style="background:var(--primary-soft);border:1px solid var(--primary-border);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--primary);line-height:1.6">
+        ${subtitulo}
+      </div>
+      ${modoOverride ? `<div style="margin-bottom:14px">
+        <button class="btn sm" onclick="aplicarTemplateNoProcesso('${fid}')">↺ Restaurar padrão global nesta unidade</button>
+      </div>` : ''}
+      <div id="cfg-etapas-accordion">
+        ${ETAPAS.map(et => {
+          const fonte = modoOverride ? (override[et.id] || tpl[et.id] || {}) : (tpl[et.id] || {});
+          const membrosEt = fonte.membros || [];
+          return `
+          <div class="card" style="margin-bottom:8px">
+            <div class="card-head" style="cursor:pointer;user-select:none" onclick="toggleCfgEtapa(${et.id})">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">${et.id}</div>
+                <div class="card-title" style="font-size:13px">${et.nome}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${membrosEt.length ? `<span class="badge" style="background:var(--green);color:#fff">${membrosEt.length} membro(s)</span>` : '<span style="font-size:11px;color:var(--text-muted)">sem equipe</span>'}
+                <span id="cfg-chevron-${et.id}" style="font-size:10px;color:var(--text-muted)">▶</span>
+              </div>
+            </div>
+            <div id="cfg-body-${et.id}" class="card-body" style="display:none">
+              <!-- Membros da etapa inteira -->
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Quem atua nesta etapa</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                ${membros.map(m => {
+                  const sel = membrosEt.includes(m.token);
+                  return `<button type="button" onclick="toggleMembroEtapa('${fid||''}',${et.id},'${m.token}')"
+                    id="memb-${et.id}-${m.token}"
+                    style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1.5px solid ${sel?m.cor:'var(--border)'};background:${sel?m.cor:'var(--bg)'};color:${sel?'#fff':'var(--text)'};font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${sel?'#fff':m.cor}"></span>
+                    ${m.nome.split(' ')[0]} <span style="opacity:.7;font-size:9px">${m.cargo}</span>
+                  </button>`;
+                }).join('')}
+              </div>
+              <!-- Drill-down opcional por item do checklist -->
+              <details style="margin-top:8px">
+                <summary style="font-size:11px;color:var(--primary);cursor:pointer;font-weight:600">Detalhar por item do checklist (opcional)</summary>
+                <div style="margin-top:10px;padding-left:8px;border-left:2px solid var(--border)">
+                  ${(et.tarefas||[]).map((item,idx) => {
+                    const itensAtrib = (fonte.itens||{})[item] || [];
+                    return `<div style="margin-bottom:10px">
+                      <div style="font-size:12px;font-weight:600;margin-bottom:4px">${idx+1}. ${item}</div>
+                      <div style="display:flex;flex-wrap:wrap;gap:5px">
+                        ${membros.map(m => {
+                          const sel = itensAtrib.includes(m.token);
+                          return `<button type="button" onclick="toggleMembroItem('${fid||''}',${et.id},${idx},'${m.token}')"
+                            id="item-${et.id}-${idx}-${m.token}"
+                            style="padding:3px 8px;border-radius:6px;border:1px solid ${sel?m.cor:'var(--border)'};background:${sel?m.cor:'var(--bg)'};color:${sel?'#fff':'var(--text)'};font-size:10px;cursor:pointer;font-family:inherit">
+                            ${m.nome.split(' ')[0]}</button>`;
+                        }).join('')}
+                      </div>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </details>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  if(modoOverride) {
+    abrirModal(titulo, corpo, `<button class="btn primary" onclick="fecharModal()">Concluir</button>`);
+    setTimeout(()=>{ const m=$('modal'); if(m) m.style.maxWidth='820px'; }, 50);
+  } else {
+    $('content').innerHTML = '<div style="margin-bottom:16px"><div style="font-size:18px;font-weight:800">'+titulo+'</div></div>' + corpo;
+  }
+}
+
+function toggleCfgEtapa(etId) {
+  const body = $('cfg-body-'+etId);
+  const chev = $('cfg-chevron-'+etId);
+  if(!body) return;
+  const aberto = body.style.display !== 'none';
+  body.style.display = aberto ? 'none' : 'block';
+  if(chev) chev.textContent = aberto ? '▶' : '▼';
+}
+
+// Alterna membro na etapa inteira (template ou override)
+function toggleMembroEtapa(fid, etId, token) {
+  const ehOverride = !!fid;
+  let store, raiz;
+  if(ehOverride) {
+    const f = getFranqueado(fid);
+    raiz = f.equipeEtapas || {};
+  } else {
+    raiz = getEquipeEtapasTemplate();
+  }
+  if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
+  if(!raiz[etId].membros) raiz[etId].membros = [];
+  const arr = raiz[etId].membros;
+  const i = arr.indexOf(token);
+  if(i>=0) arr.splice(i,1); else arr.push(token);
+
+  if(ehOverride) {
+    atualizarFranqueado(fid, { equipeEtapas: raiz });
+  } else {
+    salvarEquipeEtapasTemplate(raiz);
+  }
+  // Atualizar visual do botão
+  const btn = $('memb-'+etId+'-'+token);
+  const m = membrosDelegaveis().find(x=>x.token===token);
+  const sel = arr.includes(token);
+  if(btn && m) {
+    btn.style.borderColor = sel?m.cor:'var(--border)';
+    btn.style.background   = sel?m.cor:'var(--bg)';
+    btn.style.color        = sel?'#fff':'var(--text)';
+    const dot = btn.querySelector('span'); if(dot) dot.style.background = sel?'#fff':m.cor;
+  }
+}
+
+// Alterna membro num item específico do checklist
+function toggleMembroItem(fid, etId, itemIdx, token) {
+  const ehOverride = !!fid;
+  const et = ETAPAS.find(e=>e.id===etId);
+  const itemNome = et?.tarefas?.[itemIdx];
+  if(!itemNome) return;
+  let raiz;
+  if(ehOverride) { const f=getFranqueado(fid); raiz = f.equipeEtapas||{}; }
+  else { raiz = getEquipeEtapasTemplate(); }
+  if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
+  if(!raiz[etId].itens) raiz[etId].itens = {};
+  if(!raiz[etId].itens[itemNome]) raiz[etId].itens[itemNome] = [];
+  const arr = raiz[etId].itens[itemNome];
+  const i = arr.indexOf(token);
+  if(i>=0) arr.splice(i,1); else arr.push(token);
+
+  if(ehOverride) atualizarFranqueado(fid, { equipeEtapas: raiz });
+  else salvarEquipeEtapasTemplate(raiz);
+
+  const btn = $('item-'+etId+'-'+itemIdx+'-'+token);
+  const m = membrosDelegaveis().find(x=>x.token===token);
+  const sel = arr.includes(token);
+  if(btn && m) {
+    btn.style.borderColor = sel?m.cor:'var(--border)';
+    btn.style.background   = sel?m.cor:'var(--bg)';
+    btn.style.color        = sel?'#fff':'var(--text)';
+  }
+}
+
+// Restaura o template global como override do processo
+function aplicarTemplateNoProcesso(fid) {
+  if(!confirm('Restaurar a configuração padrão global nesta unidade? As personalizações desta unidade serão perdidas.')) return;
+  const tpl = getEquipeEtapasTemplate();
+  atualizarFranqueado(fid, { equipeEtapas: JSON.parse(JSON.stringify(tpl)) });
+  toast('Equipe restaurada para o padrão global.', 'gn');
+  fecharModal();
+  renderConfigEquipeEtapas(fid);
+}
+
+// ── Disparo automático de tarefas quando uma etapa inicia ──
+function dispararTarefasEtapa(fid, etapaId) {
+  const f = getFranqueado(fid);
+  if(!f) return;
+  const equipe = getEquipeEtapa(fid, etapaId);
+  const et = ETAPAS.find(e=>e.id===etapaId);
+  if(!et) return;
+
+  // Tokens únicos: membros da etapa + membros de itens específicos
+  const tokens = new Set(equipe.membros||[]);
+  Object.values(equipe.itens||{}).forEach(arr => (arr||[]).forEach(t=>tokens.add(t)));
+  if(tokens.size === 0) return;
+
+  const lista = getTarefas();
+  tokens.forEach(tk => {
+    const membro = EQUIPE[tk] || membrosDelegaveis().find(m=>m.token===tk);
+    if(!membro) return;
+    // Itens específicos atribuídos a este membro
+    const itensDoMembro = Object.entries(equipe.itens||{})
+      .filter(([item,arr]) => (arr||[]).includes(tk))
+      .map(([item]) => item);
+    const escopo = itensDoMembro.length
+      ? itensDoMembro.join('; ')
+      : 'Etapa ' + etapaId + ' — ' + et.nome;
+    // Evitar duplicar tarefa já existente para o mesmo membro/etapa/franqueado
+    const jaExiste = lista.some(t => t.fid===fid && t.etapaId===etapaId && t.responsavelToken===tk && t.status!=='concluida');
+    if(jaExiste) return;
+    lista.push({
+      id:               'tar_'+Date.now()+'_'+tk,
+      titulo:           'Etapa '+etapaId+' ('+et.nome+') — '+f.nome,
+      escopo,
+      fid,
+      etapaId,
+      responsavelToken: tk,
+      responsavelNome:  membro.nome,
+      dataVenc:         '',
+      desc:             'Você foi designado para atuar na Etapa '+etapaId+' ('+et.nome+') do franqueado '+f.nome+' ('+f.ticket+'). Escopo: '+escopo+'.',
+      status:           'pendente',
+      ciencia:          false,
+      criadoEm:         hoje(),
+      criadoTs:         Date.now(),
+      criadoPor:        SESSAO?.nome||'Sistema',
+      criadoPorToken:   SESSAO?.token||'',
+      origem:           'auto_etapa',
+    });
+  });
+  salvarTarefas(lista);
+}
+
 function getEquipe() {
   try {
     const s = localStorage.getItem('mo_equipe_rh');
@@ -5507,9 +5779,19 @@ function abrirFichaColaborador(id) {
         </div>
         <div class="field"><label>Tipo de acesso</label>
           <select class="inp" id="fc-tipo">
-            <option value="gestor"${col.tipo==='gestor'?' selected':''}>Gestor — acesso total</option>
-            <option value="estagiario"${col.tipo==='estagiario'?' selected':''}>Estagiário — só visualiza</option>
-            <option value="auxiliar"${col.tipo==='auxiliar'?' selected':''}>Auxiliar — acesso restrito</option>
+            <optgroup label="Acesso administrativo">
+              <option value="gestor"${col.tipo==='gestor'?' selected':''}>Gestor — acesso total</option>
+              <option value="estagiario"${col.tipo==='estagiario'?' selected':''}>Estagiário — só visualiza</option>
+              <option value="auxiliar"${col.tipo==='auxiliar'?' selected':''}>Auxiliar — acesso restrito</option>
+            </optgroup>
+            <optgroup label="Equipe de implantação (recebem tarefas)">
+              <option value="projeto"${col.tipo==='projeto'?' selected':''}>Projeto / Layout / Fachada</option>
+              <option value="compras"${col.tipo==='compras'?' selected':''}>Compras / Suprimentos</option>
+              <option value="treinamento"${col.tipo==='treinamento'?' selected':''}>Treinamento</option>
+              <option value="marketing"${col.tipo==='marketing'?' selected':''}>Marketing / Comunicação</option>
+              <option value="consultor"${col.tipo==='consultor'?' selected':''}>Consultor regional</option>
+              <option value="financeiro"${col.tipo==='financeiro'?' selected':''}>Financeiro</option>
+            </optgroup>
           </select>
         </div>
         
@@ -7170,6 +7452,9 @@ async function confirmarInicioProcesso(fid, declaracao) {
     });
   } catch(e) {}
 
+  // Disparar tarefas automáticas da Etapa 1 para a equipe designada
+  try { dispararTarefasEtapa(fid, 1); } catch(e) { console.warn('dispararTarefasEtapa:', e.message); }
+
   fecharModal();
   toast('Processo iniciado. Etapa 1 — Onboarding desbloqueada.', 'gn');
 
@@ -8241,6 +8526,10 @@ function renderProcessoImplantacao(fid) {
           onclick="abrirPainelFinanceiro('${fid}')">
           💰 Ver histórico financeiro
         </button>
+        ${PERM.assinar?`<button class="btn" style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;font-size:11.5px;margin-top:6px"
+          onclick="renderConfigEquipeEtapas('${fid}')">
+          👥 Equipe desta unidade
+        </button>`:''}
       </div>
 
       <!-- Lista de etapas -->
