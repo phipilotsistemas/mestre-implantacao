@@ -904,6 +904,9 @@ select.inp{cursor:pointer}
       <button class="sb-item" id="sb-config-equipe" onclick="ir('config_equipe',this)" style="display:none">
         <div class="dot"></div><span>Equipe das etapas</span>
       </button>
+      <button class="sb-item" id="sb-config-tarefas" onclick="ir('config_tarefas',this)" style="display:none">
+        <div class="dot"></div><span>Tarefas das etapas</span>
+      </button>
       <button class="sb-item" id="sb-contatos" onclick="ir('contatos',this)" style="display:none">
         <div class="dot"></div><span>Contatos externos</span>
       </button>
@@ -966,7 +969,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · hist-funcional-fix-v40','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · tarefas-editaveis-v41','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1640,6 +1643,7 @@ function iniciarApp() {
     $('sb-group-admin').style.display = '';
     $('sb-equipe').style.display = '';
     $('sb-config-equipe').style.display = '';
+    $('sb-config-tarefas').style.display = '';
     $('sb-contatos').style.display = '';
   }
   if(PERM.verRelatorios) $('sb-relatorios').style.display = '';
@@ -1717,7 +1721,7 @@ function iniciarApp() {
                   nomeEtapa:  proxEt.nome,
                   instrucoes: proxEt.instrucoes || proxEt.desc || '',
                   docs:       proxEt.docs || [],
-                  tarefas:    proxEt.tarefas || [],
+                  tarefas:    getTarefasEtapa(proxId),
                   prazo:      null,
                   gestor:     SESSAO?.nome || 'Sistema',
                   data:       hoje(), hora: agora(), timestamp: ts,
@@ -1762,6 +1766,7 @@ const TITULOS = {
   equipe:      'Equipe Interna',
   relatorios:  'Relatórios Funcionais',
   config_equipe: 'Equipe das Etapas',
+  config_tarefas: 'Tarefas das Etapas',
   contatos:    'Contatos Externos',
 };
 /* ══ DASHBOARD ══ */
@@ -2280,6 +2285,7 @@ const RENDERS = {
   equipe:          renderEquipe,
   relatorios:      renderRelatorios,
   config_equipe:   () => renderConfigEquipeEtapas(),
+  config_tarefas:  renderConfigTarefasEtapas,
   contatos:        renderContatosExternos,
   dashboard:       renderDashboard,
   suporte:         () => { renderSuportePainel(); },
@@ -3716,7 +3722,7 @@ async function executarRejeicaoEtapa(fid, etapaId) {
 
 
 function gerarChecklistEtapa(et) {
-  const tarefas = (et.tarefas||[]).map(t=>`${t}`);
+  const tarefas = getTarefasEtapa(et.id).map(t=>`${t}`);
   const base = tarefas.length ? tarefas : [`Os requisitos da etapa "${et.nome}" foram cumpridos integralmente`];
   if(et.pastas.length) base.push(`Documentos arquivados nas pastas: ${et.pastas.join(', ')}`);
   if(et.legal) base.push('O franqueado está ciente do conteúdo jurídico desta etapa');
@@ -5273,6 +5279,136 @@ function aplicarMascaras(container) {
    EQUIPE POR ETAPA — Template global + override por processo
 ══════════════════════════════════════════════════ */
 
+// ── TAREFAS CUSTOMIZÁVEIS POR ETAPA ──
+// Base (ETAPAS) intocada; camada custom guarda adições e remoções
+function getEtapasCustom() {
+  try {
+    const s = localStorage.getItem('mo_etapas_custom');
+    if(s) return JSON.parse(s);
+  } catch(e) {}
+  return {};
+}
+
+function salvarEtapasCustom(obj) {
+  try {
+    localStorage.setItem('mo_etapas_custom', JSON.stringify(obj));
+    db.ref('etapas_custom').set(obj).catch(()=>{});
+  } catch(e) {}
+}
+
+// Checklist efetivo de uma etapa: base + adicionadas − removidas
+function getTarefasEtapa(etapaId) {
+  const et = ETAPAS.find(e=>e.id===Number(etapaId));
+  const base = et?.tarefas || [];
+  const custom = getEtapasCustom()[etapaId] || {};
+  const removidas = custom.removidas || [];
+  const adicionadas = custom.adicionadas || [];
+  // Base sem as removidas + adicionadas no fim
+  return base.filter(t => !removidas.includes(t)).concat(adicionadas);
+}
+
+function addTarefaEtapa(etapaId) {
+  const inp = $('nova-tarefa-'+etapaId);
+  const nome = inp?.value?.trim();
+  if(!nome) { toast('Digite o nome da tarefa.', 'er'); return; }
+  const custom = getEtapasCustom();
+  if(!custom[etapaId]) custom[etapaId] = { adicionadas:[], removidas:[] };
+  if(!custom[etapaId].adicionadas) custom[etapaId].adicionadas = [];
+  // Evitar duplicar (na base ou nas adicionadas)
+  const jaExiste = getTarefasEtapa(etapaId).some(t => t.toLowerCase() === nome.toLowerCase());
+  if(jaExiste) { toast('Essa tarefa já existe nesta etapa.', 'er'); return; }
+  custom[etapaId].adicionadas.push(nome);
+  // Se estava na lista de removidas (base), tirar de lá
+  if(custom[etapaId].removidas) custom[etapaId].removidas = custom[etapaId].removidas.filter(t=>t!==nome);
+  salvarEtapasCustom(custom);
+  if(inp) inp.value = '';
+  renderConfigTarefasEtapas();
+  toast('Tarefa adicionada à Etapa '+etapaId+'.', 'gn');
+}
+
+function removerTarefaEtapa(etapaId, nomeTarefa) {
+  const et = ETAPAS.find(e=>e.id===Number(etapaId));
+  const ehBase = (et?.tarefas||[]).includes(nomeTarefa);
+  const custom = getEtapasCustom();
+  if(!custom[etapaId]) custom[etapaId] = { adicionadas:[], removidas:[] };
+  if(ehBase) {
+    // Marcar tarefa base como removida
+    if(!custom[etapaId].removidas) custom[etapaId].removidas = [];
+    if(!custom[etapaId].removidas.includes(nomeTarefa)) custom[etapaId].removidas.push(nomeTarefa);
+  } else {
+    // Remover das adicionadas
+    if(custom[etapaId].adicionadas) custom[etapaId].adicionadas = custom[etapaId].adicionadas.filter(t=>t!==nomeTarefa);
+  }
+  salvarEtapasCustom(custom);
+  renderConfigTarefasEtapas();
+  toast('Tarefa removida da Etapa '+etapaId+'.', 'or');
+}
+
+function restaurarTarefasEtapa(etapaId) {
+  if(!confirm('Restaurar o checklist padrão da Etapa '+etapaId+'? Suas personalizações nesta etapa serão perdidas.')) return;
+  const custom = getEtapasCustom();
+  delete custom[etapaId];
+  salvarEtapasCustom(custom);
+  renderConfigTarefasEtapas();
+  toast('Checklist da Etapa '+etapaId+' restaurado ao padrão.', 'gn');
+}
+
+function renderConfigTarefasEtapas() {
+  const custom = getEtapasCustom();
+  $('content').innerHTML = `
+    <div style="max-width:760px;margin:0 auto">
+      <div style="margin-bottom:16px"><div style="font-size:18px;font-weight:800">Tarefas das etapas</div></div>
+      <div style="background:var(--primary-soft);border:1px solid var(--primary-border);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--primary);line-height:1.6">
+        Adicione ou remova tarefas do checklist de cada etapa. As mudanças valem para todos os processos. Tarefas já concluídas em processos existentes permanecem registradas.
+      </div>
+      ${ETAPAS.map(et => {
+        const tarefas = getTarefasEtapa(et.id);
+        const base = et.tarefas || [];
+        const temCustom = custom[et.id] && ((custom[et.id].adicionadas||[]).length || (custom[et.id].removidas||[]).length);
+        return `
+        <div class="card" style="margin-bottom:8px">
+          <div class="card-head" style="cursor:pointer;user-select:none" onclick="toggleCfgTarefaEtapa(${et.id})">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">${et.id}</div>
+              <div class="card-title" style="font-size:13px">${et.nome}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="badge" style="background:var(--bg-alt);color:var(--text-dim)">${tarefas.length} tarefa(s)</span>
+              ${temCustom?'<span class="badge" style="background:var(--accent);color:var(--primary-dark)">personalizada</span>':''}
+              <span id="cfgt-chevron-${et.id}" style="font-size:10px;color:var(--text-muted)">▶</span>
+            </div>
+          </div>
+          <div id="cfgt-body-${et.id}" class="card-body" style="display:none">
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+              ${tarefas.map((t,idx) => {
+                const ehBase = base.includes(t);
+                return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-alt);border-radius:8px">
+                  <span style="width:22px;height:22px;border-radius:50%;background:var(--border);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${idx+1}</span>
+                  <span style="flex:1;font-size:12px">${t} ${!ehBase?'<span style="font-size:9px;color:var(--green);font-weight:700">· nova</span>':''}</span>
+                  <button onclick="removerTarefaEtapa(${et.id},'${t.replace(/'/g,"\\'")}')" title="Remover" style="background:#FEE2E2;color:#DC2626;border:none;width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:13px;flex-shrink:0">×</button>
+                </div>`;
+              }).join('')}
+            </div>
+            <div style="display:flex;gap:8px">
+              <input class="inp" id="nova-tarefa-${et.id}" placeholder="Nova tarefa para esta etapa..." style="flex:1;font-size:12px" onkeydown="if(event.key==='Enter')addTarefaEtapa(${et.id})">
+              <button class="btn sm primary" onclick="addTarefaEtapa(${et.id})">+ Adicionar</button>
+            </div>
+            ${temCustom?`<div style="margin-top:10px;text-align:right"><button class="btn sm" onclick="restaurarTarefasEtapa(${et.id})">↺ Restaurar padrão</button></div>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function toggleCfgTarefaEtapa(etId) {
+  const body = $('cfgt-body-'+etId);
+  const chev = $('cfgt-chevron-'+etId);
+  if(!body) return;
+  const aberto = body.style.display !== 'none';
+  body.style.display = aberto ? 'none' : 'block';
+  if(chev) chev.textContent = aberto ? '▶' : '▼';
+}
+
 // Lê o template global (membros padrão por etapa)
 function getEquipeEtapasTemplate() {
   try {
@@ -5374,7 +5510,7 @@ function renderConfigEquipeEtapas(fid) {
               <details style="margin-top:4px">
                 <summary style="font-size:11px;color:var(--primary);cursor:pointer;font-weight:600">Detalhar por item do checklist (opcional)</summary>
                 <div style="margin-top:10px;padding-left:8px;border-left:2px solid var(--border)">
-                  ${(et.tarefas||[]).map((item,idx) => {
+                  ${getTarefasEtapa(et.id).map((item,idx) => {
                     const itensAtrib = (fonte.itens||{})[item] || [];
                     return `<div style="margin-bottom:12px">
                       <div style="font-size:12px;font-weight:600;margin-bottom:5px">${idx+1}. ${item}</div>
@@ -5491,7 +5627,7 @@ function removeMembroItem(fid, etId, itemIdx, tk) {
 function _mutarEquipeItem(fid, etId, itemIdx, tk, adicionar) {
   const ehOverride = !!fid;
   const et = ETAPAS.find(e=>e.id===etId);
-  const itemNome = et?.tarefas?.[itemIdx];
+  const itemNome = getTarefasEtapa(etId)[itemIdx];
   if(!itemNome) return;
   let raiz = ehOverride ? (getFranqueado(fid)?.equipeEtapas || {}) : getEquipeEtapasTemplate();
   if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
@@ -5508,7 +5644,7 @@ function _mutarEquipeItem(fid, etId, itemIdx, tk, adicionar) {
 function _refreshTagsItem(fid, etId, itemIdx) {
   const membros = membrosDelegaveis();
   const et = ETAPAS.find(e=>e.id===etId);
-  const itemNome = et?.tarefas?.[itemIdx];
+  const itemNome = getTarefasEtapa(etId)[itemIdx];
   const raiz = fid ? (getFranqueado(fid)?.equipeEtapas || {}) : getEquipeEtapasTemplate();
   const tokens = (raiz[etId]?.itens||{})[itemNome] || [];
   const cont = $('cfg-item-tags-'+etId+'-'+itemIdx);
@@ -8791,7 +8927,7 @@ function abrirEtapaProcesso(fid, etapaId) {
   const docs       = StorageAdapter.listarDocumentos(fid, etapaId);
   const subchat    = StorageAdapter.listarSubchat(fid, etapaId);
   const templates  = getTemplatesMensagem(f, et, prazo);
-  const tarefas    = et.tarefas || [];
+  const tarefas    = getTarefasEtapa(et.id);
   const docsExig   = et.docs || [];
 
   // Contadores
@@ -9235,7 +9371,7 @@ function registrarTarefa(fid, etapaId, tarefaIdx, checked) {
   // Registrar evento
   if(checked) {
     const et    = ETAPAS.find(e=>e.id===etapaId);
-    const tarefa = et?.tarefas?.[tarefaIdx] || 'Tarefa '+(tarefaIdx+1);
+    const tarefa = getTarefasEtapa(et.id)[tarefaIdx] || 'Tarefa '+(tarefaIdx+1);
     salvarEventoEtapa(fid, etapaId, {
       tipo:  'tarefa_concluida',
       texto: `Tarefa marcada como concluída: "${tarefa}"`,
