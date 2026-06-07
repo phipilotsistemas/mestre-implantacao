@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · filtro-tarefas-v43','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · baixa-inatividade-v44','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -4280,6 +4280,96 @@ function sanitizarFirebase(obj) {
   return obj ?? null;
 }
 
+// Dias decorridos desde uma data no formato "YYYY-MM-DD às HH:MM" ou "DD/MM/YYYY..."
+function diasDesde(dataStr) {
+  if(!dataStr) return 0;
+  try {
+    const parteData = dataStr.split(' ')[0]; // remove " às HH:MM"
+    let d;
+    if(parteData.includes('-')) {            // YYYY-MM-DD
+      const [a,m,dia] = parteData.split('-').map(Number);
+      d = new Date(a, m-1, dia);
+    } else {                                  // DD/MM/YYYY
+      const [dia,m,a] = parteData.split('/').map(Number);
+      d = new Date(a, m-1, dia);
+    }
+    if(isNaN(d)) return 0;
+    const hoje0 = new Date(); hoje0.setHours(0,0,0,0);
+    d.setHours(0,0,0,0);
+    return Math.max(0, Math.round((hoje0 - d) / 864e5));
+  } catch(e) { return 0; }
+}
+
+async function baixarChamadoInatividade(fid, chamadoId) {
+  abrirModal('🗄 Baixar chamado por inatividade', `
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#92400E;line-height:1.6">
+      O franqueado não confirmou a resolução dentro do prazo. Esta baixa administrativa encerra o chamado e fica registrada no dossiê da unidade, com data e responsável.
+    </div>
+    <div class="field">
+      <label>Observação da baixa <span style="font-weight:400;color:var(--text-dim)">(opcional)</span></label>
+      <textarea class="inp" id="baixa-obs" rows="3" placeholder="Ex.: solução comunicada e validada por telefone; franqueado não retornou no portal."></textarea>
+    </div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn" style="background:#92400E;color:#fff;border-color:#92400E" onclick="confirmarBaixaInatividade('${fid}','${chamadoId}')">Confirmar baixa</button>`
+  );
+}
+
+async function confirmarBaixaInatividade(fid, chamadoId) {
+  const obs = $('baixa-obs')?.value?.trim() || '';
+  try {
+    const lista = JSON.parse(localStorage.getItem('suporte_'+fid)||'[]');
+    const ch = lista.find(x => x.id === chamadoId);
+    if(!ch) {
+      // fallback Firebase
+      const snap = await db.ref('chamados/'+fid).once('value');
+      const raw = snap.val();
+      if(raw){ const arr = Array.isArray(raw)?raw:Object.values(raw); const c2=arr.find(x=>x.id===chamadoId); if(c2) Object.assign(ch||{}, c2); }
+    }
+    if(!ch) { toast('Chamado não encontrado.', 'rd'); return; }
+
+    const dias = diasDesde(ch.dataResposta);
+    ch.status               = 'resolvido';
+    ch.baixadoPorInatividade = true;
+    ch.dataBaixa            = hoje() + ' às ' + agora();
+    ch.baixadoPor           = SESSAO.nome;
+    ch.obsBaixa             = obs;
+    if(!ch.historico) ch.historico = [];
+    ch.historico.push({
+      tipo: 'baixa_inatividade',
+      data: hoje() + ' às ' + agora(),
+      autor: SESSAO.nome,
+      texto: 'Baixa administrativa por inatividade do franqueado ('+dias+' dias sem confirmar a resolução).' + (obs?' Obs: '+obs:''),
+    });
+
+    const listaLimpa = sanitizarFirebase(lista);
+    await db.ref('chamados/'+fid).set(listaLimpa);
+    localStorage.setItem('suporte_'+fid, JSON.stringify(lista));
+
+    // Registrar no dossiê (histórico da esteira)
+    const f = getFranqueado(fid);
+    const etapaAtual = f?.etapaAtual || 0;
+    salvarEventoEtapa(fid, etapaAtual, {
+      tipo:  'chamado_baixado_inatividade',
+      texto: 'Chamado '+(ch.id||'')+' ("'+(ch.tipo||ch.assunto||'Suporte')+'") baixado administrativamente por inatividade do franqueado ('+dias+' dias sem confirmar a resolução proposta pelo gestor).' + (obs?' Observação: '+obs:''),
+      autor: SESSAO.nome,
+      data:  hoje(), hora: agora(), timestamp: Date.now(),
+    });
+
+    // Notificar franqueado
+    try { db.ref('chamado_notif/'+fid+'/'+chamadoId).set({
+      tipo: 'baixa_inatividade', data: hoje(),
+      msg: 'Seu chamado foi encerrado administrativamente por falta de confirmação. Se o problema persistir, abra um novo chamado.'
+    }); } catch(e) {}
+
+    atualizarBadgeChamadosNav();
+    fecharModal();
+    toast('Chamado baixado por inatividade e registrado no dossiê.', 'gn');
+    renderSuportePainel();
+  } catch(e) {
+    toast('Erro ao baixar: ' + e.message, 'rd');
+  }
+}
+
 async function renderSuportePainel() {
   $('content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">⏳</div><div style="font-size:13px">Carregando chamados...</div></div>';
 
@@ -4406,7 +4496,22 @@ async function renderSuportePainel() {
           style="padding:7px 14px;border-radius:8px;background:#FEE2E2;color:var(--red);border:1px solid var(--red-border);cursor:pointer;font-size:12px;font-weight:700">
           ✕ Cancelar
         </button>
-      </div>` : ''}
+      </div>
+      ${(() => {
+        // Baixa por inatividade: gestor resolveu, franqueado não confirmou há 7+ dias
+        if(!c.resolvidoGestor || c.retornoFranqueado) return '';
+        const diasSemResposta = diasDesde(c.dataResposta);
+        if(diasSemResposta < 7) {
+          return `<div style="margin-top:8px;font-size:10.5px;color:var(--text-muted);font-style:italic">⏳ Resolvido há ${diasSemResposta} dia(s). Baixa por inatividade liberada em ${7-diasSemResposta} dia(s) sem resposta do franqueado.</div>`;
+        }
+        return `<div style="margin-top:8px;padding:10px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px">
+          <div style="font-size:11px;color:#92400E;margin-bottom:6px">⚠ Franqueado sem resposta há <b>${diasSemResposta} dias</b> desde a resolução. Você pode dar baixa administrativa.</div>
+          <button onclick="baixarChamadoInatividade('${fid}','${c.id}')"
+            style="padding:6px 12px;border-radius:7px;background:#92400E;color:#fff;border:none;cursor:pointer;font-size:11px;font-weight:700">
+            🗄 Baixar por inatividade (registra no dossiê)
+          </button>
+        </div>`;
+      })()}` : ''}
     </div>`;
   }
 
