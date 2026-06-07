@@ -963,7 +963,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · relatorios-audit-v32','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · badge-firebase-v33','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -13930,10 +13930,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
       : Object.values(raw).filter(Boolean);
     if(dados.length > 0) {
       localStorage.setItem('mo_franqueados', JSON.stringify(dados));
+      // Badge sempre atualizado quando dados chegam do Firebase
+      atualizarBadges();
       // Re-renderizar só se estiver na aba de franqueados
       if(typeof _abaAtual !== 'undefined' && _abaAtual === 'franqueados') {
         renderFranqueados();
-        atualizarBadges();
       }
     }
   });
