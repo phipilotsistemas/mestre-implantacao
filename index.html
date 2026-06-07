@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · regenerar-acesso-v48','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · dossie-chamados-v49','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -9005,6 +9005,64 @@ function gerarDossieEsteira(fid) {
         '</tbody>' +
       '</table>' +
     '</div>';
+  })()}
+
+  <!-- HISTÓRICO DE ATENDIMENTOS (CHAMADOS) -->
+  ${(() => {
+    let chamados = [];
+    try { chamados = JSON.parse(localStorage.getItem('suporte_'+fid)||'[]'); } catch(e) {}
+    if(!Array.isArray(chamados)) chamados = Object.values(chamados||{}).filter(Boolean);
+    if(chamados.length === 0) return '';
+    const statusLbl = { aberto:'Aberto', em_andamento:'Em andamento', resolvido:'Resolvido', concluido:'Concluído', cancelado:'Cancelado' };
+    return `
+    <div class="etapa-bloco" style="margin-top:14px">
+      <div class="etapa-cab">
+        <div class="etapa-num">💬</div>
+        <div class="etapa-tit">Histórico de Atendimentos — Chamados de Suporte</div>
+      </div>
+      <div style="padding:10px 14px">
+        ${chamados.map(c => {
+          const tit = (c.id||'Chamado') + ' — ' + (c.tipo||c.assunto||'Suporte');
+          const baixa = c.baixadoPorInatividade ? ' · baixado por inatividade' : '';
+          let thread = '';
+          // Abertura
+          thread += `<div style="margin:6px 0;padding:7px 10px;background:#F8FAFC;border-left:3px solid #94A3B8;border-radius:4px">
+            <div style="font-size:8.5pt;font-weight:bold;color:#475569">Abertura · ${c.criadoEm||'—'}</div>
+            <div style="font-size:9pt;color:#1F2937">${(c.descricao||c.mensagem||'—')}</div></div>`;
+          // Histórico de rodadas
+          (c.historico||[]).forEach((h,i) => {
+            if(h.respostaGestor) thread += `<div style="margin:6px 0;padding:7px 10px;background:#F0FDF4;border-left:3px solid #16A34A;border-radius:4px">
+              <div style="font-size:8.5pt;font-weight:bold;color:#166534">Resposta da franqueadora · ${h.dataResposta||''}</div>
+              <div style="font-size:9pt;color:#1F2937">${h.respostaGestor}</div></div>`;
+            if(h.retornoFranqueado) thread += `<div style="margin:6px 0;padding:7px 10px;background:#FFFBEB;border-left:3px solid #D97706;border-radius:4px">
+              <div style="font-size:8.5pt;font-weight:bold;color:#92400E">Retorno do franqueado · ${h.dataRetorno||''}</div>
+              <div style="font-size:9pt;color:#1F2937">${h.retornoFranqueado}</div></div>`;
+          });
+          // Resposta/retorno atuais (fora do histórico)
+          if(c.respostaGestor) thread += `<div style="margin:6px 0;padding:7px 10px;background:#F0FDF4;border-left:3px solid #16A34A;border-radius:4px">
+            <div style="font-size:8.5pt;font-weight:bold;color:#166534">Resposta da franqueadora · ${c.dataResposta||''}</div>
+            <div style="font-size:9pt;color:#1F2937">${c.respostaGestor}</div></div>`;
+          if(c.retornoFranqueado) thread += `<div style="margin:6px 0;padding:7px 10px;background:#FFFBEB;border-left:3px solid #D97706;border-radius:4px">
+            <div style="font-size:8.5pt;font-weight:bold;color:#92400E">Retorno do franqueado · ${c.dataRetorno||''}</div>
+            <div style="font-size:9pt;color:#1F2937">${c.retornoFranqueado}</div></div>`;
+          // Conclusão / assinatura
+          if(c.assinaturaFranqueado) thread += `<div style="margin:6px 0;padding:7px 10px;background:#EFF6FF;border-left:3px solid #2563EB;border-radius:4px">
+            <div style="font-size:8.5pt;font-weight:bold;color:#1E40AF">✓ Confirmado pelo franqueado · ${c.dataAssinatura||''}</div>
+            ${c.hashAssinatura?`<div style="font-size:7.5pt;color:#64748B">hash: ${c.hashAssinatura}</div>`:''}</div>`;
+          if(c.baixadoPorInatividade) thread += `<div style="margin:6px 0;padding:7px 10px;background:#FEF3C7;border-left:3px solid #D97706;border-radius:4px">
+            <div style="font-size:8.5pt;font-weight:bold;color:#92400E">Baixa administrativa por inatividade · ${c.dataBaixa||''}</div>
+            <div style="font-size:9pt;color:#1F2937">Responsável: ${c.baixadoPor||'—'}${c.obsBaixa?'. Obs: '+c.obsBaixa:''}</div></div>`;
+          return `<div style="margin-bottom:14px;padding:10px;border:1px solid #E5E7EB;border-radius:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-size:9.5pt;font-weight:bold;color:#1F3864">${tit}</div>
+              <div style="font-size:8pt;color:#64748B">${statusLbl[c.status]||c.status||''}${baixa}</div>
+            </div>
+            ${thread}
+          </div>`;
+        }).join('')}
+        <div style="font-size:8pt;color:#64748B;margin-top:4px;font-style:italic">Total: ${chamados.length} atendimento(s) registrado(s) no processo.</div>
+      </div>
+    </div>`;
   })()}
 
   <!-- RODAPÉ ANALÍTICO -->
