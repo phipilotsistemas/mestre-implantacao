@@ -966,7 +966,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · resumo-ciclo-datas-v39','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · hist-funcional-fix-v40','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1448,12 +1448,15 @@ async function assinarDigital(caminho, textoDeclaracao) {
 }
 
 function gravarHistoricoFuncional(registro) {
+  const token = (typeof SESSAO !== 'undefined' && SESSAO?.token) ? SESSAO.token : (registro?.uid || 'geral');
   const mesAno = hoje().slice(0,7).replace('-','_');
-  const chave = `hf_${SESSAO.token}_${mesAno}`;
+  const chave = `hf_${token}_${mesAno}`;
   try {
     const atual = JSON.parse(localStorage.getItem(chave)||'[]');
     atual.push({ ...registro, timestamp: Date.now() });
     localStorage.setItem(chave, JSON.stringify(atual));
+    // Espelhar no Firebase para o relatório consolidar entre dispositivos
+    try { db.ref('historico_funcional/'+token+'/'+mesAno).set(atual).catch(()=>{}); } catch(e) {}
   } catch(e) {}
 }
 
@@ -4829,7 +4832,15 @@ function inicializarPastasColaborador(col) {
 ══════════════════════════════════════════════════ */
 
 function getDossieColaborador(colId, mesAno) {
-  const chave = `hf_${colId}_${mesAno.replace('/','_')}`;
+  // Normalizar para o formato da gravação: hf_{token}_YYYY_MM
+  let chaveMs;
+  if(mesAno.includes('/')) {            // MM/YYYY (de getMesAtual)
+    const [mm, yyyy] = mesAno.split('/');
+    chaveMs = yyyy + '_' + mm;
+  } else {                               // YYYY-MM ou YYYY_MM
+    chaveMs = mesAno.replace('-','_');
+  }
+  const chave = `hf_${colId}_${chaveMs}`;
   try { return JSON.parse(localStorage.getItem(chave)||'[]'); } catch(e) { return []; }
 }
 
@@ -6430,15 +6441,19 @@ function renderRelatorios() {
         <button class="btn sm" onclick="renderRelatorios()">↻ Atualizar</button>
       </div>
       <div class="card-body" style="padding:8px 0">
-        ${Object.entries(EQUIPE).map(([tk,u])=>{
-          const mesAno = hoje().slice(0,7).replace('/','_').replace('/','-');
-          const evs = JSON.parse(localStorage.getItem('hf_'+tk+'_'+mesAno)||'[]');
-          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border)">
-            <div style="width:30px;height:30px;border-radius:50%;background:${u.cor};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px;flex-shrink:0">${u.nome.charAt(0)}</div>
-            <div style="flex:1"><div style="font-size:12px;font-weight:700">${u.nome}</div><div style="font-size:10px;color:var(--text-dim)">${u.cargo}</div></div>
-            <span class="badge" style="background:${evs.length>0?'var(--green)':'var(--border)'};color:${evs.length>0?'#fff':'var(--text-dim)'}">${evs.length} evento(s)</span>
-          </div>`;
-        }).join('')}
+        ${(() => {
+          const mesAno = hoje().slice(0,7).replace('-','_'); // mesma chave da gravação
+          const membros = membrosDelegaveis();
+          return membros.map(u => {
+            const tk = u.token;
+            const evs = JSON.parse(localStorage.getItem('hf_'+tk+'_'+mesAno)||'[]');
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border)">
+              <div style="width:30px;height:30px;border-radius:50%;background:${u.cor||'#94A3B8'};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px;flex-shrink:0">${u.nome.charAt(0)}</div>
+              <div style="flex:1"><div style="font-size:12px;font-weight:700">${u.nome}</div><div style="font-size:10px;color:var(--text-dim)">${u.cargo||''}</div></div>
+              <span class="badge" style="background:${evs.length>0?'var(--green)':'var(--border)'};color:${evs.length>0?'#fff':'var(--text-dim)'}">${evs.length} evento(s)</span>
+            </div>`;
+          }).join('');
+        })()}
       </div>
     </div>
 
