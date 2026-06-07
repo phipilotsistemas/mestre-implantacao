@@ -966,7 +966,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · equipe-na-etapa-v38','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · resumo-ciclo-datas-v39','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -3534,23 +3534,38 @@ async function mostrarResumoCicloEtapa(notif) {
   // Buscar eventos da etapa para calcular duração
   let diasTranscorridos = '—';
   let dataInicio = '—';
-  let dataFim    = notif.data;
+  let dataFim    = notif.data || hoje();
   try {
-    const snap = await db.ref(`etapas/${notif.fid}/et${notif.etapa}/eventos`).once('value');
-    const raw  = snap.val();
-    if(raw) {
-      const evs = Array.isArray(raw) ? raw : Object.values(raw);
-      const inicio = evs.find(e => e.tipo === 'etapa_iniciada');
-      if(inicio?.data) {
-        dataInicio = inicio.data;
-        const [di,mi,ai] = inicio.data.split('/').map(Number);
-        const [df,mf,af] = notif.data.split('/').map(Number);
-        const d1 = new Date(ai,mi-1,di);
-        const d2 = new Date(af,mf-1,df);
-        diasTranscorridos = Math.max(0, Math.round((d2-d1)/(864e5)));
-      }
+    // Ler eventos do localStorage (fonte primária) com fallback para Firebase
+    let evs = [];
+    try { evs = JSON.parse(localStorage.getItem('mo_eventos_'+notif.fid+'_etapa'+notif.etapa)||'[]'); } catch(e) {}
+    if(evs.length === 0) {
+      const snap = await db.ref(`etapas/${notif.fid}/et${notif.etapa}/eventos`).once('value');
+      const raw  = snap.val();
+      if(raw) evs = Array.isArray(raw) ? raw : Object.values(raw);
     }
-  } catch(e) {}
+
+    // Início: etapa_iniciada OU processo_iniciado (Etapa 1)
+    const inicio = evs.find(e => e.tipo === 'etapa_iniciada' || e.tipo === 'processo_iniciado');
+    // Conclusão: etapa_concluida OU concordancia_franqueado OU assinatura_gestora
+    const fim = evs.find(e => e.tipo === 'etapa_concluida')
+             || evs.find(e => e.tipo === 'concordancia_franqueado')
+             || evs.find(e => e.tipo === 'assinatura_gestora');
+
+    if(inicio?.data) dataInicio = inicio.data;
+    if(fim?.data)    dataFim    = fim.data;
+
+    // Calcular dias se ambas as datas forem válidas (formato DD/MM/YYYY)
+    const parse = d => {
+      if(!d) return null;
+      const p = d.includes('-') ? d.split('-') : d.split('/').reverse();
+      const [a,m,dia] = p.map(Number);
+      const dt = new Date(a, m-1, dia);
+      return isNaN(dt) ? null : dt;
+    };
+    const d1 = parse(dataInicio), d2 = parse(dataFim);
+    if(d1 && d2) diasTranscorridos = Math.max(0, Math.round((d2-d1)/(864e5)));
+  } catch(e) { console.warn('resumo ciclo datas:', e.message); }
 
   abrirModal(`✅ Etapa ${notif.etapa} concluída — ${notif.franqueado}`, `
     <div style="background:linear-gradient(135deg,#1E40AF,#3B82F6);border-radius:12px;padding:16px;margin-bottom:16px;color:#fff">
@@ -3562,7 +3577,7 @@ async function mostrarResumoCicloEtapa(notif) {
       ${[
         {label:'Início', valor: dataInicio},
         {label:'Conclusão', valor: dataFim},
-        {label:'Dias', valor: diasTranscorridos + (diasTranscorridos!=='—'?' dia(s)':'')},
+        {label:'Dias', valor: diasTranscorridos==='—' ? '—' : (diasTranscorridos===0 ? 'mesmo dia' : diasTranscorridos + ' dia(s)')},
       ].map(s=>`
       <div style="text-align:center;background:var(--bg);border-radius:10px;padding:12px;border:1px solid var(--border)">
         <div style="font-size:18px;font-weight:800;color:var(--primary)">${s.valor}</div>
