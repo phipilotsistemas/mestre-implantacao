@@ -901,12 +901,7 @@ select.inp{cursor:pointer}
       <button class="sb-item" id="sb-equipe" onclick="ir('equipe',this)" style="display:none">
         <div class="dot"></div><span>Equipe</span>
       </button>
-      <button class="sb-item" id="sb-config-equipe" onclick="ir('config_equipe',this)" style="display:none">
-        <div class="dot"></div><span>Equipe das etapas</span>
-      </button>
-      <button class="sb-item" id="sb-config-tarefas" onclick="ir('config_tarefas',this)" style="display:none">
-        <div class="dot"></div><span>Tarefas das etapas</span>
-      </button>
+
       <button class="sb-item" id="sb-contatos" onclick="ir('contatos',this)" style="display:none">
         <div class="dot"></div><span>Contatos externos</span>
       </button>
@@ -969,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · tarefas-editaveis-v41','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · config-engrenagem-v42','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1642,8 +1637,6 @@ function iniciarApp() {
   if(PERM.verEquipe) {
     $('sb-group-admin').style.display = '';
     $('sb-equipe').style.display = '';
-    $('sb-config-equipe').style.display = '';
-    $('sb-config-tarefas').style.display = '';
     $('sb-contatos').style.display = '';
   }
   if(PERM.verRelatorios) $('sb-relatorios').style.display = '';
@@ -2486,11 +2479,26 @@ function renderFranqueados() {
   // Renderiza a esteira com abas
   const dados = getDados();
   $('content').innerHTML = `
-    <div class="esteira-tabs">
+    <div class="esteira-tabs" style="display:flex;align-items:center">
       <button class="esteira-tab ativa" data-aba="painel"        onclick="trocarAbaEsteira('painel',this)">Painel</button>
       <button class="esteira-tab"       data-aba="lista"         onclick="trocarAbaEsteira('lista',this)">Franqueados</button>
       <button class="esteira-tab"       data-aba="inaugurados"   onclick="trocarAbaEsteira('inaugurados',this)">Inaugurados</button>
       <button class="esteira-tab"       data-aba="arquivados"    onclick="trocarAbaEsteira('arquivados',this)" style="color:var(--text-muted)">Arquivados</button>
+      ${PERM.assinar?`<div style="margin-left:auto;position:relative">
+        <button onclick="toggleConfigImplantacao(event)" title="Configurações da implantação"
+          style="background:none;border:1.5px solid var(--border);border-radius:8px;width:36px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-dim);transition:all .15s"
+          onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">⚙</button>
+        <div id="config-impl-menu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:220px;z-index:500;overflow:hidden">
+          <div style="padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:1px solid var(--border)">Configurações</div>
+          <button onclick="fecharConfigImplantacao();ir('config_equipe')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--text);text-align:left;font-family:inherit" onmouseover="this.style.background='var(--bg-alt)'" onmouseout="this.style.background='none'">
+            <span style="font-size:16px">👥</span> Equipe das etapas
+          </button>
+          <button onclick="fecharConfigImplantacao();ir('config_tarefas')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--text);text-align:left;font-family:inherit;border-top:1px solid var(--border)" onmouseover="this.style.background='var(--bg-alt)'" onmouseout="this.style.background='none'">
+            <span style="font-size:16px">📋</span> Tarefas das etapas
+          </button>
+        </div>
+      </div>`:''}
     </div>
     <div id="esteira-aba-painel"       class="esteira-aba ativa"></div>
     <div id="esteira-aba-onboarding"   class="esteira-aba"></div>
@@ -2501,6 +2509,28 @@ function renderFranqueados() {
   // Aguardar o browser processar o DOM antes de injetar o conteúdo
   requestAnimationFrame(() => { if($('esteira-aba-painel')) renderEsteiraPainel(); });
 
+}
+
+function toggleConfigImplantacao(ev) {
+  if(ev) ev.stopPropagation();
+  const menu = $('config-impl-menu');
+  if(!menu) return;
+  const aberto = menu.style.display !== 'none';
+  menu.style.display = aberto ? 'none' : 'block';
+  if(!aberto) {
+    // Fechar ao clicar fora
+    setTimeout(() => {
+      const handler = (e) => {
+        if(!menu.contains(e.target)) { menu.style.display='none'; document.removeEventListener('click', handler); }
+      };
+      document.addEventListener('click', handler);
+    }, 10);
+  }
+}
+
+function fecharConfigImplantacao() {
+  const menu = $('config-impl-menu');
+  if(menu) menu.style.display = 'none';
 }
 
 function trocarAbaEsteira(aba, btn) {
@@ -5357,6 +5387,7 @@ function renderConfigTarefasEtapas() {
   const custom = getEtapasCustom();
   $('content').innerHTML = `
     <div style="max-width:760px;margin:0 auto">
+      <button class="btn sm" onclick="ir('franqueados')" style="margin-bottom:12px">← Voltar à implantação</button>
       <div style="margin-bottom:16px"><div style="font-size:18px;font-weight:800">Tarefas das etapas</div></div>
       <div style="background:var(--primary-soft);border:1px solid var(--primary-border);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--primary);line-height:1.6">
         Adicione ou remova tarefas do checklist de cada etapa. As mudanças valem para todos os processos. Tarefas já concluídas em processos existentes permanecem registradas.
@@ -5538,7 +5569,7 @@ function renderConfigEquipeEtapas(fid) {
     abrirModal(titulo, corpo, `<button class="btn primary" onclick="fecharModal()">Concluir</button>`);
     setTimeout(()=>{ const m=$('modal'); if(m) m.style.maxWidth='820px'; }, 50);
   } else {
-    $('content').innerHTML = '<div style="margin-bottom:16px"><div style="font-size:18px;font-weight:800">'+titulo+'</div></div>' + corpo;
+    $('content').innerHTML = '<button class="btn sm" onclick="ir(\'franqueados\')" style="margin-bottom:12px">← Voltar à implantação</button><div style="margin-bottom:16px"><div style="font-size:18px;font-weight:800">'+titulo+'</div></div>' + corpo;
   }
 }
 
