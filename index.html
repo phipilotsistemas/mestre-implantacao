@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · baixa-inatividade-v44','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · filtro-robusto-v45','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -12552,22 +12552,35 @@ function limparFiltrosTarefa() {
   renderSubTarefas();
 }
 
+// Deriva o franqueado de uma tarefa (direto ou via prazo)
+function tarefaFid(t) {
+  if(t.fid) return t.fid;
+  if(t.prazoId) { const p = getPrazos().find(x=>x.id===t.prazoId); return p?.franqueadoId || ''; }
+  return '';
+}
+// Deriva a etapa de uma tarefa (direto ou via prazo)
+function tarefaEtapa(t) {
+  if(t.etapaId != null) return t.etapaId;
+  if(t.prazoId) { const p = getPrazos().find(x=>x.id===t.prazoId); return p?.etapaId ?? p?.etapa ?? null; }
+  return null;
+}
+
 function renderSubTarefas() {
   const el = $('sub-tarefas');
   if(!el) return;
   const token    = SESSAO?.token || '';
   const todas    = getTarefas().filter(t=>t.responsavelToken===token);
 
-  // Valores disponíveis para os filtros — só o que o membro realmente tem
-  const fidsDisp = [...new Set(todas.map(t=>t.fid).filter(Boolean))];
-  const etapasDisp = [...new Set(todas.map(t=>t.etapaId).filter(e=>e!=null))].sort((a,b)=>a-b);
+  // Valores disponíveis para os filtros — derivados de tarefa direta OU via prazo
+  const fidsDisp = [...new Set(todas.map(t=>tarefaFid(t)).filter(Boolean))];
+  const etapasDisp = [...new Set(todas.map(t=>tarefaEtapa(t)).filter(e=>e!=null))].sort((a,b)=>a-b);
 
   // Aplicar filtros (lógica E)
   const hoje0 = new Date(); hoje0.setHours(0,0,0,0);
   const fimSemana = new Date(hoje0); fimSemana.setDate(fimSemana.getDate() + (7 - hoje0.getDay()));
   const tarefas = todas.filter(t => {
-    if(_filtroTarefas.fid && t.fid !== _filtroTarefas.fid) return false;
-    if(_filtroTarefas.etapa !== '' && String(t.etapaId) !== String(_filtroTarefas.etapa)) return false;
+    if(_filtroTarefas.fid && tarefaFid(t) !== _filtroTarefas.fid) return false;
+    if(_filtroTarefas.etapa !== '' && String(tarefaEtapa(t)) !== String(_filtroTarefas.etapa)) return false;
     if(_filtroTarefas.periodo) {
       const venc = t.dataVenc ? new Date(t.dataVenc+'T00:00') : null;
       if(_filtroTarefas.periodo === 'atrasadas') {
@@ -12590,12 +12603,12 @@ function renderSubTarefas() {
   const barraFiltros = `
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;background:var(--bg-alt);border-radius:10px;margin-bottom:12px">
       <span style="font-size:11px;font-weight:700;color:var(--text-muted)">Filtrar:</span>
-      <select onchange="setFiltroTarefa('fid',this.value)" style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);font-family:inherit;color:var(--text)">
-        <option value="">Todos os franqueados</option>
+      <select onchange="setFiltroTarefa('fid',this.value)" ${fidsDisp.length===0?'disabled':''} style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);font-family:inherit;color:var(--text);${fidsDisp.length===0?'opacity:.5':''}">
+        <option value="">${fidsDisp.length===0?'Nenhum franqueado ainda':'Todos os franqueados'}</option>
         ${fidsDisp.map(fid=>{const f=dados.find(x=>x.id===fid);return `<option value="${fid}" ${_filtroTarefas.fid===fid?'selected':''}>${f?f.nome.split(' ').slice(0,2).join(' '):fid}</option>`;}).join('')}
       </select>
-      <select onchange="setFiltroTarefa('etapa',this.value)" style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);font-family:inherit;color:var(--text)">
-        <option value="">Todas as etapas</option>
+      <select onchange="setFiltroTarefa('etapa',this.value)" ${etapasDisp.length===0?'disabled':''} style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);font-family:inherit;color:var(--text);${etapasDisp.length===0?'opacity:.5':''}">
+        <option value="">${etapasDisp.length===0?'Nenhuma etapa ainda':'Todas as etapas'}</option>
         ${etapasDisp.map(eid=>{const et=ETAPAS.find(e=>e.id===eid);return `<option value="${eid}" ${String(_filtroTarefas.etapa)===String(eid)?'selected':''}>Etapa ${eid} — ${et?et.nome:''}</option>`;}).join('')}
       </select>
       <select onchange="setFiltroTarefa('periodo',this.value)" style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);font-family:inherit;color:var(--text)">
