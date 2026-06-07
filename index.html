@@ -966,7 +966,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · equipe-etapas-v36','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · equipe-dropdown-v37','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1029,10 +1029,6 @@ const EQUIPE = {
   'GES-002':      { nome:'Rafael Torres',         cargo:'Consultor de Implantação',tipo:'gestor',    cor:'#1E40AF', email:'rafael@mestrework.com'   },
   'EST-001':      { nome:'Beatriz Oliveira',       cargo:'Estagiária',             tipo:'estagiario',cor:'#16A34A', email:'beatriz@mestrework.com'  },
   'AUX-001':      { nome:'Lucas Pereira',          cargo:'Auxiliar Administrativo',tipo:'auxiliar',  cor:'#7C3AED', email:'lucas@mestrework.com'    },
-  'EQ-VANESSA':   { nome:'Vanessa',                cargo:'Projeto, Layout e Fachada',tipo:'projeto', cor:'#0891B2', email:'vanessa@mestrework.com'  },
-  'EQ-PRISCILA':  { nome:'Priscila',               cargo:'Compras',                 tipo:'compras',  cor:'#CA8A04', email:'priscila@mestrework.com' },
-  'EQ-ERICA':     { nome:'Érica',                  cargo:'Treinamento',             tipo:'treinamento',cor:'#DB2777',email:'erica@mestrework.com'   },
-  'EQ-LEANDRO':   { nome:'Leandro',                cargo:'Marketing',               tipo:'marketing',cor:'#9333EA', email:'leandro@mestrework.com'  },
 };
 
 /* Permissões por tipo */
@@ -5290,7 +5286,6 @@ function membrosDelegaveis() {
 
 // ── TELA: Configurar equipe das etapas (template global) ──
 function renderConfigEquipeEtapas(fid) {
-  // Se fid fornecido → modo override (por processo); senão → template global
   const modoOverride = !!fid;
   const f = fid ? getFranqueado(fid) : null;
   const tpl = getEquipeEtapasTemplate();
@@ -5303,6 +5298,13 @@ function renderConfigEquipeEtapas(fid) {
   const subtitulo = modoOverride
     ? 'Ajustes aqui valem apenas para esta unidade. O padrão geral não é alterado.'
     : 'Defina os membros que atuam em cada etapa. Vale como padrão para todo novo processo.';
+
+  if(membros.length === 0) {
+    const vazio = '<div style="padding:30px;text-align:center;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:8px">👥</div><div style="font-size:14px;font-weight:700">Nenhum membro cadastrado</div><div style="font-size:12px;margin-top:4px">Cadastre membros na seção <b>Equipe</b> primeiro. Eles aparecerão aqui automaticamente.</div></div>';
+    if(modoOverride) { abrirModal(titulo, vazio, '<button class="btn" onclick="fecharModal()">Fechar</button>'); }
+    else { $('content').innerHTML = vazio; }
+    return;
+  }
 
   const corpo = `
     <div style="max-width:760px;margin:0 auto">
@@ -5324,40 +5326,41 @@ function renderConfigEquipeEtapas(fid) {
                 <div class="card-title" style="font-size:13px">${et.nome}</div>
               </div>
               <div style="display:flex;align-items:center;gap:8px">
-                ${membrosEt.length ? `<span class="badge" style="background:var(--green);color:#fff">${membrosEt.length} membro(s)</span>` : '<span style="font-size:11px;color:var(--text-muted)">sem equipe</span>'}
+                <span id="cfg-count-${et.id}" class="badge" style="background:${membrosEt.length?'var(--green)':'var(--border)'};color:${membrosEt.length?'#fff':'var(--text-dim)'}">${membrosEt.length?membrosEt.length+' membro(s)':'sem equipe'}</span>
                 <span id="cfg-chevron-${et.id}" style="font-size:10px;color:var(--text-muted)">▶</span>
               </div>
             </div>
             <div id="cfg-body-${et.id}" class="card-body" style="display:none">
-              <!-- Membros da etapa inteira -->
+              <!-- Dropdown para adicionar membro -->
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">Quem atua nesta etapa</div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
-                ${membros.map(m => {
-                  const sel = membrosEt.includes(m.token);
-                  return `<button type="button" onclick="toggleMembroEtapa('${fid||''}',${et.id},'${m.token}')"
-                    id="memb-${et.id}-${m.token}"
-                    style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1.5px solid ${sel?m.cor:'var(--border)'};background:${sel?m.cor:'var(--bg)'};color:${sel?'#fff':'var(--text)'};font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s">
-                    <span style="width:7px;height:7px;border-radius:50%;background:${sel?'#fff':m.cor}"></span>
-                    ${m.nome.split(' ')[0]} <span style="opacity:.7;font-size:9px">${m.cargo}</span>
-                  </button>`;
-                }).join('')}
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <select class="inp" id="cfg-select-${et.id}" style="flex:1;font-size:12px">
+                  <option value="">+ Adicionar membro...</option>
+                  ${membros.map(m => `<option value="${m.token}">${m.nome} — ${m.cargo}</option>`).join('')}
+                </select>
+                <button class="btn sm primary" onclick="addMembroEtapaDropdown('${fid||''}',${et.id})">Adicionar</button>
               </div>
-              <!-- Drill-down opcional por item do checklist -->
-              <details style="margin-top:8px">
+              <!-- Tags dos membros atribuídos -->
+              <div id="cfg-tags-${et.id}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                ${renderTagsMembros(membrosEt, membros, fid||'', et.id)}
+              </div>
+              <!-- Drill-down opcional por item -->
+              <details style="margin-top:4px">
                 <summary style="font-size:11px;color:var(--primary);cursor:pointer;font-weight:600">Detalhar por item do checklist (opcional)</summary>
                 <div style="margin-top:10px;padding-left:8px;border-left:2px solid var(--border)">
                   ${(et.tarefas||[]).map((item,idx) => {
                     const itensAtrib = (fonte.itens||{})[item] || [];
-                    return `<div style="margin-bottom:10px">
-                      <div style="font-size:12px;font-weight:600;margin-bottom:4px">${idx+1}. ${item}</div>
-                      <div style="display:flex;flex-wrap:wrap;gap:5px">
-                        ${membros.map(m => {
-                          const sel = itensAtrib.includes(m.token);
-                          return `<button type="button" onclick="toggleMembroItem('${fid||''}',${et.id},${idx},'${m.token}')"
-                            id="item-${et.id}-${idx}-${m.token}"
-                            style="padding:3px 8px;border-radius:6px;border:1px solid ${sel?m.cor:'var(--border)'};background:${sel?m.cor:'var(--bg)'};color:${sel?'#fff':'var(--text)'};font-size:10px;cursor:pointer;font-family:inherit">
-                            ${m.nome.split(' ')[0]}</button>`;
-                        }).join('')}
+                    return `<div style="margin-bottom:12px">
+                      <div style="font-size:12px;font-weight:600;margin-bottom:5px">${idx+1}. ${item}</div>
+                      <div style="display:flex;gap:6px">
+                        <select class="inp" id="cfg-item-select-${et.id}-${idx}" style="flex:1;font-size:11px;padding:4px 8px">
+                          <option value="">+ Adicionar...</option>
+                          ${membros.map(m => `<option value="${m.token}">${m.nome.split(' ')[0]} — ${m.cargo}</option>`).join('')}
+                        </select>
+                        <button class="btn sm" onclick="addMembroItemDropdown('${fid||''}',${et.id},${idx})">+</button>
+                      </div>
+                      <div id="cfg-item-tags-${et.id}-${idx}" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+                        ${renderTagsItens(itensAtrib, membros, fid||'', et.id, idx)}
                       </div>
                     </div>`;
                   }).join('')}
@@ -5377,6 +5380,115 @@ function renderConfigEquipeEtapas(fid) {
   }
 }
 
+// Renderiza tags removíveis dos membros de uma etapa
+function renderTagsMembros(tokens, membros, fid, etId) {
+  if(!tokens || tokens.length===0) return '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Nenhum membro atribuído ainda</span>';
+  return tokens.map(tk => {
+    const m = membros.find(x=>x.token===tk) || {nome:tk, cor:'#94A3B8', cargo:''};
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 10px;border-radius:20px;background:${m.cor};color:#fff;font-size:11px;font-weight:600">
+      ${m.nome.split(' ')[0]} <span style="opacity:.8;font-size:9px;font-weight:400">${m.cargo}</span>
+      <button onclick="removeMembroEtapa('${fid}',${etId},'${tk}')" style="background:rgba(255,255,255,.25);border:none;color:#fff;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
+    </span>`;
+  }).join('');
+}
+
+// Renderiza tags removíveis de um item do checklist
+function renderTagsItens(tokens, membros, fid, etId, itemIdx) {
+  if(!tokens || tokens.length===0) return '';
+  return tokens.map(tk => {
+    const m = membros.find(x=>x.token===tk) || {nome:tk, cor:'#94A3B8'};
+    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px 2px 8px;border-radius:14px;background:${m.cor};color:#fff;font-size:10px">
+      ${m.nome.split(' ')[0]}
+      <button onclick="removeMembroItem('${fid}',${etId},${itemIdx},'${tk}')" style="background:rgba(255,255,255,.25);border:none;color:#fff;width:13px;height:13px;border-radius:50%;cursor:pointer;font-size:9px;line-height:1;display:flex;align-items:center;justify-content:center">×</button>
+    </span>`;
+  }).join('');
+}
+
+// Adiciona membro à etapa via dropdown
+function addMembroEtapaDropdown(fid, etId) {
+  const sel = $('cfg-select-'+etId);
+  const tk = sel?.value;
+  if(!tk) return;
+  _mutarEquipeEtapa(fid, etId, tk, true);
+  sel.value = '';
+  _refreshTagsEtapa(fid, etId);
+}
+
+function removeMembroEtapa(fid, etId, tk) {
+  _mutarEquipeEtapa(fid, etId, tk, false);
+  _refreshTagsEtapa(fid, etId);
+}
+
+// Núcleo: adiciona/remove membro de uma etapa (template ou override)
+function _mutarEquipeEtapa(fid, etId, tk, adicionar) {
+  const ehOverride = !!fid;
+  let raiz = ehOverride ? (getFranqueado(fid)?.equipeEtapas || {}) : getEquipeEtapasTemplate();
+  if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
+  if(!raiz[etId].membros) raiz[etId].membros = [];
+  const arr = raiz[etId].membros;
+  const i = arr.indexOf(tk);
+  if(adicionar && i<0) arr.push(tk);
+  if(!adicionar && i>=0) arr.splice(i,1);
+  if(ehOverride) atualizarFranqueado(fid, { equipeEtapas: raiz });
+  else salvarEquipeEtapasTemplate(raiz);
+}
+
+function _refreshTagsEtapa(fid, etId) {
+  const membros = membrosDelegaveis();
+  const raiz = fid ? (getFranqueado(fid)?.equipeEtapas || {}) : getEquipeEtapasTemplate();
+  const tokens = raiz[etId]?.membros || [];
+  const cont = $('cfg-tags-'+etId);
+  if(cont) cont.innerHTML = renderTagsMembros(tokens, membros, fid||'', etId);
+  const badge = $('cfg-count-'+etId);
+  if(badge) {
+    badge.textContent = tokens.length ? tokens.length+' membro(s)' : 'sem equipe';
+    badge.style.background = tokens.length ? 'var(--green)' : 'var(--border)';
+    badge.style.color = tokens.length ? '#fff' : 'var(--text-dim)';
+  }
+}
+
+// Item-level dropdown
+function addMembroItemDropdown(fid, etId, itemIdx) {
+  const sel = $('cfg-item-select-'+etId+'-'+itemIdx);
+  const tk = sel?.value;
+  if(!tk) return;
+  _mutarEquipeItem(fid, etId, itemIdx, tk, true);
+  sel.value = '';
+  _refreshTagsItem(fid, etId, itemIdx);
+}
+
+function removeMembroItem(fid, etId, itemIdx, tk) {
+  _mutarEquipeItem(fid, etId, itemIdx, tk, false);
+  _refreshTagsItem(fid, etId, itemIdx);
+}
+
+function _mutarEquipeItem(fid, etId, itemIdx, tk, adicionar) {
+  const ehOverride = !!fid;
+  const et = ETAPAS.find(e=>e.id===etId);
+  const itemNome = et?.tarefas?.[itemIdx];
+  if(!itemNome) return;
+  let raiz = ehOverride ? (getFranqueado(fid)?.equipeEtapas || {}) : getEquipeEtapasTemplate();
+  if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
+  if(!raiz[etId].itens) raiz[etId].itens = {};
+  if(!raiz[etId].itens[itemNome]) raiz[etId].itens[itemNome] = [];
+  const arr = raiz[etId].itens[itemNome];
+  const i = arr.indexOf(tk);
+  if(adicionar && i<0) arr.push(tk);
+  if(!adicionar && i>=0) arr.splice(i,1);
+  if(ehOverride) atualizarFranqueado(fid, { equipeEtapas: raiz });
+  else salvarEquipeEtapasTemplate(raiz);
+}
+
+function _refreshTagsItem(fid, etId, itemIdx) {
+  const membros = membrosDelegaveis();
+  const et = ETAPAS.find(e=>e.id===etId);
+  const itemNome = et?.tarefas?.[itemIdx];
+  const raiz = fid ? (getFranqueado(fid)?.equipeEtapas || {}) : getEquipeEtapasTemplate();
+  const tokens = (raiz[etId]?.itens||{})[itemNome] || [];
+  const cont = $('cfg-item-tags-'+etId+'-'+itemIdx);
+  if(cont) cont.innerHTML = renderTagsItens(tokens, membros, fid||'', etId, itemIdx);
+}
+
 function toggleCfgEtapa(etId) {
   const body = $('cfg-body-'+etId);
   const chev = $('cfg-chevron-'+etId);
@@ -5384,68 +5496,6 @@ function toggleCfgEtapa(etId) {
   const aberto = body.style.display !== 'none';
   body.style.display = aberto ? 'none' : 'block';
   if(chev) chev.textContent = aberto ? '▶' : '▼';
-}
-
-// Alterna membro na etapa inteira (template ou override)
-function toggleMembroEtapa(fid, etId, token) {
-  const ehOverride = !!fid;
-  let store, raiz;
-  if(ehOverride) {
-    const f = getFranqueado(fid);
-    raiz = f.equipeEtapas || {};
-  } else {
-    raiz = getEquipeEtapasTemplate();
-  }
-  if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
-  if(!raiz[etId].membros) raiz[etId].membros = [];
-  const arr = raiz[etId].membros;
-  const i = arr.indexOf(token);
-  if(i>=0) arr.splice(i,1); else arr.push(token);
-
-  if(ehOverride) {
-    atualizarFranqueado(fid, { equipeEtapas: raiz });
-  } else {
-    salvarEquipeEtapasTemplate(raiz);
-  }
-  // Atualizar visual do botão
-  const btn = $('memb-'+etId+'-'+token);
-  const m = membrosDelegaveis().find(x=>x.token===token);
-  const sel = arr.includes(token);
-  if(btn && m) {
-    btn.style.borderColor = sel?m.cor:'var(--border)';
-    btn.style.background   = sel?m.cor:'var(--bg)';
-    btn.style.color        = sel?'#fff':'var(--text)';
-    const dot = btn.querySelector('span'); if(dot) dot.style.background = sel?'#fff':m.cor;
-  }
-}
-
-// Alterna membro num item específico do checklist
-function toggleMembroItem(fid, etId, itemIdx, token) {
-  const ehOverride = !!fid;
-  const et = ETAPAS.find(e=>e.id===etId);
-  const itemNome = et?.tarefas?.[itemIdx];
-  if(!itemNome) return;
-  let raiz;
-  if(ehOverride) { const f=getFranqueado(fid); raiz = f.equipeEtapas||{}; }
-  else { raiz = getEquipeEtapasTemplate(); }
-  if(!raiz[etId]) raiz[etId] = { membros:[], itens:{} };
-  if(!raiz[etId].itens) raiz[etId].itens = {};
-  if(!raiz[etId].itens[itemNome]) raiz[etId].itens[itemNome] = [];
-  const arr = raiz[etId].itens[itemNome];
-  const i = arr.indexOf(token);
-  if(i>=0) arr.splice(i,1); else arr.push(token);
-
-  if(ehOverride) atualizarFranqueado(fid, { equipeEtapas: raiz });
-  else salvarEquipeEtapasTemplate(raiz);
-
-  const btn = $('item-'+etId+'-'+itemIdx+'-'+token);
-  const m = membrosDelegaveis().find(x=>x.token===token);
-  const sel = arr.includes(token);
-  if(btn && m) {
-    btn.style.borderColor = sel?m.cor:'var(--border)';
-    btn.style.background   = sel?m.cor:'var(--bg)';
-    btn.style.color        = sel?'#fff':'var(--text)';
-  }
 }
 
 // Restaura o template global como override do processo
@@ -5585,6 +5635,30 @@ function getEquipe() {
       emergencia:{ nome:'Ana Pereira Carvalho', parentesco:'Mãe', tel:'(11) 91111-0000' },
       obs:'Responsável pelo suporte administrativo, arquivo físico e digital de documentos e controle de correspondências. Ensino médio completo. Em processo de qualificação interna.',
       foto:'',
+    },
+    {
+      id:'EQ-VANESSA', token:'EQ-VANESSA',
+      nome:'Vanessa Martins', cargo:'Projeto, Layout e Fachada',
+      tipo:'projeto', cor:'#0891B2', modalidade:'PJ', status:'ativo',
+      email:'vanessa@mestrework.com', tel:'(42) 99100-0001',
+    },
+    {
+      id:'EQ-PRISCILA', token:'EQ-PRISCILA',
+      nome:'Priscila Andrade', cargo:'Compras e Suprimentos',
+      tipo:'compras', cor:'#CA8A04', modalidade:'CLT', status:'ativo',
+      email:'priscila@mestrework.com', tel:'(42) 99100-0002',
+    },
+    {
+      id:'EQ-ERICA', token:'EQ-ERICA',
+      nome:'Érica Souza', cargo:'Treinamento',
+      tipo:'treinamento', cor:'#DB2777', modalidade:'PJ', status:'ativo',
+      email:'erica@mestrework.com', tel:'(42) 99100-0003',
+    },
+    {
+      id:'EQ-LEANDRO', token:'EQ-LEANDRO',
+      nome:'Leandro Dias', cargo:'Marketing e Comunicação',
+      tipo:'marketing', cor:'#9333EA', modalidade:'PJ', status:'ativo',
+      email:'leandro@mestrework.com', tel:'(42) 99100-0004',
     },
   ];
 }
