@@ -963,7 +963,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · badge-firebase-v33','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · dossie-hist-fix-v35','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -7064,7 +7064,7 @@ function iniciarProcesso(fid) {
   const telWA   = contato?.tel;
   const msgWA   = `Olá ${contato?.responsavel||''},\n\nEstamos iniciando o processo de implantação do franqueado *${f.nome}* (${f.ticket} · ${f.cidade}/${f.uf}).\n\nPara prosseguir, precisamos confirmar o recebimento dos seguintes documentos:\n• COF (Circular de Oferta de Franquia) assinada\n• Pré-contrato assinado\n\nPor favor, confirme o envio ou encaminhe os documentos o quanto antes.\n\nAtenciosamente,\n${SESSAO.nome}\nMestre da Obra`;
 
-  const declaracao = `Eu, ${SESSAO.nome}, cargo ${SESSAO.cargo}, declaro para todos os fins legais que:\n\n1. A COF (Circular de Oferta de Franquia) assinada pelo franqueado ${f.nome} (${f.ticket}) está em minha posse física e devidamente arquivada na pasta 01_COF do sistema;\n2. O Pré-contrato assinado pelo mesmo franqueado está em minha posse física e devidamente arquivado na pasta 02_Pre_Contrato do sistema;\n3. Ambos os documentos foram recebidos de ${contato?.empresa||'empresa de origem'} — responsável: ${contato?.responsavel||'—'};\n4. Os documentos foram conferidos e estão aptos para dar início ao processo de implantação.\n\nData: ${hoje()} às ${agora()}.`;
+  const declaracao = `Eu, ${SESSAO.nome}, cargo ${SESSAO.cargo}, declaro para todos os fins legais que dou início ao processo de implantação do franqueado ${f.nome} (${f.ticket}), abrindo a Etapa 1 — Onboarding & Contratos, na qual o franqueado deverá reunir e assinar a documentação inicial exigida.\n\nData: ${hoje()} às ${agora()}.`;
 
   abrirModal('Iniciar processo de implantação',
     `<!-- FRANQUEADO -->
@@ -7096,17 +7096,11 @@ function iniciarProcesso(fid) {
       </div>
     </div>
 
-    <!-- TRAVA: confirmação obrigatória antes de assinar -->
-    <div style="background:var(--amber-soft);border:1px solid var(--amber-border);border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:8px">⚠ Antes de iniciar, confirme:</div>
-      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-bottom:6px">
-        <input type="checkbox" id="chk-cof" style="margin-top:2px;accent-color:var(--orange)">
-        <span style="font-size:12px;color:#92400E">A COF assinada foi recebida da ${contato?.empresa||'empresa de origem'} e está arquivada na pasta 01_COF</span>
-      </label>
-      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
-        <input type="checkbox" id="chk-pre" style="margin-top:2px;accent-color:var(--orange)">
-        <span style="font-size:12px;color:#92400E">O pré-contrato assinado foi recebido e está arquivado na pasta 02_Pre_Contrato</span>
-      </label>
+    <!-- INFORMATIVO: a documentação é obrigação da Etapa 1 do franqueado -->
+    <div style="background:#EFF6FF;border:1px solid var(--blue-border);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:12px;color:var(--blue);line-height:1.6">
+        Ao iniciar, a <b>Etapa 1 — Onboarding & Contratos</b> será aberta para o franqueado. A COF, o pré-contrato e o contrato de franquia fazem parte dos documentos que o franqueado deverá reunir e assinar nessa etapa. A conferência será feita por você ao assinar a conclusão da Etapa 1.
+      </div>
     </div>
 
     <div id="ass-iniciar-container"></div>`,
@@ -7114,22 +7108,12 @@ function iniciarProcesso(fid) {
     `<button class="btn" onclick="fecharModal()">Cancelar</button>`
   );
 
-  // Habilitar assinatura somente após marcar os dois checkboxes
+  // Assinatura disponível imediatamente — sem trava de documentos
   setTimeout(()=>{
-    const chkCof = $('chk-cof');
-    const chkPre = $('chk-pre');
-    const verificar = () => {
-      if(chkCof?.checked && chkPre?.checked) {
-        renderAssBox('ass-iniciar-container', declaracao,
-          'Confirmar documentos e iniciar processo',
-          ()=>confirmarInicioProcesso(fid, declaracao)
-        );
-      } else {
-        $('ass-iniciar-container').innerHTML = '';
-      }
-    };
-    chkCof?.addEventListener('change', verificar);
-    chkPre?.addEventListener('change', verificar);
+    renderAssBox('ass-iniciar-container', declaracao,
+      'Assinar e iniciar processo',
+      ()=>confirmarInicioProcesso(fid, declaracao)
+    );
   }, 100);
 }
 
@@ -7154,7 +7138,7 @@ async function confirmarInicioProcesso(fid, declaracao) {
 
   const novoHist = [...(f.historico||[]), {
     data:  hoje(),
-    texto: `Processo iniciado por ${SESSAO?.nome||'Sistema'}. COF e Pré-contrato confirmados. Hash: ${hash}`,
+    texto: `Processo de implantação iniciado por ${SESSAO?.nome||'Sistema'}. Etapa 1 aberta para o franqueado. Hash: ${hash}`,
     autor: SESSAO?.nome || 'Sistema',
   }];
 
@@ -7170,23 +7154,20 @@ async function confirmarInicioProcesso(fid, declaracao) {
   salvarEventoEtapa(fid, 1, {
     ...registroInicio,
     tipo:  'processo_iniciado',
-    texto: `Processo de implantação iniciado por ${SESSAO?.nome||'Sistema'} — ${f.nome} (${f.ticket}). COF e Pré-contrato confirmados.`,
+    texto: `Processo de implantação iniciado por ${SESSAO?.nome||'Sistema'} — ${f.nome} (${f.ticket}). Etapa 1 — Onboarding & Contratos aberta para o franqueado.`,
   });
 
-  // ── Registrar na ficha mensal do gestor ──
+  // ── Registrar na ficha mensal do gestor (chave hf_ padrão, lida pelo relatório) ──
   try {
-    const mesAno = new Date().toISOString().slice(0,7); // 'YYYY-MM'
-    const chaveGestor = 'mo_ficha_mensal_' + (SESSAO?.token||'geral') + '_' + mesAno;
-    const fichaGestor = JSON.parse(localStorage.getItem(chaveGestor)||'[]');
-    fichaGestor.push({
-      tipo:           'inicio_processo',
-      franqueado:     f.nome,
-      ticket:         f.ticket,
-      data:           hoje(),
-      hora:           agora(),
+    gravarHistoricoFuncional({
+      tipo:       'inicio_processo',
+      acao:       'Iniciou processo de implantação',
+      franqueado: f.nome,
+      ticket:     f.ticket,
+      data:       hoje(),
+      hora:       agora(),
       hash,
     });
-    localStorage.setItem(chaveGestor, JSON.stringify(fichaGestor));
   } catch(e) {}
 
   fecharModal();
@@ -7744,7 +7725,7 @@ function gerarDossieEsteira(fid) {
     const atual     = et.id === f.etapaAtual;
 
     // Datas reais da etapa
-    const evIni  = eventos.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
+    const evIni  = eventos.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='processo_iniciado'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
     const evConc = eventos.find(e=>e.tipo==='etapa_concluida');
     const evGest = eventos.find(e=>e.tipo==='assinatura_gestora');
     const evFrq  = eventos.find(e=>e.tipo==='concordancia_franqueado');
@@ -8272,7 +8253,7 @@ function renderProcessoImplantacao(fid) {
           const prazoVenc = prazo && new Date(prazo) < new Date();
           // Datas da etapa para o sidebar
           const evsCached = getEventosEtapa(fid, et.id)||[];
-          const evIniSb   = evsCached.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
+          const evIniSb   = evsCached.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='processo_iniciado'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
           const evConcSb  = evsCached.find(e=>e.tipo==='etapa_concluida');
           const dtIniSb   = evIniSb?.data||'';
           const dtConcSb  = evConcSb?.data||'';
@@ -8429,7 +8410,7 @@ function abrirEtapaProcesso(fid, etapaId) {
   const evGest     = eventos.find(e=>e.tipo==='assinatura_gestora');
   const evFrq      = eventos.find(e=>e.tipo==='concordancia_franqueado');
   const evConcluida= eventos.find(e=>e.tipo==='etapa_concluida');
-  const evIniItem  = eventos.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
+  const evIniItem  = eventos.find(e=>e.tipo==='etapa_iniciada'||e.tipo==='processo_iniciado'||e.tipo==='assinatura_gestora'||e.tipo==='mensagem_registrada'||e.tipo==='tarefa_concluida');
   const dtIni      = evIniItem?.data || '—';
   const dtConc     = evConcluida?.data || '—';
   let   diasGastos = 0;
