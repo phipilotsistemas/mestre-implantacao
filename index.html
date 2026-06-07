@@ -966,7 +966,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · equipe-dropdown-v37','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · equipe-na-etapa-v38','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -8988,6 +8988,45 @@ function abrirEtapaProcesso(fid, etapaId) {
       </div>` : ''}
     </div>
   </div>
+
+  <!-- EQUIPE DESTA ETAPA -->
+  ${(() => {
+    const eqEt = getEquipeEtapa(fid, etapaId);
+    const membros = membrosDelegaveis();
+    const tokens = [...new Set([...(eqEt.membros||[]), ...Object.values(eqEt.itens||{}).flat()])];
+    const tarefasEtapa = getTarefas().filter(t => t.fid===fid && t.etapaId===etapaId);
+    return `
+    <div class="card" style="margin-bottom:14px;border-color:var(--primary-border)">
+      <div class="card-head" style="border-color:var(--primary-border)">
+        <div class="card-title" style="color:var(--primary)">👥 Equipe desta etapa</div>
+        ${PERM.assinar?`<button class="btn sm" onclick="renderConfigEquipeEtapas('${fid}')">Editar</button>`:''}
+      </div>
+      <div class="card-body">
+        ${tokens.length === 0
+          ? '<div style="font-size:12px;color:var(--text-dim);font-style:italic">Nenhum membro designado para esta etapa. Clique em "Editar" ou configure o padrão em Equipe das etapas.</div>'
+          : `<div style="display:flex;flex-direction:column;gap:8px">
+              ${tokens.map(tk => {
+                const m = membros.find(x=>x.token===tk) || {nome:tk, cargo:'', cor:'#94A3B8'};
+                const tarefa = tarefasEtapa.find(t=>t.responsavelToken===tk);
+                const statusLabel = !tarefa ? '<span style="font-size:10px;color:var(--text-muted)">aguardando início da etapa</span>'
+                  : tarefa.ciencia ? '<span style="font-size:10px;color:var(--green);font-weight:700">✓ ciência confirmada</span>'
+                  : tarefa.status==='concluida' ? '<span style="font-size:10px;color:var(--green);font-weight:700">✓ concluída</span>'
+                  : '<span style="font-size:10px;color:#92400E;font-weight:700">⏳ aguardando ciência</span>';
+                // Itens específicos atribuídos a este membro
+                const itensDoMembro = Object.entries(eqEt.itens||{}).filter(([item,arr])=>(arr||[]).includes(tk)).map(([item])=>item);
+                return `<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg-alt);border-radius:8px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:${m.cor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">${m.nome.charAt(0)}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:700">${m.nome}</div>
+                    <div style="font-size:11px;color:var(--text-dim)">${m.cargo}${itensDoMembro.length?' · '+itensDoMembro.join(', '):''}</div>
+                  </div>
+                  ${statusLabel}
+                </div>`;
+              }).join('')}
+            </div>`}
+      </div>
+    </div>`;
+  })()}
 
   <!-- LINHA DO TEMPO / EVENTOS -->
   <div class="card" style="margin-bottom:14px">
