@@ -879,12 +879,18 @@ select.inp{cursor:pointer}
 
       <!-- SUPORTE -->
       <div class="sb-group">SUPORTE</div>
-      <button class="sb-item" onclick="ir('onboarding_ref',this)">
-        <div class="dot"></div><span>Onboarding</span>
+      <button class="sb-item" id="sb-manual" onclick="toggleSubmenuManual()" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span>Manual do sistema</span></div>
+        <span id="sb-manual-chevron" style="font-size:10px;color:var(--text-muted);transition:transform .2s">▶</span>
       </button>
-      <button class="sb-item" onclick="ir('manual',this)">
-        <div class="dot"></div><span>Manual do sistema</span>
-      </button>
+      <div id="sb-manual-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border);margin-left:16px">
+        <button class="sb-item" onclick="ir('manual',this)" style="font-size:12px">
+          <div class="dot" style="width:6px;height:6px"></div><span>Documentação</span>
+        </button>
+        <button class="sb-item" onclick="ir('onboarding_ref',this)" style="font-size:12px">
+          <div class="dot" style="width:6px;height:6px"></div><span>Onboarding</span>
+        </button>
+      </div>
 
       <!-- GESTÃO INTERNA -->
       <div class="sb-group" id="sb-group-admin" style="display:none">GESTÃO INTERNA</div>
@@ -957,7 +963,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · sidebar-audit-v30','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · relatorios-audit-v32','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1987,12 +1993,12 @@ function abrirCadastroFranqueado() {
     // ── SEÇÃO 1: PESSOA FÍSICA ──
     '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--primary);margin:0 0 10px;padding:8px 0 4px;border-bottom:2px solid var(--primary-soft)">Pessoa física</div>' +
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Nome completo *</label>' +
+      '<div class="field" style="grid-column:1/-1"><label>Nome completo <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="nf-nome" placeholder="Nome completo do franqueado"></div>' +
       '<div class="field"><label>CPF</label>' +
-        '<input class="inp" id="nf-cpf" placeholder="000.000.000-00" maxlength="14"></div>' +
+        '<input class="inp" id="nf-cpf" data-mask="cpf" placeholder="000.000.000-00" maxlength="14"></div>' +
       '<div class="field"><label>Data de nascimento</label>' +
-        '<input class="inp" id="nf-nascimento" type="date"></div>' +
+        '<input class="inp" id="nf-nascimento" data-mask="data" placeholder="DD/MM/AAAA" maxlength="10"></div>' +
       '<div class="field"><label>Estado civil</label>' +
         '<select class="inp" id="nf-estado-civil">' +
           '<option value="">— Selecione —</option>' +
@@ -2000,16 +2006,16 @@ function abrirCadastroFranqueado() {
           '<option>Divorciado(a)</option><option>Viúvo(a)</option>' +
           '<option>União estável</option>' +
         '</select></div>' +
-      '<div class="field"><label>Telefone *</label>' +
-        '<input class="inp" id="nf-tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
-      '<div class="field"><label>E-mail *</label>' +
+      '<div class="field"><label>Telefone <span style="color:#DC2626">*</span></label>' +
+        '<input class="inp" id="nf-tel" data-mask="tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
+      '<div class="field"><label>E-mail <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="nf-email" type="email" placeholder="email@email.com"></div>' +
       '<div class="field" style="grid-column:1/-1"><label>Endereço</label>' +
         '<input class="inp" id="nf-endereco" placeholder="Rua, número, complemento"></div>' +
       '<div class="field"><label>Bairro</label>' +
         '<input class="inp" id="nf-bairro" placeholder="Bairro"></div>' +
       '<div class="field"><label>CEP</label>' +
-        '<input class="inp" id="nf-cep" placeholder="00000-000" maxlength="9"></div>' +
+        '<input class="inp" id="nf-cep" data-mask="cep" placeholder="00000-000" maxlength="9"></div>' +
       '<div class="field"><label>Cidade</label>' +
         '<input class="inp" id="nf-cidade" placeholder="Cidade"></div>' +
       '<div class="field"><label>UF</label>' +
@@ -2047,17 +2053,17 @@ function abrirCadastroFranqueado() {
       '<div class="field"><label>Consultor A300 responsável</label>' +
         '<input class="inp" id="nf-consultor" placeholder="Nome do consultor"></div>' +
       '<div class="field"><label>Telefone do consultor</label>' +
-        '<input class="inp" id="nf-consultor-tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
+        '<input class="inp" id="nf-consultor-tel" data-mask="tel" placeholder="(00) 00000-0000" maxlength="15"></div>' +
       '<div class="field"><label>E-mail do consultor</label>' +
         '<input class="inp" id="nf-consultor-email" placeholder="consultor@a300.com.br"></div>' +
-      '<div class="field"><label>Cidade pretendida para a franquia *</label>' +
+      '<div class="field"><label>Cidade pretendida para a franquia <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="nf-cidade-franquia" placeholder="Ex: Ponta Grossa / PR"></div>' +
       '<div class="field"><label>Modelo de interesse</label>' +
         '<select class="inp" id="nf-modelo">' +
           '<option>Premium</option><option>Smart</option><option>A definir</option>' +
         '</select></div>' +
       '<div class="field"><label>Meta de inauguração</label>' +
-        '<input class="inp" id="nf-meta" type="date"></div>' +
+        '<input class="inp" id="nf-meta" data-mask="data" placeholder="DD/MM/AAAA" maxlength="10"></div>' +
       '<div class="field"><label>Gestor responsável</label>' +
         '<select class="inp" id="nf-gestor">' + gestores + '</select></div>' +
       '<div class="field"><label>Ticket / Matrícula</label>' +
@@ -2068,7 +2074,10 @@ function abrirCadastroFranqueado() {
     '<button class="btn" onclick="fecharModal()">Cancelar</button> ' +
     '<button class="btn primary" onclick="confirmarCadastroFranqueado()">Cadastrar e liberar portal</button>'
   );
-  setTimeout(function(){ var m=$('modal'); if(m) m.style.maxWidth='640px'; }, 50);
+  setTimeout(function(){
+    var m=$('modal'); if(m) m.style.maxWidth='640px';
+    requestAnimationFrame(function(){ aplicarMascaras(); });
+  }, 80);
 }
 
 async function confirmarCadastroFranqueado() {
@@ -2172,9 +2181,56 @@ function abrirModalNovoFranqueado() {
 
 function encerrarFranquia(fid) {
   const f = getFranqueado(fid);
-  if(!confirm('Encerrar a franquia de ' + (f?.nome||fid) + '? Esta ação não pode ser desfeita.')) return;
-  atualizarFranqueado(fid, { status: 'desistencia', dataEncerramento: hoje() });
-  toast('Franquia encerrada.', 'rd');
+  if(!f) return;
+  abrirModal('Encerrar franquia — '+f.nome, `
+    <div style="font-size:13px;color:var(--text);margin-bottom:14px">
+      Esta ação registra a desistência e encerra o processo. Não pode ser desfeita.
+    </div>
+    <div class="field" style="margin-bottom:14px">
+      <label>Motivo da saída <span style="color:#DC2626">*</span></label>
+      <select class="inp" id="enc-motivo">
+        <option value="">— Selecione —</option>
+        <option>Dificuldade financeira</option>
+        <option>Mudança de planos pessoais</option>
+        <option>Desacordo com a franqueadora</option>
+        <option>Problemas com ponto comercial</option>
+        <option>Questões familiares</option>
+        <option>Outro</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Observação complementar</label>
+      <textarea class="inp" id="enc-obs" rows="3" placeholder="Detalhes sobre o encerramento..."></textarea>
+    </div>`,
+    `<button class="btn" onclick="fecharModal()">Cancelar</button>
+     <button class="btn" style="background:#DC2626;color:#fff;border-color:#DC2626" onclick="confirmarEncerramento('${fid}')">Confirmar encerramento</button>`
+  );
+}
+
+function confirmarEncerramento(fid) {
+  const motivo = $('enc-motivo')?.value;
+  const obs    = $('enc-obs')?.value?.trim();
+  if(!motivo) { toast('Selecione o motivo da saída.', 'er'); return; }
+  const f = getFranqueado(fid);
+  const etapaAtual = f?.etapaAtual || 0;
+  const nomeEtapa  = ETAPAS.find(e=>e.id===etapaAtual)?.nome || '—';
+  atualizarFranqueado(fid, {
+    status:            'desistencia',
+    dataEncerramento:  hoje(),
+    dataDesistencia:   hoje(),
+    etapaDesistencia:  etapaAtual,
+    nomeEtapaDesistencia: nomeEtapa,
+    motivoDesistencia: motivo + (obs?' — '+obs:''),
+  });
+  // Registrar evento no histórico
+  salvarEventoEtapa(fid, etapaAtual, {
+    tipo:  'desistencia',
+    texto: 'Franquia encerrada na Etapa '+etapaAtual+' ('+nomeEtapa+'). Motivo: '+motivo+(obs?' — '+obs:''),
+    autor: SESSAO.nome,
+    data:  hoje(), hora: agora(), timestamp: Date.now(),
+  });
+  fecharModal();
+  toast('Franquia encerrada e registrada no relatório.', 'rd');
   renderFranqueados();
 }
 
@@ -2354,9 +2410,42 @@ function atualizarFranqueado(id, updates) {
   return dados[idx];
 }
 
+function toggleSubmenuManual() {
+  const sub = $('sb-manual-sub');
+  const chev = $('sb-manual-chevron');
+  if(!sub) return;
+  const aberto = sub.style.display !== 'none';
+  sub.style.display = aberto ? 'none' : 'block';
+  if(chev) chev.style.transform = aberto ? '' : 'rotate(90deg)';
+}
+
+function atualizarBadgeChamadosNav() {
+  try {
+    db.ref('chamados').once('value').then(snap => {
+      const raw = snap.val() || {};
+      let total = 0;
+      Object.values(raw).forEach(fidCh => {
+        if(typeof fidCh === 'object') {
+          Object.values(fidCh).forEach(ch => {
+            if(ch && ch.status !== 'resolvido') total++;
+          });
+        }
+      });
+      const badge = $('badge-chamados-nav');
+      if(badge) {
+        badge.textContent = total;
+        badge.style.display = total > 0 ? '' : 'none';
+      }
+    }).catch(()=>{});
+    // chamados só existem no Firebase — sem fallback localStorage
+  } catch(e) {}
+}
+
 function atualizarBadges() {
   const dados = getDados();
-  $('badge-frq').textContent = dados.filter(f=>f.etapaAtual<ETAPAS.length && f.status!=='arquivado').length;
+  $('badge-frq').textContent = dados.filter(f=>f.processoIniciado && f.etapaAtual>=1 && f.etapaAtual<=ETAPAS.length && f.status!=='arquivado' && f.status!=='desistencia').length;
+  // Carregar badge de chamados no sidebar imediatamente
+  atualizarBadgeChamadosNav();
   // Badge de arquivados na aba
   const nArq = dados.filter(f=>f.status==='arquivado').length;
   const tabArq = document.querySelector('[data-aba="arquivados"]');
@@ -5137,11 +5226,9 @@ function mascara(el, tipo) {
 // Aplica máscara em todos os elementos com data-mask no DOM ou dentro de um container
 function aplicarMascaras(container) {
   const root = container || document;
-  setTimeout(() => {
-    root.querySelectorAll('[data-mask]').forEach(el => {
-      mascara(el, el.getAttribute('data-mask'));
-    });
-  }, 50);
+  root.querySelectorAll('[data-mask]').forEach(el => {
+    mascara(el, el.getAttribute('data-mask'));
+  });
 }
 
 /* ══════════════════════════════════════════════════
@@ -5387,17 +5474,17 @@ function abrirFichaColaborador(id) {
       </div>
     </div>
     <div class="grid-2">
-        <div class="field" style="grid-column:span 2"><label>Nome completo *</label>
+        <div class="field" style="grid-column:span 2"><label>Nome completo <span style="color:#DC2626">*</span></label>
           <input class="inp" id="fc-nome" value="${col.nome||''}" placeholder="Nome completo"></div>
-        <div class="field"><label>CPF *</label>
+        <div class="field"><label>CPF <span style="color:#DC2626">*</span></label>
           <input class="inp" id="fc-cpf" data-mask="cpf" value="${col.cpf||''}" placeholder="000.000.000-00" maxlength="14"></div>
         <div class="field"><label>RG</label>
           <input class="inp" id="fc-rg" data-mask="rg" value="${col.rg||''}" placeholder="00.000.000-0" maxlength="12"></div>
         <div class="field"><label>Data de nascimento</label>
           <input class="inp" id="fc-nasc" data-mask="data" value="${col.nasc||''}" placeholder="DD/MM/AAAA" maxlength="10"></div>
-        <div class="field"><label>Telefone *</label>
+        <div class="field"><label>Telefone <span style="color:#DC2626">*</span></label>
           <input class="inp" id="fc-tel" data-mask="tel" value="${col.tel||''}" placeholder="(00) 00000-0000" maxlength="15"></div>
-        <div class="field"><label>E-mail *</label>
+        <div class="field"><label>E-mail <span style="color:#DC2626">*</span></label>
           <input class="inp" id="fc-email" value="${col.email||''}" placeholder="email@email.com"></div>
         <div class="field"><label>Ramal interno</label>
           <input class="inp" id="fc-ramal" value="${col.ramal||''}" placeholder="Ex: 201"></div>
@@ -5410,9 +5497,9 @@ function abrirFichaColaborador(id) {
     <!-- ABA CONTRATO -->
     <div id="aba-contrato" class="hidden">
       <div class="grid-2">
-        <div class="field"><label>Cargo *</label>
+        <div class="field"><label>Cargo <span style="color:#DC2626">*</span></label>
           <input class="inp" id="fc-cargo" value="${col.cargo||''}" placeholder="Cargo"></div>
-        <div class="field"><label>Modalidade contratual *</label>
+        <div class="field"><label>Modalidade contratual <span style="color:#DC2626">*</span></label>
           <select class="inp" id="fc-modalidade">
             ${['CLT','Estágio','Prestador Autônomo','PJ','Temporário','Cooperado'].map(m=>
               `<option${m===col.modalidade?' selected':''}>${m}</option>`).join('')}
@@ -5842,53 +5929,151 @@ function confirmarDesligamento(id) {
 function renderRelatorios() {
   if(!PERM.verRelatorios){ $('content').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-dim)">Acesso não autorizado.</div>'; return; }
 
-  const mesAno = hoje().slice(0,7).replace('-','_');
-  const relatorios = Object.entries(EQUIPE).map(([tk,u])=>{
-    const chave  = `hf_${tk}_${mesAno}`;
-    const eventos = JSON.parse(localStorage.getItem(chave)||'[]');
-    return { token:tk, nome:u.nome, cargo:u.cargo, cor:u.cor, eventos };
+  const dados  = getDados();
+  const ativos = dados.filter(f => f.status !== 'arquivado');
+  const desist = dados.filter(f => f.status === 'desistencia');
+
+  // ── ANÁLISE DE ETAPAS ──
+  // Para cada etapa, coletar os tempos (em dias) de processos concluídos
+  const statsPorEtapa = ETAPAS.map(et => {
+    const tempos = [];
+    ativos.forEach(f => {
+      const evs = JSON.parse(localStorage.getItem('mo_eventos_'+f.id+'_etapa'+et.id)||'[]');
+      const evIni  = evs.find(e=>e.tipo==='etapa_iniciada');
+      const evConc = evs.find(e=>e.tipo==='etapa_concluida');
+      if(evIni?.data && evConc?.data) {
+        const toDate = d => { const [a,b,c]=(d.includes('-')?d.split('-'):[d.split('/')[2],d.split('/')[1],d.split('/')[0]]); return new Date(a,b-1,c); };
+        const dias = Math.round((toDate(evConc.data)-toDate(evIni.data))/(864e5));
+        if(dias>=0 && dias<500) tempos.push(dias);
+      }
+    });
+    const media = tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : null;
+    return { id:et.id, nome:et.nome, media, min:tempos.length?Math.min(...tempos):null, max:tempos.length?Math.max(...tempos):null, n:tempos.length };
+  }).filter(e=>e.n>0).sort((a,b)=>(a.media||999)-(b.media||999));
+
+  const maisRapida  = statsPorEtapa[0];
+  const maisDemorada = statsPorEtapa[statsPorEtapa.length-1];
+
+  // ── TAXA DE SAÍDA ──
+  const totalIniciados = dados.filter(f=>f.processoIniciado).length;
+  const taxaSaida = totalIniciados ? Math.round(desist.length/totalIniciados*100) : 0;
+
+  // ── DESISTÊNCIAS POR ETAPA ──
+  const saidaPorEtapa = {};
+  desist.forEach(f => {
+    const etapa = f.etapaDesistencia || f.etapaAtual || '—';
+    saidaPorEtapa[etapa] = (saidaPorEtapa[etapa]||0) + 1;
   });
 
-  $('content').innerHTML =
-    '<div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px">' +
-      '<div class="stat-card"><div class="stat-label">Período</div><div class="stat-val" style="font-size:18px">'+mesAno.replace('_','/')+'</div><div class="stat-sub">Relatório funcional ativo</div></div>' +
-      '<div class="stat-card"><div class="stat-label">Total de atividades</div><div class="stat-val verde">'+relatorios.reduce((s,r)=>s+r.eventos.length,0)+'</div><div class="stat-sub">no mês atual</div></div>' +
-    '</div>' +
-    relatorios.map((r,idx) => {
-      const aberto = r.eventos.length > 0; // Abre automaticamente quem tem eventos
-      return (
-        '<div class="card" style="margin-bottom:8px">' +
-          '<div class="card-head" onclick="toggleRelColaborador(this.dataset.relid)" data-relid="rel-'+r.token+'" style="cursor:pointer;user-select:none">' +
-            '<div style="display:flex;align-items:center;gap:10px">' +
-              '<div style="width:32px;height:32px;border-radius:50%;background:'+r.cor+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff">'+ini(r.nome)+'</div>' +
-              '<div>' +
-                '<div class="card-title">'+r.nome+'</div>' +
-                '<div style="font-size:11px;color:var(--text-dim)">'+r.cargo+' · '+r.token+'</div>' +
-              '</div>' +
-            '</div>' +
-            '<div style="display:flex;align-items:center;gap:8px">' +
-              '<span class="badge '+(r.eventos.length>0?'badge-green':'badge-gray')+'">'+r.eventos.length+' evento(s)</span>' +
-              '<span id="rel-arrow-'+r.token+'" style="font-size:12px;color:var(--text-muted);transition:transform .2s;display:inline-block;transform:'+(aberto?'rotate(180deg)':'rotate(0deg)')+'">▼</span>' +
-            '</div>' +
-          '</div>' +
-          '<div id="rel-'+r.token+'" style="display:'+(aberto?'block':'none')+'">' +
-            '<div class="card-body">' +
-              (r.eventos.length===0
-                ? '<div style="color:var(--text-dim);font-size:12px">Nenhuma atividade registrada neste período</div>'
-                : r.eventos.map(e=>
-                    '<div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #F5F5F5">' +
-                      '<div style="font-size:11px;color:var(--text-dim);white-space:nowrap;min-width:80px">'+e.data+' '+e.hora+'</div>' +
-                      '<div style="font-size:12px;color:var(--text);flex:1">'+(e.texto?.slice(0,100)||'Atividade registrada')+'</div>' +
-                      '<div style="font-size:10px;font-family:monospace;color:var(--text-muted)">#'+(e.hash?.slice(0,8)||'--')+'</div>' +
-                    '</div>'
-                  ).join('')
-              ) +
-            '</div>' +
-          '</div>' +
-        '</div>'
-      );
-    }).join('');
+  // ── HTML ──
+  $('content').innerHTML = `
+  <div style="max-width:900px;margin:0 auto">
+
+    <!-- KPIs de saída -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+      ${[
+        {label:'Em implantação',val:ativos.filter(f=>f.processoIniciado&&f.etapaAtual<=ETAPAS.length).length,cor:'var(--primary)',sub:'processos ativos'},
+        {label:'Inaugurados',val:ativos.filter(f=>f.etapaAtual>ETAPAS.length).length,cor:'var(--green)',sub:'franqueados ativos'},
+        {label:'Desistências',val:desist.length,cor:'#DC2626',sub:'saídas registradas'},
+        {label:'Taxa de saída',val:taxaSaida+'%',cor:taxaSaida>20?'#DC2626':'#92400E',sub:'dos processos iniciados'},
+      ].map(k=>`<div class="stat-card"><div class="stat-label">${k.label}</div><div class="stat-val" style="color:${k.cor}">${k.val}</div><div class="stat-sub">${k.sub}</div></div>`).join('')}
+    </div>
+
+    <!-- Destaques rápida/demorada -->
+    ${maisRapida||maisDemorada ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      ${maisRapida?`<div class="card" style="border-color:var(--green)">
+        <div class="card-body">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--green);margin-bottom:4px">⚡ Etapa mais rápida</div>
+          <div style="font-size:14px;font-weight:800">${maisRapida.nome}</div>
+          <div style="font-size:24px;font-weight:900;color:var(--green)">${maisRapida.media}d</div>
+          <div style="font-size:11px;color:var(--text-dim)">média · ${maisRapida.n} processo(s) analisado(s)</div>
+        </div>
+      </div>`:''}
+      ${maisDemorada&&maisDemorada!==maisRapida?`<div class="card" style="border-color:#DC2626">
+        <div class="card-body">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#DC2626;margin-bottom:4px">🐢 Etapa mais demorada</div>
+          <div style="font-size:14px;font-weight:800">${maisDemorada.nome}</div>
+          <div style="font-size:24px;font-weight:900;color:#DC2626">${maisDemorada.media}d</div>
+          <div style="font-size:11px;color:var(--text-dim)">média · ${maisDemorada.n} processo(s) analisado(s)</div>
+        </div>
+      </div>`:''}
+    </div>` : ''}
+
+    <!-- Duração média por etapa -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><div class="card-title">📊 Duração média por etapa</div></div>
+      <div class="card-body" style="padding:0">
+        ${statsPorEtapa.length === 0
+          ? '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">Dados insuficientes — nenhum processo concluído ainda.</div>'
+          : statsPorEtapa.map(e => {
+            const maxMedia = Math.max(...statsPorEtapa.map(x=>x.media||0))||1;
+            const pct = Math.round((e.media/maxMedia)*100);
+            const cor = e.media<=7?'var(--green)':e.media<=21?'#F5A623':'#DC2626';
+            return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div style="font-size:12px;font-weight:700">Etapa ${e.id} — ${e.nome}</div>
+                <div style="font-size:12px;color:${cor};font-weight:800">${e.media}d <span style="color:var(--text-muted);font-weight:400;font-size:10px">· min ${e.min}d · max ${e.max}d</span></div>
+              </div>
+              <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+                <div style="width:${pct}%;height:100%;background:${cor};border-radius:4px;transition:width .6s"></div>
+              </div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:4px">${e.n} processo(s) com dados suficientes</div>
+            </div>`;
+          }).join('')}
+      </div>
+    </div>
+
+    <!-- Saídas por etapa -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><div class="card-title">🚪 Taxa de saída — desistências por etapa</div></div>
+      <div class="card-body" style="padding:0">
+        ${desist.length === 0
+          ? '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">✓ Nenhuma desistência registrada ainda.</div>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="background:var(--bg-alt);border-bottom:2px solid var(--border)">
+                <th style="padding:10px 16px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Franqueado</th>
+                <th style="padding:10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Etapa ao sair</th>
+                <th style="padding:10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Data</th>
+                <th style="padding:10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Motivo</th>
+              </tr></thead>
+              <tbody>
+                ${desist.map(f=>`<tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 16px"><b>${f.nome}</b><div style="font-size:10px;color:var(--text-dim)">${f.ticket} · ${f.cidade||'—'}/${f.estado||'—'}</div></td>
+                  <td style="padding:10px;text-align:center">
+                    <span style="background:#FEE2E2;color:#DC2626;padding:2px 8px;border-radius:6px;font-weight:700;font-size:11px">
+                      ${f.etapaDesistencia||f.etapaAtual||'—'}
+                    </span>
+                  </td>
+                  <td style="padding:10px;text-align:center;color:var(--text-dim)">${f.dataDesistencia||'—'}</td>
+                  <td style="padding:10px;color:var(--text-dim);font-style:italic">${f.motivoDesistencia||'—'}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>`}
+      </div>
+    </div>
+
+    <!-- Relatório funcional equipe (existente) -->
+    <div class="card">
+      <div class="card-head"><div class="card-title">👥 Atividade da equipe — ${hoje().slice(3)}</div>
+        <button class="btn sm" onclick="renderRelatorios()">↻ Atualizar</button>
+      </div>
+      <div class="card-body" style="padding:8px 0">
+        ${Object.entries(EQUIPE).map(([tk,u])=>{
+          const mesAno = hoje().slice(0,7).replace('/','_').replace('/','-');
+          const evs = JSON.parse(localStorage.getItem('hf_'+tk+'_'+mesAno)||'[]');
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border)">
+            <div style="width:30px;height:30px;border-radius:50%;background:${u.cor};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px;flex-shrink:0">${u.nome.charAt(0)}</div>
+            <div style="flex:1"><div style="font-size:12px;font-weight:700">${u.nome}</div><div style="font-size:10px;color:var(--text-dim)">${u.cargo}</div></div>
+            <span class="badge" style="background:${evs.length>0?'var(--green)':'var(--border)'};color:${evs.length>0?'#fff':'var(--text-dim)'}">${evs.length} evento(s)</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+  </div>`;
 }
+
 
 function toggleRelColaborador(id) {
   const el    = $(id);
@@ -6822,9 +7007,9 @@ function renderContatosExternos() {
 function abrirCadastroContatoExterno(prefill) {
   abrirModal('Cadastrar contato externo',
     `<div class="grid-2">
-       <div class="field"><label>Empresa *</label><input class="inp" id="ce-empresa" placeholder="Nome da empresa" value="${prefill?.empresa||''}"></div>
-       <div class="field"><label>Responsável *</label><input class="inp" id="ce-resp" placeholder="Nome do responsável" value="${prefill?.responsavel||''}"></div>
-       <div class="field"><label>Categoria *</label>
+       <div class="field"><label>Empresa <span style="color:#DC2626">*</span></label><input class="inp" id="ce-empresa" placeholder="Nome da empresa" value="${prefill?.empresa||''}"></div>
+       <div class="field"><label>Responsável <span style="color:#DC2626">*</span></label><input class="inp" id="ce-resp" placeholder="Nome do responsável" value="${prefill?.responsavel||''}"></div>
+       <div class="field"><label>Categoria <span style="color:#DC2626">*</span></label>
          <select class="inp" id="ce-cat">
            <option>Captação</option><option>Jurídico</option><option>Imobiliário</option>
            <option>Contador</option><option>Fornecedor</option><option>Outro</option>
@@ -9098,7 +9283,7 @@ function abrirNovoCandidato() {
   const modo = getModoNegociacao();
   abrirModal('Novo candidato',
     `<div class="grid-2">
-       <div class="field"><label>Nome completo *</label>
+       <div class="field"><label>Nome completo <span style="color:#DC2626">*</span></label>
          <input class="inp" id="cand-nome" placeholder="Nome do candidato"></div>
        <div class="field"><label>CPF</label>
          <input class="inp" id="cand-cpf" data-mask="cpf" placeholder="000.000.000-00" maxlength="14"></div>
@@ -9802,7 +9987,7 @@ function salvarFinanceiro(id, lista) {
 function abrirRegistroPagamento(id) {
   abrirModal('Registrar pagamento',
     `<div class="grid-2">
-       <div class="field" style="grid-column:1/-1"><label>Descrição *</label>
+       <div class="field" style="grid-column:1/-1"><label>Descrição <span style="color:#DC2626">*</span></label>
          <select class="inp" id="pgto-descricao" onchange="checkOutro(this.value)">
            ${TIPOS_PAGAMENTO.map(t=>'<option>'+t+'</option>').join('')}
          </select>
@@ -9810,9 +9995,9 @@ function abrirRegistroPagamento(id) {
        <div class="field" id="field-outro" style="grid-column:1/-1;display:none"><label>Especifique</label>
          <input class="inp" id="pgto-outro" placeholder="Descreva o pagamento...">
        </div>
-       <div class="field"><label>Valor (R$) *</label>
+       <div class="field"><label>Valor (R$) <span style="color:#DC2626">*</span></label>
          <input class="inp" id="pgto-valor" type="number" step="0.01" min="0" placeholder="0,00"></div>
-       <div class="field"><label>Data do pagamento *</label>
+       <div class="field"><label>Data do pagamento <span style="color:#DC2626">*</span></label>
          <input class="inp" id="pgto-data" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
        <div class="field"><label>Status</label>
          <select class="inp" id="pgto-status">
@@ -10602,13 +10787,13 @@ function abrirNovoEvento(dataPreench) {
 
   abrirModal('Novo evento',
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Título *</label>' +
+      '<div class="field" style="grid-column:1/-1"><label>Título <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="ev-titulo" placeholder="Ex: Reunião com franqueado, Visita ao ponto..."></div>' +
-      '<div class="field"><label>Tipo *</label>' +
+      '<div class="field"><label>Tipo <span style="color:#DC2626">*</span></label>' +
         '<select class="inp" id="ev-tipo" onchange="toggleTerceiro(this.value)">' +
           TIPOS_EVENTO.map(t=>'<option value="'+t.id+'">'+t.icon+' '+t.label+'</option>').join('') +
         '</select></div>' +
-      '<div class="field"><label>Data *</label>' +
+      '<div class="field"><label>Data <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="ev-data" type="date" value="'+dataVal+'"></div>' +
       '<div class="field"><label>Horário</label>' +
         '<input class="inp" id="ev-hora" type="time" value="09:00"></div>' +
@@ -10754,13 +10939,13 @@ function abrirAgendarEtapa(fid, etapaId) {
       '<b>'+f?.nome+'</b> · Etapa '+etapaId+' — '+et?.nome +
     '</div>' +
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Título *</label>' +
+      '<div class="field" style="grid-column:1/-1"><label>Título <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="ev-titulo" value="'+et?.nome+' — '+f?.nome.split(' ')[0]+'" placeholder="Título do evento"></div>' +
       '<div class="field"><label>Tipo</label>' +
         '<select class="inp" id="ev-tipo" onchange="toggleTerceiro(this.value)">' +
           TIPOS_EVENTO.map(t=>'<option value="'+t.id+'" '+(terceirosEtapa[etapaId]&&t.id==='terceiro'?'selected':'')+'>'+t.icon+' '+t.label+'</option>').join('') +
         '</select></div>' +
-      '<div class="field"><label>Data *</label><input class="inp" id="ev-data" type="date" value="'+new Date().toISOString().split('T')[0]+'"></div>' +
+      '<div class="field"><label>Data <span style="color:#DC2626">*</span></label><input class="inp" id="ev-data" type="date" value="'+new Date().toISOString().split('T')[0]+'"></div>' +
       '<div class="field"><label>Horário</label><input class="inp" id="ev-hora" type="time" value="09:00"></div>' +
       '<div class="field" id="field-terceiro" style="grid-column:1/-1;'+(terceirosEtapa[etapaId]?'':'display:none')+'"><label>Aguardando terceiro (quem?)</label>' +
         '<input class="inp" id="ev-terceiro" value="'+(terceirosEtapa[etapaId]||'')+'" placeholder="Ex: Arquiteto, Prefeitura, Contador..."></div>' +
@@ -11779,9 +11964,9 @@ function abrirNovoPrazo(fid, etId) {
 
   abrirModal('Novo prazo',
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Título do prazo *</label>' +
+      '<div class="field" style="grid-column:1/-1"><label>Título do prazo <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="pz-titulo" placeholder="Ex: Aprovação do ponto comercial, Entrega do projeto arquitetônico..."></div>' +
-      '<div class="field"><label>Franqueado vinculado *</label>' +
+      '<div class="field"><label>Franqueado vinculado <span style="color:#DC2626">*</span></label>' +
         '<select class="inp" id="pz-franqueado" onchange="atualizarEtapasPrazo(this.value)">' +
           '<option value="">— Selecione —</option>' +
           ativos.map(f=>'<option value="'+f.id+'" '+(fid===f.id?'selected':'')+'>'+f.ticket+' · '+f.nome.split(' ').slice(0,2).join(' ')+'</option>').join('') +
@@ -11791,7 +11976,7 @@ function abrirNovoPrazo(fid, etId) {
           '<option value="">— Nenhuma —</option>' +
           ETAPAS.map(e=>'<option value="'+e.id+'" '+(etId===e.id?'selected':'')+'>'+e.id+'. '+e.nome+'</option>').join('') +
         '</select></div>' +
-      '<div class="field"><label>Data de vencimento *</label>' +
+      '<div class="field"><label>Data de vencimento <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="pz-data" type="date" value="'+new Date().toISOString().split('T')[0]+'"></div>' +
       '<div class="field"><label>Responsável interno</label>' +
         '<select class="inp" id="pz-responsavel">' +
@@ -12016,9 +12201,9 @@ function abrirNovaTarefa(prazoId) {
       (prazoId ? '📎 Vinculada ao prazo: <b>'+getPrazos().find(p=>p.id===prazoId)?.titulo+'</b>' : 'Tarefa avulsa — sem vínculo com prazo') +
     '</div>' +
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Título da tarefa *</label>' +
+      '<div class="field" style="grid-column:1/-1"><label>Título da tarefa <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="tar-titulo" placeholder="O que precisa ser feito?"></div>' +
-      '<div class="field"><label>Responsável *</label>' +
+      '<div class="field"><label>Responsável <span style="color:#DC2626">*</span></label>' +
         '<select class="inp" id="tar-responsavel">' +
           '<option value="">— Selecione —</option>' +
           equipe.map(([tk,u])=>'<option value="'+tk+'">'+u.nome.split(' ')[0]+(u.cargo?' · '+u.cargo:'')+'</option>').join('') +
@@ -12432,19 +12617,19 @@ function abrirNovaReuniao(dataPreench) {
 
   abrirModal('Nova reunião',
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Título *</label>' +
+      '<div class="field" style="grid-column:1/-1"><label>Título <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="reu-titulo" placeholder="Ex: Acompanhamento de implantação, Apresentação do ponto comercial..."></div>' +
 
-      '<div class="field"><label>Data *</label>' +
+      '<div class="field"><label>Data <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="reu-data" type="date" value="'+dataVal+'"></div>' +
-      '<div class="field"><label>Horário *</label>' +
+      '<div class="field"><label>Horário <span style="color:#DC2626">*</span></label>' +
         '<input class="inp" id="reu-hora" type="time" value="10:00"></div>' +
       '<div class="field"><label>Duração</label>' +
         '<select class="inp" id="reu-duracao">' +
           ['30 min','1 hora','1h30','2 horas','3 horas','Indefinida'].map(d=>'<option>'+d+'</option>').join('')+
         '</select></div>' +
 
-      '<div class="field"><label>Modalidade *</label>' +
+      '<div class="field"><label>Modalidade <span style="color:#DC2626">*</span></label>' +
         '<select class="inp" id="reu-modalidade" onchange="toggleCamposReuniao(this.value)">' +
           '<option value="online">Online</option>' +
           '<option value="presencial">Presencial</option>' +
@@ -13315,7 +13500,7 @@ function abrirNovoGrupo() {
   const equipe = Object.entries(EQUIPE);
   abrirModal('Novo grupo',
     '<div class="grid-2">' +
-      '<div class="field" style="grid-column:1/-1"><label>Nome do grupo *</label><input class="inp" id="ng-nome" placeholder="Ex: Equipe SP, Gestores RS..."></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>Nome do grupo <span style="color:#DC2626">*</span></label><input class="inp" id="ng-nome" placeholder="Ex: Equipe SP, Gestores RS..."></div>' +
       '<div class="field"><label>Ícone</label><input class="inp" id="ng-icone" value="💬" style="font-size:18px;text-align:center;width:60px"></div>' +
       '<div class="field" style="grid-column:1/-1"><label>Membros</label>' +
         '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1.5px solid var(--border);border-radius:8px">' +
