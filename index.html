@@ -817,7 +817,8 @@ select.inp{cursor:pointer}
         onkeydown="if(event.key==='Enter')logarFirebase()">
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 61</div></div>
+    <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 65</div></div>
   </div>
 </div>
 
@@ -964,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · token-auto-visivel-v64','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · firebase-auth-equipe-v65','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1568,7 +1569,7 @@ function iniciarLogin() {
   });
 }
 
-function logarFirebase() {
+async function logarFirebase() {
   const email = document.getElementById('painel-email')?.value?.trim().toLowerCase();
   const senha  = document.getElementById('painel-senha')?.value;
   const erro   = document.getElementById('login-erro-painel');
@@ -1578,8 +1579,7 @@ function logarFirebase() {
     return;
   }
 
-  // ── LOGIN LOCAL (fase de desenvolvimento) ──
-  // Valida contra o objeto EQUIPE sem precisar do Firebase Auth
+  // ── Identificar o membro pela equipe (e-mail é a chave de login) ──
   const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
   if(!entrada) {
     if(erro) { erro.style.display='block'; erro.style.color='#DC2626'; erro.style.background='#FEE2E2'; erro.textContent='E-mail não cadastrado na equipe.'; }
@@ -1587,34 +1587,114 @@ function logarFirebase() {
   }
   const [token, membro] = entrada;
 
-  // Verificar senha local (armazenada no localStorage por token)
-  const senhaKey   = 'mo_senha_' + token;
-  const senhaSalva = localStorage.getItem(senhaKey);
+  const mostrarErro = (txt) => { if(erro){ erro.style.display='block'; erro.style.color='#DC2626'; erro.style.background='#FEE2E2'; erro.textContent=txt; } };
+  const provedorDesligado = (e) => e && (e.code==='auth/operation-not-allowed' || e.code==='auth/configuration-not-found');
 
-  if(!senhaSalva) {
-    // Primeiro acesso — salvar senha e entrar
-    localStorage.setItem(senhaKey, senha);
-  } else if(senhaSalva !== senha) {
-    if(erro) { erro.style.display='block'; erro.style.color='#DC2626'; erro.style.background='#FEE2E2'; erro.textContent='Senha incorreta.'; }
-    return;
-  }
+  // ── LOGIN LOCAL (fallback) — só usado se o Firebase Auth não estiver disponível ──
+  const loginLocal = () => {
+    const senhaKey = 'mo_senha_' + token;
+    const senhaSalva = localStorage.getItem(senhaKey);
+    if(!senhaSalva) localStorage.setItem(senhaKey, senha);
+    else if(senhaSalva !== senha) { mostrarErro('Senha incorreta.'); return false; }
+    entrarNoApp(token, membro, token);
+    return true;
+  };
 
-  // Login ok
-  SESSAO = { token, uid: token, ...membro };
-  PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
-  localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
+  // ── Sem conexão: usa fallback local com aviso ──
+  if(window._fbOffline) { loginLocal(); return; }
+
   if(erro) erro.style.display='none';
 
-  // Conectar Firebase em background (para dados em tempo real)
   try {
-    if(db) {
-      // Firebase já inicializado — só sincronizar dados
-      carregarFranqueadosDoFirebase().catch(()=>{});
-      carregarEquipeDoFirebase().catch(()=>{});
+    let cred;
+    try {
+      cred = await auth.signInWithEmailAndPassword(email, senha);
+    } catch(e1) {
+      if(provedorDesligado(e1)) { loginLocal(); return; }
+      // Senha curta nunca cria conta
+      if(senha.length < 6) { mostrarErro('Senha incorreta.'); return; }
+      // Pode ser primeiro acesso (conta ainda não existe) — tentar criar
+      try {
+        cred = await auth.createUserWithEmailAndPassword(email, senha);
+      } catch(e2) {
+        if(e2.code==='auth/email-already-in-use') { mostrarErro('Senha incorreta.'); return; }
+        if(provedorDesligado(e2)) { loginLocal(); return; }
+        mostrarErro('Não foi possível entrar. Verifique a senha e tente novamente.');
+        return;
+      }
     }
-  } catch(e) {}
 
+    // Autenticado com sucesso no Firebase
+    const uid = cred.user?.uid || token;
+    // Verificar se a senha é provisória (definida pelo administrador) → trocar agora
+    let provisoria = false;
+    try { const s = await db.ref('equipe_meta/' + token + '/senhaProvisoria').once('value'); provisoria = s.val() === true; } catch(e) {}
+    if(provisoria) { abrirTrocaSenhaGestor(token, membro, uid); return; }
+
+    entrarNoApp(token, membro, uid);
+  } catch(e) {
+    mostrarErro('Não foi possível entrar. Tente novamente.');
+  }
+}
+
+// Conclui o login: monta a sessão, sincroniza dados e abre o app
+function entrarNoApp(token, membro, uid) {
+  SESSAO = { token, uid, ...membro };
+  PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
+  localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
+  try {
+    if(db) { carregarFranqueadosDoFirebase().catch(()=>{}); carregarEquipeDoFirebase().catch(()=>{}); }
+  } catch(e) {}
   iniciarApp();
+}
+
+// Modal de troca obrigatória de senha no primeiro acesso (senha provisória)
+function abrirTrocaSenhaGestor(token, membro, uid) {
+  abrirModal('Defina sua senha', `
+    <div style="padding:2px">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.5">Este é seu primeiro acesso. Por segurança, crie uma senha pessoal para continuar.</div>
+      <div class="field"><label>Nova senha (mínimo 6 caracteres)</label>
+        <input class="inp" id="ts-nova" type="password" placeholder="Sua nova senha" autocomplete="new-password"></div>
+      <div class="field"><label>Confirmar nova senha</label>
+        <input class="inp" id="ts-conf" type="password" placeholder="Repita a nova senha" autocomplete="new-password"></div>
+      <div id="ts-erro" style="display:none;color:#DC2626;font-size:12px;margin:6px 0 10px"></div>
+      <button class="btn primary" style="width:100%;margin-top:6px" onclick="confirmarTrocaSenhaGestor('${token}','${uid}')">Salvar e entrar</button>
+    </div>
+  `);
+  window._trocaSenhaCtx = { token, membro, uid };
+}
+
+async function confirmarTrocaSenhaGestor(token, uid) {
+  const nova = document.getElementById('ts-nova')?.value || '';
+  const conf = document.getElementById('ts-conf')?.value || '';
+  const erro = document.getElementById('ts-erro');
+  const mostra = t => { if(erro){ erro.style.display='block'; erro.textContent=t; } };
+  if(nova.length < 6) return mostra('A senha precisa ter ao menos 6 caracteres.');
+  if(nova !== conf)   return mostra('As senhas não coincidem.');
+  try {
+    if(auth.currentUser) await auth.currentUser.updatePassword(nova);
+    await db.ref('equipe_meta/' + token + '/senhaProvisoria').set(false);
+    const ctx = window._trocaSenhaCtx || {};
+    fecharModal();
+    entrarNoApp(token, ctx.membro, uid);
+  } catch(e) {
+    mostra('Não foi possível salvar a senha. Saia e entre novamente para tentar.');
+  }
+}
+
+// Recuperação de senha por e-mail (link "Esqueci minha senha")
+async function recuperarSenhaPainel() {
+  const email = document.getElementById('painel-email')?.value?.trim().toLowerCase();
+  const erro  = document.getElementById('login-erro-painel');
+  const mostra = (t,cor) => { if(erro){ erro.style.display='block'; erro.style.color=cor||'#DC2626'; erro.style.background=cor?'#ECFDF5':'#FEE2E2'; erro.textContent=t; } };
+  if(!email) return mostra('Digite seu e-mail acima para receber o link de recuperação.');
+  if(window._fbOffline) return mostra('Sem conexão com o servidor. Tente quando estiver online.');
+  try {
+    await auth.sendPasswordResetEmail(email);
+    mostra('Enviamos um link de recuperação para seu e-mail. Verifique a caixa de entrada e o spam.', 'ok');
+  } catch(e) {
+    mostra('Não foi possível enviar o e-mail de recuperação. Confira o endereço digitado.');
+  }
 }
 
 function logar(token) {
@@ -6568,6 +6648,9 @@ function abrirFichaColaborador(id) {
         <div class="field"><label>Token de acesso</label>
           <input class="inp" id="fc-token" data-novo="${isNovo?'1':'0'}" value="${isNovo ? gerarTokenColaborador(col.tipo) : (col.token||'')}" readonly style="background:#F5F5F5;font-family:monospace;color:var(--text-dim);letter-spacing:.5px">
           <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">${isNovo ? 'Gerado automaticamente conforme o tipo de acesso.' : 'Identificador fixo do colaborador (não editável).'}</div></div>
+        ${isNovo ? `<div class="field"><label>Senha inicial de acesso</label>
+          <input class="inp" id="fc-senha-inicial" value="mestre@2026" style="font-family:monospace">
+          <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">O colaborador usará esta senha no primeiro acesso e será obrigado a trocá-la.</div></div>` : ''}
         <div class="field"><label>Status</label>
           <select class="inp" id="fc-status">
             ${[['ativo','Ativo'],['ferias','Férias'],['atestado','Atestado médico'],['licenca','Licença'],['afastado','Afastamento INSS'],['licenca_maternidade','Licença maternidade'],['licenca_paternidade','Licença paternidade'],['suspensao','Suspensão disciplinar'],['desligado','Desligado']].map(([v,l])=>
@@ -6773,6 +6856,27 @@ function salvarColaborador(id) {
 
   // Criar pastas no Drive (só para cadastros novos)
   if(idx < 0) {
+    // ── Criar acesso no Firebase Authentication (segurança real) ──
+    const _senhaIni = $('fc-senha-inicial')?.value || 'mestre@2026';
+    if(email && !window._fbOffline) {
+      (async () => {
+        try {
+          await authSecundario.createUserWithEmailAndPassword(email, _senhaIni);
+          // Marca senha como provisória → troca obrigatória no primeiro acesso
+          await db.ref('equipe_meta/' + token + '/senhaProvisoria').set(true);
+          await authSecundario.signOut();
+          toast('Acesso criado. Senha inicial: ' + _senhaIni, 'gn');
+        } catch(e) {
+          if(e.code === 'auth/email-already-in-use') {
+            toast('Este e-mail já tinha acesso. O colaborador usa a senha existente.', 'or');
+          } else if(e.code === 'auth/operation-not-allowed' || e.code === 'auth/configuration-not-found') {
+            toast('Ative Email/Senha no Firebase para liberar o acesso seguro.', 'rd');
+          } else {
+            toast('Cadastro salvo, mas o acesso não pôde ser criado: ' + (e.message||''), 'rd');
+          }
+        }
+      })();
+    }
     const _colId   = novo.id;
     const _colNome = novo.nome;
     const _colCargo= novo.cargo;
