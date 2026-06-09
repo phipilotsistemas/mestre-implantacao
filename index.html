@@ -820,7 +820,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 78</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 79</div></div>
   </div>
 </div>
 
@@ -967,7 +967,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · responsavel-por-tarefa-v78','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · cobranca-chamado-responsavel-v79','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1464,15 +1464,26 @@ async function assinarDigital(caminho, textoDeclaracao) {
 
 function gravarHistoricoFuncional(registro) {
   const token = (typeof SESSAO !== 'undefined' && SESSAO?.token) ? SESSAO.token : (registro?.uid || 'geral');
+  gravarHistoricoFuncionalDe(token, registro);
+}
+
+// Grava no histórico funcional de um membro específico (não o logado)
+function gravarHistoricoFuncionalDe(token, registro) {
+  if(!token) return;
   const mesAno = hoje().slice(0,7).replace('-','_');
   const chave = `hf_${token}_${mesAno}`;
   try {
     const atual = JSON.parse(localStorage.getItem(chave)||'[]');
     atual.push({ ...registro, timestamp: Date.now() });
     localStorage.setItem(chave, JSON.stringify(atual));
-    // Espelhar no Firebase para o relatório consolidar entre dispositivos
     try { db.ref('historico_funcional/'+token+'/'+mesAno).set(atual).catch(()=>{}); } catch(e) {}
   } catch(e) {}
+}
+
+// Horas decorridas desde um timestamp (ms)
+function horasDesde(ts) {
+  if(!ts) return 0;
+  return Math.floor((Date.now() - ts) / 3600000);
 }
 
 /* Renderiza box de assinatura com scroll obrigatório */
@@ -4811,6 +4822,41 @@ async function confirmarBaixaInatividade(fid, chamadoId) {
   }
 }
 
+// Cobra o responsável pelo chamado no MO Talk e registra no histórico funcional dele
+async function cobrarResponsavelChamado(fid, chamadoId) {
+  let lista = [];
+  try {
+    const snap = await db.ref('chamados/'+fid).once('value');
+    const v = snap.val();
+    lista = Array.isArray(v) ? v : (v ? Object.values(v) : []);
+  } catch(e) {}
+  const ch = lista.find(c => c && c.id === chamadoId);
+  if(!ch) { toast('Chamado não encontrado.','rd'); return; }
+  const f = getFranqueado(fid);
+  const token = ch.responsavelToken || responsavelDaEtapa(fid, ch.etapaAberta || f?.etapaAtual || 1);
+  if(!token || token === SESSAO?.token) {
+    toast('Esta etapa não tem outro responsável designado. Configure a equipe da etapa.','er');
+    return;
+  }
+  const nome = EQUIPE[token]?.nome || 'responsável';
+  const prim = nome.split(' ')[0];
+  const msg = 'Olá, ' + prim + '. O chamado "' + (ch.titulo||'suporte') + '" do franqueado ' + (f?.nome||ch.franqueado||'') + ' (' + (ch.ticket||fid) + ') está há mais de 24h sem retorno. Pode dar andamento, por favor?';
+  // Registrar no histórico funcional do RESPONSÁVEL
+  gravarHistoricoFuncionalDe(token, {
+    tipo: 'cobranca_chamado',
+    texto: 'Cobrança de retorno — chamado "' + (ch.titulo||'suporte') + '" do franqueado ' + (f?.nome||ch.franqueado||'') + ' (' + (ch.ticket||fid) + ') sem resposta há mais de 24h.',
+    data: hoje(), hora: agora(), autor: SESSAO?.nome || 'Gestão', fid, chamadoId,
+  });
+  // Marcar como cobrado e persistir
+  ch.cobrado24h = true; ch.dataCobranca = hoje() + ' ' + agora(); ch.responsavelToken = token;
+  try { await db.ref('chamados/'+fid).set(lista); localStorage.setItem('suporte_'+fid, JSON.stringify(lista)); } catch(e){}
+  // Abrir MO Talk no direto do responsável com a mensagem pronta
+  abrirChatFlutuante();
+  selecionarCanalMOTalk('dm_'+token);
+  setTimeout(()=>{ const inp=$('motalk-input'); if(inp){ inp.value=msg; inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,90)+'px'; inp.focus(); } }, 280);
+  toast('Cobrança registrada no histórico de ' + prim + '. Mensagem pronta no MO Talk.','gn');
+}
+
 async function renderSuportePainel() {
   $('content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">⏳</div><div style="font-size:13px">Carregando chamados...</div></div>';
 
@@ -4871,6 +4917,9 @@ async function renderSuportePainel() {
           <div style="font-size:12px;font-weight:800;color:var(--text)">${c.id} · ${c.titulo}</div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
             ${fTick} · ${fNome.split(' ')[0]} · Aberto em ${c.dataAbertura} às ${c.horaAbertura}
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+            👤 Responsável: <b style="color:var(--text)">${(EQUIPE[c.responsavelToken||responsavelDaEtapa(fid,c.etapaAberta||1)]?.nome||'Sem responsável definido').split(' ').slice(0,2).join(' ')}</b>${c.etapaAberta?` · ${c.nomeEtapa||('Etapa '+c.etapaAberta)}`:''}
           </div>
         </div>
         <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;
@@ -4964,6 +5013,27 @@ async function renderSuportePainel() {
       </div>
       <button onclick="renderSuportePainel()" class="btn sm">↻ Atualizar</button>
     </div>
+
+    ${(() => {
+      const semRetorno = abertos.filter(c => !c.respostaGestor && horasDesde(c.timestamp) >= 24);
+      if(!semRetorno.length) return '';
+      return `<div style="background:#FEF2F2;border:1px solid var(--red-border);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:800;color:#991B1B;margin-bottom:6px">⚠ ${semRetorno.length} chamado(s) há mais de 24h sem retorno do responsável</div>
+        <div style="font-size:11px;color:#7F1D1D;margin-bottom:8px">Cobre o responsável diretamente no MO Talk. A cobrança fica registrada no histórico funcional dele.</div>
+        ${semRetorno.map(c => {
+          const fid2 = c._franqueado?.id || c.fid;
+          const tk = c.responsavelToken || responsavelDaEtapa(fid2, c.etapaAberta||1);
+          const nomeResp = EQUIPE[tk]?.nome || 'Sem responsável definido';
+          const h = horasDesde(c.timestamp);
+          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #FECACA">
+            <div style="font-size:12px;color:#7F1D1D;min-width:0">
+              <b>${c.titulo||'Chamado'}</b> · ${(c._franqueado?.nome||c.franqueado||'').split(' ')[0]} · resp.: <b>${nomeResp.split(' ')[0]}</b> · há ${h}h${c.cobrado24h?' · já cobrado':''}
+            </div>
+            <button onclick="cobrarResponsavelChamado('${fid2}','${c.id}')" style="padding:6px 12px;border-radius:8px;background:#991B1B;color:#fff;border:none;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0">💬 Cobrar no MO Talk</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+    })()}
 
     ${todosChamados.length === 0 ? `
     <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
@@ -6042,6 +6112,20 @@ function getEquipeEtapa(fid, etapaId) {
     membros: fonte.membros || [],
     itens:   fonte.itens   || {},
   };
+}
+
+// Responsável pela etapa (para direcionar o chamado do franqueado).
+// Prioriza o primeiro membro designado à etapa; senão, alguém atribuído a uma tarefa;
+// por fim, o gestor do franqueado.
+function responsavelDaEtapa(fid, etapaId) {
+  try {
+    const eq = getEquipeEtapa(fid, etapaId);
+    if(eq.membros && eq.membros.length) return eq.membros[0];
+    const itensTokens = Object.values(eq.itens||{}).flat();
+    if(itensTokens.length) return itensTokens[0];
+  } catch(e) {}
+  const f = getFranqueado(fid);
+  return f?.gestorToken || f?.gestor || '';
 }
 
 // Membros que recebem tarefas (exclui acesso puramente administrativo opcional)
