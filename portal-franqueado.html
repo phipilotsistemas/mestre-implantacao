@@ -1064,6 +1064,12 @@ body { overflow-x:hidden }
   </div>
 </div>
 
+<div id="splash-portal" style="position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#1B3F8B 0%,#2D5FCC 60%,#1B3F8B 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px">
+  <div style="width:46px;height:46px;border:4px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:splash-spin .8s linear infinite"></div>
+  <div style="color:rgba(255,255,255,.85);font-size:13px;letter-spacing:.04em">Carregando...</div>
+</div>
+<style>@keyframes splash-spin{to{transform:rotate(360deg)}}</style>
+
 <div id="tela-login">
   <div class="login-card">
     <div class="login-logo-wrap">
@@ -1090,7 +1096,7 @@ body { overflow-x:hidden }
 
     <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-muted)">
       Desenvolvido por <span style="font-weight:700;color:var(--primary)">PhiPilot Sistemas</span>
-      <div style="margin-top:3px;font-size:9px;opacity:.7">versão 60</div>
+      <div style="margin-top:3px;font-size:9px;opacity:.7">versão 70</div>
     </div>
   </div>
 </div>
@@ -1400,8 +1406,17 @@ auth.onAuthStateChanged(user => {
       if(emailEl) emailEl.value = '';
       if(senhaEl) senhaEl.value = '';
     }
+    esconderSplash();
   }
 });
+
+// Esconde a tela de carregamento (uma vez que a autenticação resolveu)
+function esconderSplash() {
+  const s = document.getElementById('splash-portal');
+  if(s) { s.style.opacity = '0'; s.style.transition = 'opacity .25s'; setTimeout(() => s.remove(), 280); }
+}
+// Segurança: nunca deixar o splash preso (ex.: offline)
+setTimeout(esconderSplash, 3500);
 
 
 
@@ -1876,6 +1891,7 @@ function montarPortal(f, senhaUsada) {
   };
 
   $('tela-login').style.display='none';
+  esconderSplash();
 
   // Verificar se já trocou a senha do 1º acesso (localStorage OU Firebase)
   let senhaTrocada = localStorage.getItem('senha_trocada_' + PORTAL.fid) === '1';
@@ -2119,14 +2135,23 @@ function confirmarTrocaSenha() {
     }
   };
 
-  // MÉTODO MAIS CONFIÁVEL: refazer o login (token garantidamente fresco),
-  // depois trocar a senha. Evita o estado intermediário e a corrida do
-  // onAuthStateChanged que travavam a página no 1º acesso.
+  // MÉTODO RECOMENDADO: como o usuário acabou de entrar, o token é recente e
+  // updatePassword funciona direto. Só reautenticamos se o Firebase exigir
+  // (requires-recent-login), evitando a corrida que travava a tela.
   const senhaProvisoria = PORTAL._senhaAtual || '123456';
-  auth.signInWithEmailAndPassword(user.email, senhaProvisoria)
-    .then(cred => cred.user.updatePassword(nova))
+  user.updatePassword(nova)
     .then(aoConcluir)
-    .catch(aoFalhar);
+    .catch(e => {
+      if(e && e.code === 'auth/requires-recent-login') {
+        // Token antigo — reautentica e tenta de novo
+        auth.signInWithEmailAndPassword(user.email, senhaProvisoria)
+          .then(cred => cred.user.updatePassword(nova))
+          .then(aoConcluir)
+          .catch(aoFalhar);
+      } else {
+        aoFalhar(e);
+      }
+    });
 }
 
 /* ══ NAVEGAÇÃO ══ */
@@ -3718,7 +3743,8 @@ function escutarChat() {
   if(!PORTAL.fid || !db) return;
   const canal = 'chat_impl_' + PORTAL.fid;
   if(_chatRef) { try { _chatRef.off(); } catch(e) {} }
-  _chatRef = db.ref('chats/' + canal);
+  // limitToLast(100): carrega as últimas mensagens (mais leve, padrão de chat)
+  _chatRef = db.ref('chats/' + canal).limitToLast(100);
   _chatRef.on('value', snap => {
     const raw = snap.val();
     _chatMsgsCache = raw
@@ -4288,7 +4314,6 @@ function toggleTarefa(tid) {
 }
 function getPrazo(etId) { return localStorage.getItem('prazo_'+PORTAL.fid+'_'+etId)||null; }
 function getEventos()   { try{return JSON.parse(localStorage.getItem('portal_agenda_'+PORTAL.fid)||'[]');}catch(e){return[];} }
-function getMsgs()      { try{return JSON.parse(localStorage.getItem('portal_chat_'+PORTAL.fid)||'[]');}catch(e){return[];} }
 function getComunicados(){ return [{id:'cg1',texto:'Bem-vindo ao Portal da Mestre da Obra! Aqui você acompanha sua implantação e fala com seu gestor.',data:hoje()},{id:'cg2',texto:'📢 Nova campanha de marketing disponível. Fale com seu gestor para mais detalhes.',data:hoje()}]; }
 
 function getAlertas() {
