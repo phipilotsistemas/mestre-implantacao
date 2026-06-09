@@ -892,8 +892,6 @@ body { overflow-x:hidden }
   transition:color .15s;
 }
 .portal-nav-btn.ativo { color:var(--primary) }
-.portal-nav-btn.ativo .nav-icon-off { display:none!important }
-.portal-nav-btn.ativo .nav-icon-on  { display:block!important }
 .nav-notif {
   position:absolute;top:7px;right:calc(50% - 18px);
   min-width:16px;height:16px;border-radius:8px;
@@ -1075,26 +1073,22 @@ body { overflow-x:hidden }
   <!-- Nav inferior -->
   <nav class="portal-nav">
     <button class="portal-nav-btn ativo" data-aba="inicio" onclick="irAba('inicio',this)">
-      <img class="nav-icon-off" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUklEQVR4nO3SMQHAIADAsDH/Jw4wgTuQwdFEQY+Oufb5yPpfB/CWAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEX4xID7r450WEAAAAASUVORK5CYII=" style="width:22px;height:22px;object-fit:contain">
-      <img class="nav-icon-on"  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUUlEQVR4nO3SMQHAIADAsDEreMchN8jgaKKgR8de83xk/a8DeMsAcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAuAvJCwO9AigyAAAAAABJRU5ErkJggg=="       style="width:22px;height:22px;object-fit:contain;display:none">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Início
       
     </button>
     <button class="portal-nav-btn " data-aba="etapas" onclick="irAba('etapas',this)">
-      <img class="nav-icon-off" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUklEQVR4nO3SMQHAIADAsDH/Jw4wgTuQwdFEQY+Oufb5yPpfB/CWAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEX4xID7r450WEAAAAASUVORK5CYII=" style="width:22px;height:22px;object-fit:contain">
-      <img class="nav-icon-on"  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUUlEQVR4nO3SMQHAIADAsDEreMchN8jgaKKgR8de83xk/a8DeMsAcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAuAvJCwO9AigyAAAAAABJRU5ErkJggg=="       style="width:22px;height:22px;object-fit:contain;display:none">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>
       Etapas
       
     </button>
     <button class="portal-nav-btn " data-aba="agenda" onclick="irAba('agenda',this)">
-      <img class="nav-icon-off" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUklEQVR4nO3SMQHAIADAsDH/Jw4wgTuQwdFEQY+Oufb5yPpfB/CWAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEX4xID7r450WEAAAAASUVORK5CYII=" style="width:22px;height:22px;object-fit:contain">
-      <img class="nav-icon-on"  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUUlEQVR4nO3SMQHAIADAsDEreMchN8jgaKKgR8de83xk/a8DeMsAcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAuAvJCwO9AigyAAAAAABJRU5ErkJggg=="       style="width:22px;height:22px;object-fit:contain;display:none">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Agenda
       <span id="badge-agenda-p" class="nav-notif" style="display:none">0</span>
     </button>
     <button class="portal-nav-btn " data-aba="chat" onclick="irAba('chat',this)">
-      <img class="nav-icon-off" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUklEQVR4nO3SMQHAIADAsDH/Jw4wgTuQwdFEQY+Oufb5yPpfB/CWAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEX4xID7r450WEAAAAASUVORK5CYII=" style="width:22px;height:22px;object-fit:contain">
-      <img class="nav-icon-on"  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUUlEQVR4nO3SMQHAIADAsDEreMchN8jgaKKgR8de83xk/a8DeMsAcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAuAvJCwO9AigyAAAAAABJRU5ErkJggg=="       style="width:22px;height:22px;object-fit:contain;display:none">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>
       MO Talk
       <span id="badge-chat-p" class="nav-notif" style="display:none">0</span>
     </button>
@@ -1925,6 +1919,17 @@ function confirmarTrocaSenha() {
 }
 
 /* ══ NAVEGAÇÃO ══ */
+function iconSVG(nome, size) {
+  size = size || 16;
+  const paths = {
+    clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><polyline points="9 14 11 16 15 12"/>',
+    document: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+  };
+  const p = paths[nome] || '';
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+}
+
 function irAba(aba, btn) {
   _aba = aba;
   document.querySelectorAll('.portal-nav-btn').forEach(b=>b.classList.remove('ativo'));
@@ -2870,12 +2875,12 @@ function renderInicio() {
   // Alertas
   alertas.forEach(a => {
     html += `<div class="alerta-row ${a.tipo}" data-aba="${a.aba}">
-      <i class="${a.icone}" style="font-size:20px;color:${a.tipo==='red'?'var(--red)':'var(--amber)'}"></i>
+      <span style="color:${a.tipo==='red'?'var(--red)':'var(--amber)'};display:inline-flex">${iconSVG(a.icone,20)}</span>
       <div style="flex:1">
         <div style="font-size:12.5px;font-weight:700;color:var(--text)">${a.titulo}</div>
         <div style="font-size:11px;color:var(--text-dim)">${a.sub}</div>
       </div>
-      <i class="fi fi-sr-angle-right" style="color:var(--text-muted);font-size:12px"></i>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;color:var(--text-muted)"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`;
   });
 
@@ -2923,7 +2928,7 @@ function renderInicio() {
           <div style="font-size:10.5px;color:var(--text-dim);margin-bottom:1px">Gestor de implantação</div>
           <div style="font-size:13.5px;font-weight:700;color:var(--text)">${PORTAL.gestor.nome}</div>
         </div>
-        <button class="btn primary sm" data-nav="chat"><i class="fi fi-sr-comment-alt-middle" style="margin-right:4px"></i> Mensagem</button>
+        <button class="btn primary sm" data-nav="chat"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg> Mensagem</button>
       </div>
     </div>`;
 
@@ -3098,13 +3103,13 @@ function renderEtapas() {
           const lock = et.id > PORTAL.etapaAtual;
           return `<div class="etapa-step${lock?' etapa-lock':''}" data-etid="${et.id}" data-lock="${lock?1:0}">
             <div class="etapa-circle ${ok?'ok':atual?'atual':'lock'}">
-              ${ok?'<i class="fi fi-sr-check" style="font-size:12px"></i>':et.id}
+              ${ok?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"/></svg>':et.id}
             </div>
             <div style="flex:1;min-width:0">
               <div style="font-size:12.5px;font-weight:${atual?700:500};color:${lock?'var(--text-muted)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${et.nome}</div>
               <div style="font-size:10.5px;color:var(--text-muted);margin-top:1px">${ok?'Concluída':atual?'Em andamento':'Aguardando'}</div>
             </div>
-            ${!lock?'<i class="fi fi-sr-angle-right" style="color:var(--text-muted);font-size:12px;flex-shrink:0"></i>':''}
+            ${!lock?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;color:var(--text-muted)"><polyline points="9 18 15 12 9 6"/></svg>':''}
           </div>`;
         }).join('')}
       </div>
@@ -3129,7 +3134,7 @@ function abrirDetalheEtapa(etId) {
     const cor  = dias<0?'var(--red)':dias<=3?'var(--amber)':'var(--green)';
     const txt  = dias<0?`Venceu há ${Math.abs(dias)}d`:dias===0?'Vence hoje':dias===1?'Amanhã':`Em ${dias}d`;
     prazoHTML = `<div style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:10px;border:1px solid;border-color:${dias<0?'var(--red-border)':dias<=3?'var(--amber-border)':'var(--green-border)'};background:${dias<0?'var(--red-soft)':dias<=3?'var(--amber-soft)':'var(--green-soft)'};margin-bottom:14px">
-      <i class="fi fi-sr-clock" style="font-size:18px;color:${cor}"></i>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;color:${cor}"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
       <div>
         <div style="font-size:12px;font-weight:700;color:${cor}">${txt}</div>
         <div style="font-size:10.5px;color:var(--text-dim)">${d.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})}</div>
@@ -3151,7 +3156,7 @@ function abrirDetalheEtapa(etId) {
     </div>`,
     (atual?`
     <button class="btn-validar" onclick="solicitarValidacao(${etId})" style="flex:1">
-      <i class="fi fi-sr-badge-check"></i> Concluí esta etapa
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"/></svg> Concluí esta etapa
     </button>
     <button onclick="fecharModal();irAba('suporte')" style="padding:10px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
       💬 Tenho dúvidas
@@ -3382,7 +3387,7 @@ function renderAgendaOriginal() {
       </div>
     </div>
     <button class="btn primary" style="width:100%;margin-bottom:12px" onclick="abrirNovoEvento()">
-      <i class="fi fi-sr-calendar-plus" style="margin-right:6px"></i> Adicionar evento
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg> Adicionar evento
     </button>
     <div class="card">
       <div class="card-head"><div class="card-title">Próximos eventos</div></div>
@@ -3475,10 +3480,10 @@ function renderChat() {
   $('portal-content').innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button id="btn-g" class="chat-canal-btn ativo" onclick="trocarCanal('gestor')">
-        <i class="fi fi-sr-comment-alt-middle" style="margin-right:5px"></i>${PORTAL.gestor.nome.split(' ')[0]}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>${PORTAL.gestor.nome.split(' ')[0]}
       </button>
       <button id="btn-gl" class="chat-canal-btn" onclick="trocarCanal('global')">
-        <i class="fi fi-sr-megaphone" style="margin-right:5px"></i>Global
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M3 11l15-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Global
       </button>
     </div>
     <div class="card" style="height:calc(100vh - 240px);display:flex;flex-direction:column;overflow:hidden;padding:0">
@@ -3529,7 +3534,7 @@ function renderMsgs() {
 function renderChatInput() {
   const w = $('chat-inp-p'); if(!w) return;
   if(_chatCanal==='global') {
-    w.innerHTML='<div style="flex:1;text-align:center;font-size:12px;color:var(--text-muted);padding:6px"><i class="fi fi-sr-megaphone" style="margin-right:4px"></i>Apenas a franqueadora publica neste canal</div>';
+    w.innerHTML='<div style="flex:1;text-align:center;font-size:12px;color:var(--text-muted);padding:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M3 11l15-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Apenas a franqueadora publica neste canal</div>';
     return;
   }
   w.innerHTML=`<textarea id="chat-inp-txt" class="chat-input-portal" rows="1"
@@ -3537,7 +3542,7 @@ function renderChatInput() {
     onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarMsg();}"
     oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
     <button onclick="enviarMsg()" style="width:40px;height:40px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(245,166,35,.3)">
-      <i class="fi fi-sr-paper-plane" style="font-size:16px;color:var(--primary-dark)"></i>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;color:var(--primary-dark)"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>`;
   setTimeout(()=>$('chat-inp-txt')?.focus(), 100);
 }
@@ -3561,7 +3566,7 @@ function abrirPerfilPortal() {
       <div style="font-size:12px;color:var(--text-dim);margin-top:4px">${PORTAL.ticket} · Franqueado</div>
     </div>`,
     `<button class="btn" style="width:100%;color:var(--red);border-color:#FECACA" onclick="fazerLogoutPortal()">
-      <i class="fi fi-sr-sign-out-alt" style="margin-right:6px"></i>Sair
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sair
     </button>`
   );
 }
@@ -4025,11 +4030,11 @@ function getComunicados(){ return [{id:'cg1',texto:'Bem-vindo ao Portal da Mestr
 function getAlertas() {
   const a=[];
   const pend=getTarefas(PORTAL.etapaAtual).filter(t=>t.status!=='ok');
-  if(pend.length) a.push({icone:'fi fi-sr-clipboard-list-check',tipo:'amber',titulo:`${pend.length} tarefa${pend.length>1?'s':''} pendente${pend.length>1?'s':''}`,sub:`Etapa ${PORTAL.etapaAtual} em andamento`,aba:'etapas'});
+  if(pend.length) a.push({icone:'clipboard',tipo:'amber',titulo:`${pend.length} tarefa${pend.length>1?'s':''} pendente${pend.length>1?'s':''}`,sub:`Etapa ${PORTAL.etapaAtual} em andamento`,aba:'etapas'});
   const docs2=getDocs(PORTAL.etapaAtual); const docsPend2=docs2.filter(d=>!d.anexo);
-  if(docsPend2.length) a.push({icone:'fi fi-sr-document',tipo:'amber',titulo:`${docsPend2.length} documento${docsPend2.length>1?'s':''} a entregar`,sub:`Etapa ${PORTAL.etapaAtual} — anexe os arquivos obrigatórios`,aba:'etapas'});
+  if(docsPend2.length) a.push({icone:'document',tipo:'amber',titulo:`${docsPend2.length} documento${docsPend2.length>1?'s':''} a entregar`,sub:`Etapa ${PORTAL.etapaAtual} — anexe os arquivos obrigatórios`,aba:'etapas'});
   const prazo=getPrazo(PORTAL.etapaAtual);
-  if(prazo){const hoje2=new Date();hoje2.setHours(0,0,0,0);const dias=Math.floor((new Date(prazo+'T00:00')-hoje2)/(864e5));if(dias<=3)a.push({icone:'fi fi-sr-clock',tipo:dias<0?'red':'amber',titulo:dias<0?'Prazo vencido':`Prazo vencendo em ${dias}d`,sub:`Etapa ${PORTAL.etapaAtual}`,aba:'etapas'});}
+  if(prazo){const hoje2=new Date();hoje2.setHours(0,0,0,0);const dias=Math.floor((new Date(prazo+'T00:00')-hoje2)/(864e5));if(dias<=3)a.push({icone:'clock',tipo:dias<0?'red':'amber',titulo:dias<0?'Prazo vencido':`Prazo vencendo em ${dias}d`,sub:`Etapa ${PORTAL.etapaAtual}`,aba:'etapas'});}
   return a;
 }
 function atualizarBadges() {
