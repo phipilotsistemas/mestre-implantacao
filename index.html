@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 67</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 71</div></div>
   </div>
 </div>
 
@@ -866,10 +866,6 @@ select.inp{cursor:pointer}
         <span>Em implantação</span>
         <span class="badge" id="badge-frq" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
-      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
-        <div class="dot"></div><span>Chamados</span>
-        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
-      </button>
 
       <!-- AGENDA -->
       <div class="sb-group" id="sb-group-agenda">AGENDA</div>
@@ -908,6 +904,10 @@ select.inp{cursor:pointer}
       </button>
       <button class="sb-item" id="sb-relatorios" onclick="ir('relatorios',this)" style="display:none">
         <div class="dot"></div><span>Relatórios</span>
+      </button>
+      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
+        <div class="dot"></div><span>Chamados</span>
+        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
       </button>
     </div>
     <div class="sb-foot">
@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · fix-equipe-status-v67','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · franqueado-gestor-default-v71','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1761,12 +1761,9 @@ function iniciarApp() {
   const btnDev = $('sb-dev');
   if(btnDev) btnDev.style.display = SESSAO?.token === 'ADM-PHILLIPE' ? 'flex' : 'none';
   $('tela-login').style.display = 'none';
-  // Salvar equipe no Firebase para consulta do login
-  try {
-    const obj = {};
-    Object.entries(EQUIPE).forEach(([tk,u]) => { obj[tk] = {...u, token:tk}; });
-    db.ref('equipe').set(obj);
-  } catch(e) {}
+  // (Os dados de login da equipe são carregados do Firebase por carregarEquipeDoFirebase.
+  //  Não gravamos o objeto EQUIPE aqui para não sobrescrever a lista de colaboradores,
+  //  que é a fonte da verdade e contém id, e-mail e demais campos cadastrais.)
   $('app').style.display = 'flex';
 
   // Sidebar
@@ -2364,7 +2361,7 @@ function renderAlertas() {
 function abrirCadastroFranqueado() {
   const proxNum = String(getDados().length + 1).padStart(3, '0');
   const gestores = Object.entries(EQUIPE).filter(function(e){ return e[1].tipo==='gestor'; })
-    .map(function(e){ return '<option value="'+e[0]+'">'+e[1].nome+'</option>'; }).join('');
+    .map(function(e){ return '<option value="'+e[0]+'"'+(e[0]===(SESSAO&&SESSAO.token)?' selected':'')+'>'+e[1].nome+'</option>'; }).join('');
 
   abrirModal('Cadastrar novo franqueado',
     '<div style="max-height:70vh;overflow-y:auto;padding-right:6px">' +
@@ -5621,8 +5618,7 @@ function exportarDossie(colId, mesAno) {
 
 /* ── PRÉVIA DO DOSSIÊ NO PAINEL ── */
 function abrirPreviaDosse(colId) {
-  const lista = getEquipe();
-  const col   = lista.find(c=>c.id===colId);
+  const col = getColaborador(colId);
   if(!col){ toast('Colaborador não encontrado.','rd'); return; }
 
   const mesAtual = getMesAtual();
@@ -6328,7 +6324,14 @@ function dispararTarefasEtapa(fid, etapaId) {
 function getEquipe() {
   try {
     const s = localStorage.getItem('mo_equipe_rh');
-    if(s) return JSON.parse(s);
+    if(s) {
+      const lista = JSON.parse(s);
+      // Autocorreção: colaboradores sem id (dados antigos danificados) recuperam o id pelo token
+      let corrigiu = false;
+      lista.forEach(c => { if(c && !c.id && c.token) { c.id = c.token; corrigiu = true; } });
+      if(corrigiu) { try { localStorage.setItem('mo_equipe_rh', JSON.stringify(lista)); } catch(e){} }
+      return lista;
+    }
   } catch(e) {}
   // Sistema inicia vazio — colaboradores são cadastrados pelo administrador
   return [];
@@ -7775,7 +7778,7 @@ function abrirAcoesColaborador(colId) {
 ══════════════════════════════════════════════════ */
 
 function emitirFichaRegistro(colId) {
-  const col = getEquipe().find(c=>c.id===colId);
+  const col = getColaborador(colId);
   if(!col) return;
 
   const html = gerarHTMLFichaRegistro(col);
