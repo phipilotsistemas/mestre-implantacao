@@ -6,8 +6,15 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="MO Portal">
+<meta name="application-name" content="MO Portal">
 <meta name="theme-color" content="#1B3F8B">
 <title>Mestre da Obra — Portal do Franqueado</title>
+
+<!-- PWA: app instalável na tela inicial -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 
 <style>
 /* ── RESET ── */
@@ -1018,7 +1025,27 @@ body { overflow-x:hidden }
 </head>
 <body>
 
-<!-- ══ LOGIN ══ -->
+<!-- ══ BANNER INSTALAR APP (PWA) ══ -->
+<div id="pwa-instalar" style="display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#1B3F8B;color:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 8px 28px rgba(0,0,0,.25);align-items:center;gap:12px">
+  <div style="flex:1">
+    <div style="font-weight:800;font-size:14px">Instalar o app</div>
+    <div style="font-size:12px;opacity:.9">Adicione o portal à tela inicial para abrir como aplicativo.</div>
+  </div>
+  <button onclick="instalarPWA()" style="background:#F5A623;color:#1B3F8B;border:none;border-radius:10px;padding:9px 14px;font-weight:800;font-size:13px;cursor:pointer">Instalar</button>
+  <button onclick="fecharBannerPWA()" aria-label="Fechar" style="background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+</div>
+
+<!-- ══ DICA INSTALAR NO iOS ══ -->
+<div id="pwa-ios" style="display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#1B3F8B;color:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 8px 28px rgba(0,0,0,.25)">
+  <div style="display:flex;align-items:flex-start;gap:10px">
+    <div style="flex:1">
+      <div style="font-weight:800;font-size:14px">Instalar na tela inicial</div>
+      <div style="font-size:12px;opacity:.92;margin-top:3px">Toque em <b>Compartilhar</b> <span style="font-size:14px">⬆️</span> e depois em <b>"Adicionar à Tela de Início"</b>.</div>
+    </div>
+    <button onclick="fecharBannerPWA()" aria-label="Fechar" style="background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;padding:0 2px">×</button>
+  </div>
+</div>
+
 <div id="tela-login">
   <div class="login-card">
     <div class="login-logo-wrap">
@@ -1141,6 +1168,53 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.database();
+
+// PWA: registrar service worker para o portal ser instalável como app
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW:', e.message));
+  });
+}
+
+// PWA: banner de instalação
+let _promptPWA = null;
+function jaInstalado() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function fecharBannerPWA() {
+  const a = document.getElementById('pwa-instalar'); if(a) a.style.display='none';
+  const b = document.getElementById('pwa-ios'); if(b) b.style.display='none';
+  try { localStorage.setItem('pwa_banner_fechado', Date.now().toString()); } catch(e) {}
+}
+function bannerFoiFechadoRecente() {
+  try {
+    const t = parseInt(localStorage.getItem('pwa_banner_fechado') || '0', 10);
+    return t && (Date.now() - t) < 7*24*60*60*1000; // não reaparece por 7 dias
+  } catch(e) { return false; }
+}
+function instalarPWA() {
+  if(!_promptPWA) return;
+  _promptPWA.prompt();
+  _promptPWA.userChoice.finally(() => { _promptPWA = null; fecharBannerPWA(); });
+}
+// Android/Chrome: captura o evento de instalação
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _promptPWA = e;
+  if(!jaInstalado() && !bannerFoiFechadoRecente()) {
+    const el = document.getElementById('pwa-instalar');
+    if(el) el.style.display = 'flex';
+  }
+});
+// iOS/Safari: não tem prompt, mostra a dica manual
+window.addEventListener('load', () => {
+  const ua = window.navigator.userAgent;
+  const ehIOS = /iphone|ipad|ipod/i.test(ua);
+  const ehSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+  if(ehIOS && ehSafari && !jaInstalado() && !bannerFoiFechadoRecente()) {
+    setTimeout(() => { const el = document.getElementById('pwa-ios'); if(el) el.style.display='block'; }, 2500);
+  }
+});
 
 // Configurar persistência — SESSION evita o erro 400 de token expirado
 // ao reabrir o portal em nova aba/sessão
@@ -1852,70 +1926,61 @@ function confirmarTrocaSenha() {
     return;
   }
 
-  user.updatePassword(nova)
-    .then(() => {
-      // PASSO 2 — Registrar localmente
-      const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-      localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
-      localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
+  // Helper para reabilitar o botão e mostrar erro (nunca deixa travado)
+  const reabilitar = (msg) => {
+    if(btnConfirmar) { btnConfirmar.disabled=false; btnConfirmar.textContent='Confirmar minha senha'; }
+    if(msg) { erroEl.style.display='block'; erroEl.textContent=msg; }
+  };
 
-      // PASSO 3 — Registrar no Firebase DB para o painel ver
-      try {
-        db.ref('franqueados/' + PORTAL.fid + '/senhaTrocada').set({
-          trocada:   true,
-          data:      agora_str,
-          timestamp: Date.now(),
-        });
-      } catch(e) {}
+  // Guarda de segurança: se nada resolver em 20s, libera o botão
+  let finalizado = false;
+  const timeoutGuarda = setTimeout(() => {
+    if(!finalizado) reabilitar('A conexão demorou demais. Verifique sua internet e tente novamente.');
+  }, 20000);
 
-      // PASSO 4 — Notificar painel via localStorage
-      try {
-        const reg = {
-          fid:    PORTAL.fid,
-          ticket: PORTAL.ticket,
-          nome:   PORTAL.nome,
-          data:   agora_str,
-          acao:   'senha_alterada_primeiro_acesso',
-        };
-        const hist = JSON.parse(localStorage.getItem('portal_eventos') || '[]');
-        hist.push(reg);
-        localStorage.setItem('portal_eventos', JSON.stringify(hist));
-      } catch(e) {}
+  // Sucesso: registra a troca e entra no portal
+  const aoConcluir = () => {
+    finalizado = true;
+    clearTimeout(timeoutGuarda);
+    const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
+    localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
+    PORTAL._senhaAtual = nova;
+    try {
+      db.ref('franqueados/' + PORTAL.fid + '/senhaTrocada').set({ trocada:true, data:agora_str, timestamp:Date.now() });
+    } catch(e) {}
+    try {
+      const hist = JSON.parse(localStorage.getItem('portal_eventos') || '[]');
+      hist.push({ fid:PORTAL.fid, ticket:PORTAL.ticket, nome:PORTAL.nome, data:agora_str, acao:'senha_alterada_primeiro_acesso' });
+      localStorage.setItem('portal_eventos', JSON.stringify(hist));
+    } catch(e) {}
+    const overlay = $('tela-troca-senha');
+    if(overlay) overlay.remove();
+    entrarNoPortal();
+  };
 
-      // PASSO 5 — Remover overlay e seguir
-      const overlay = $('tela-troca-senha');
-      if(overlay) overlay.remove();
-      entrarNoPortal();
-    })
-    .catch(err => {
-      // auth/requires-recent-login — precisa reautenticar antes de trocar senha
-      if(err.code === 'auth/requires-recent-login') {
-        // Reautenticar com a senha provisória e tentar novamente
-        const credential = firebase.auth.EmailAuthProvider.credential(
-          user.email, PORTAL._senhaAtual || '123456'
-        );
-        user.reauthenticateWithCredential(credential)
-          .then(() => user.updatePassword(nova))
-          .then(() => {
-            const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-            localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
-            localStorage.setItem('senha_trocada_data_' + PORTAL.fid, agora_str);
-            try { db.ref('franqueados/' + PORTAL.fid + '/senhaTrocada').set({ trocada:true, data:agora_str, timestamp:Date.now() }); } catch(e) {}
-            const overlay = $('tela-troca-senha');
-            if(overlay) overlay.remove();
-            entrarNoPortal();
-          })
-          .catch(e2 => {
-            erroEl.style.display='block';
-            erroEl.textContent='Erro ao salvar senha: ' + (e2.message || 'tente novamente.');
-            if(btnConfirmar) { btnConfirmar.disabled=false; btnConfirmar.textContent='Confirmar minha senha'; }
-          });
-      } else {
-        erroEl.style.display='block';
-        erroEl.textContent='Erro ao salvar senha: ' + (err.message || 'tente novamente.');
-        if(btnConfirmar) { btnConfirmar.disabled=false; btnConfirmar.textContent='Confirmar minha senha'; }
-      }
-    });
+  // Falha: encerra guarda e reabilita
+  const aoFalhar = (e) => {
+    finalizado = true;
+    clearTimeout(timeoutGuarda);
+    if(e && e.code === 'auth/weak-password') {
+      reabilitar('A senha é muito fraca. Use pelo menos 6 caracteres.');
+    } else if(e && e.code === 'auth/wrong-password') {
+      reabilitar('Não foi possível confirmar sua identidade. Atualize a página e entre novamente.');
+    } else {
+      reabilitar('Erro ao salvar senha: ' + ((e && e.message) || 'tente novamente.'));
+    }
+  };
+
+  // PADRÃO RECOMENDADO: reautenticar PRIMEIRO (token fresco), depois trocar.
+  // Isso elimina o estado intermediário que travava a página no 1º acesso.
+  const credential = firebase.auth.EmailAuthProvider.credential(
+    user.email, PORTAL._senhaAtual || '123456'
+  );
+  user.reauthenticateWithCredential(credential)
+    .then(() => user.updatePassword(nova))
+    .then(aoConcluir)
+    .catch(aoFalhar);
 }
 
 /* ══ NAVEGAÇÃO ══ */
