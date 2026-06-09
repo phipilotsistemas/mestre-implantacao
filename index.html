@@ -820,7 +820,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 80</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 81</div></div>
   </div>
 </div>
 
@@ -967,7 +967,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · minhas-tarefas-sync-atribuicoes-v80','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · fix-seed-destrutivo-equipe-v81','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -8769,16 +8769,12 @@ function seedProcessoFernando() {
   localStorage.setItem('mo_prazo_frq_1_et11', '2025-12-15');
 }
 
-// Executar seed do Fernando
-(function(){ try { seedProcessoFernando(); } catch(e){ console.warn('seed Fernando:', e); } })();
-
-// Executar seed se MO-001 ainda estiver na etapa 1
-(function() {
-  try {
-    // Sempre rodar o seed para garantir os eventos de assinatura
-    seedDemoMO001();
-  } catch(e) {}
-})();
+// ── SEEDS DE DEMONSTRAÇÃO DESATIVADOS ──
+// Estes seeds rodavam em TODA carga da página e apagavam mo_franqueados e
+// mo_equipe_rh (a equipe real do usuário), reinjetando o franqueado fictício
+// "Fernando Dias Caldas". O sistema inicia vazio (v66), então a execução
+// automática foi removida. As funções seguem definidas, mas não são chamadas.
+// (Antes: seedProcessoFernando() e seedDemoMO001() eram invocados aqui.)
 
 /* ── FIM DO SEED ── */
 
@@ -15490,17 +15486,10 @@ window.addEventListener('DOMContentLoaded', ()=>{
     }
   });
   setTimeout(atualizarBadgeAlertas, 500);
-  // Verificar versão dos dados — limpar se for versão antiga (sem campos novos)
-  try {
-    const equipe = JSON.parse(localStorage.getItem('mo_equipe_rh')||'null');
-    if(equipe && equipe.length > 0) {
-      const temCamposNovos = equipe[0].cpf && equipe[0].horario && equipe[0].endereco;
-      if(!temCamposNovos) {
-        localStorage.removeItem('mo_equipe_rh');
-        console.log('Dados da equipe resetados — versão desatualizada');
-      }
-    }
-  } catch(e) {}
+  // NOTA: aqui havia uma "verificação de versão" que apagava TODA a equipe
+  // (mo_equipe_rh) quando o primeiro membro não tinha os campos cpf/horario/endereco.
+  // Isso destruía a equipe real cadastrada sem esses campos opcionais. Removido.
+  // A interface já lida com campos ausentes sem precisar apagar nada.
 
 
   iniciarLogin();
