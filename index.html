@@ -820,7 +820,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 82</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 83</div></div>
   </div>
 </div>
 
@@ -967,7 +967,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · fix-seeds-demo-calendario-v82','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · limpeza-dados-demo-firebase-v83','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1652,7 +1652,14 @@ function entrarNoApp(token, membro, uid) {
   PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
   localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
   try {
-    if(db) { carregarFranqueadosDoFirebase().catch(()=>{}); carregarEquipeDoFirebase().catch(()=>{}); hidratarColecoesGlobais().catch(()=>{}); }
+    if(db) {
+      carregarFranqueadosDoFirebase().catch(()=>{});
+      carregarEquipeDoFirebase().catch(()=>{});
+      hidratarColecoesGlobais().then(()=>limparDadosDemo()).catch(()=>{ try{ limparDadosDemo(); }catch(e){} });
+    } else {
+      try { limparDadosDemo(); } catch(e) {}
+    }
+    setTimeout(()=>{ try{ limparDadosDemo(); }catch(e){} }, 1800);
   } catch(e) {}
   iniciarApp();
 }
@@ -6510,6 +6517,42 @@ async function hidratarColecoesGlobais() {
     _hidratarFB('mo_dossies_fechados','dossies_fechados'),
     _hidratarFB('motalk_grupos','motalk_grupos'),
   ]).catch(()=>{});
+}
+
+// Limpeza única dos dados de demonstração que ficaram persistidos (localStorage + Firebase).
+// Remove apenas registros com ids fixos dos antigos seeds; não toca em dados reais
+// (que usam ids gerados por timestamp). Roda após a hidratação do Firebase.
+function limparDadosDemo() {
+  const DEMO = {
+    agenda:     ['ev_d1','ev_d2','ev_d3','ev_d4','ev_d5'],
+    prazos:     ['pz_d1','pz_d2','pz_d3'],
+    tarefas:    ['tar_d1','tar_d2'],
+    candidatos: ['cand_1','cand_2','cand_3'],
+    motalk:     ['cm1','cm2','cm3','mo1','mo2','mo3','mo4'],
+  };
+  try {
+    const ag = getEventosAgenda();
+    if(ag.some(e=>DEMO.agenda.includes(e.id))) salvarEventosAgenda(ag.filter(e=>!DEMO.agenda.includes(e.id)));
+
+    const pz = getPrazos();
+    if(pz.some(p=>DEMO.prazos.includes(p.id))) salvarPrazos(pz.filter(p=>!DEMO.prazos.includes(p.id)));
+
+    const tf = getTarefas();
+    if(tf.some(t=>DEMO.tarefas.includes(t.id))) salvarTarefas(tf.filter(t=>!DEMO.tarefas.includes(t.id)));
+
+    if(typeof getCandidatos==='function') {
+      const cd = getCandidatos();
+      if(Array.isArray(cd) && cd.some(c=>DEMO.candidatos.includes(c.id))) salvarCandidatos(cd.filter(c=>!DEMO.candidatos.includes(c.id)));
+    }
+
+    if(typeof getMOTalkMsgs==='function') {
+      const mt = getMOTalkMsgs('geral');
+      if(Array.isArray(mt) && mt.some(m=>DEMO.motalk.includes(m.id))) {
+        salvarMOTalkMsgs('geral', mt.filter(m=>!DEMO.motalk.includes(m.id)));
+        if(db){ DEMO.motalk.forEach(id=>{ try{ db.ref('motalk/geral/'+id).remove(); }catch(e){} }); }
+      }
+    }
+  } catch(e) { console.warn('limparDadosDemo:', e.message); }
 }
 
 function getColaborador(id) {
@@ -15499,6 +15542,15 @@ window.addEventListener('DOMContentLoaded', ()=>{
 /* Verificar fechamento mensal a cada hora */
 setInterval(verificarFechamentoMensal, 3600000);
 verificarFechamentoMensal();
+
+/* Limpeza de dados de demonstração — remove resíduos dos antigos seeds.
+   Roda no carregamento (limpa o localStorage) e novamente após a hidratação
+   do Firebase (limpa o que vier de lá). Só remove ids fixos de demonstração. */
+(function(){
+  try { limparDadosDemo(); } catch(e) {}
+  setTimeout(function(){ try { limparDadosDemo(); } catch(e) {} }, 2500);
+  setTimeout(function(){ try { limparDadosDemo(); } catch(e) {} }, 5000);
+})();
 </script>
 
 
