@@ -2,7 +2,7 @@
 // Estrategia: network-first para a pagina (sempre versao mais nova quando online),
 // com cache de fallback para funcionar offline. Assets estaticos: cache-first.
 
-const CACHE = 'mo-portal-v6';
+const CACHE = 'mo-portal-v7';
 const ESSENCIAIS = [
   'portal-franqueado.html',
   'manifest.json',
