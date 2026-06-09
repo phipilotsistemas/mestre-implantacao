@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · chat-firebase-voltar-swipe-v57','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · motalk-firebase-naofecha-v58','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -14316,14 +14316,8 @@ function enviarMsgChat() {
   }
 }
 
-// Fechar ao clicar fora
-document.addEventListener('click', e=>{
-  const painel = $('chat-painel');
-  const fab    = $('chat-fab');
-  if(painel && _chatAberto && !painel.contains(e.target) && !fab.contains(e.target)) {
-    fecharChatFlutuante();
-  }
-});
+// (Removido o fechamento automático ao clicar fora: o chat só fecha pelo botão ✕,
+//  para não fechar quando o usuário clica nas abas/menu do painel.)
 
 // Seed de mensagens demo
 function seedChatDemo() {
@@ -14357,6 +14351,37 @@ function getMOTalkGrupos() {
 }
 function salvarMOTalkGrupos(g) { localStorage.setItem('motalk_grupos', JSON.stringify(g)); }
 
+// ── Sincronização em tempo real (Firebase) ──
+let _motalkMsgsCache = [];
+let _motalkRef = null;
+let _motalkH = null;
+
+// Envia uma mensagem para o canal (Firebase como fonte da verdade)
+function pushMotalk(canal, msg) {
+  if(db) {
+    try { db.ref('motalk/' + canal + '/' + msg.id).set(msg); return; } catch(e) {}
+  }
+  // Fallback local (sem Firebase)
+  const l = getMOTalkMsgs(canal); l.push(msg); salvarMOTalkMsgs(canal, l);
+  if(canal === _motalkCanal) { _motalkMsgsCache = getMOTalkMsgs(canal); renderMsgsMOTalk(); }
+  renderListaMOTalk($('motalk-busca')?.value || '');
+}
+
+// Assina o canal ativo e re-renderiza quando chegam mensagens
+function escutarMotalk(canal) {
+  if(_motalkRef && _motalkH) { try { _motalkRef.off('value', _motalkH); } catch(e) {} _motalkRef = null; _motalkH = null; }
+  if(!db) { _motalkMsgsCache = getMOTalkMsgs(canal); renderMsgsMOTalk(); return; }
+  _motalkRef = db.ref('motalk/' + canal);
+  _motalkH = _motalkRef.on('value', snap => {
+    if(_motalkCanal !== canal) return;
+    const raw = snap.val();
+    _motalkMsgsCache = raw ? Object.values(raw).filter(Boolean).sort((a,b)=>(a.ts||0)-(b.ts||0)) : [];
+    try { localStorage.setItem('motalk_' + canal, JSON.stringify(_motalkMsgsCache)); } catch(e) {}
+    renderMsgsMOTalk();
+    renderListaMOTalk($('motalk-busca')?.value || '');
+  });
+}
+
 // ── Inicializar ──
 function abrirChatFlutuante() {
   const painel = $('chat-painel');
@@ -14377,6 +14402,7 @@ function fecharChatFlutuante() {
   const painel = $('chat-painel');
   if(!painel) return;
   _chatAberto = false;
+  if(_motalkRef && _motalkH) { try { _motalkRef.off('value', _motalkH); } catch(e) {} _motalkRef = null; _motalkH = null; }
   painel.style.opacity='0';
   painel.style.transform='translateY(12px) scale(.97)';
   setTimeout(()=>{ painel.style.display='none'; painel.style.opacity=''; painel.style.transform=''; },200);
@@ -14469,6 +14495,7 @@ function selecionarCanalMOTalk(canalId) {
   if($('motalk-conv-sub'))  $('motalk-conv-sub').textContent  = info.sub;
 
   renderMsgsMOTalk();
+  escutarMotalk(canalId);
   setTimeout(()=>{ const inp=$('motalk-input'); if(inp) inp.focus(); },100);
 }
 
@@ -14578,11 +14605,7 @@ function handleMotalkImagem(input) {
       src:   e.target.result,
       data:  hoje(), hora: agora(), ts: Date.now(),
     };
-    const lista = getMOTalkMsgs(_motalkCanal);
-    lista.push(msg);
-    salvarMOTalkMsgs(_motalkCanal, lista);
-    renderMsgsMOTalk();
-    renderListaMOTalk();
+    pushMotalk(_motalkCanal, msg);
   };
   reader.readAsDataURL(file);
   input.value = '';
@@ -14602,11 +14625,7 @@ function handleMotalkArquivo(input) {
     tamanho,
     data:  hoje(), hora: agora(), ts: Date.now(),
   };
-  const lista = getMOTalkMsgs(_motalkCanal);
-  lista.push(msg);
-  salvarMOTalkMsgs(_motalkCanal, lista);
-  renderMsgsMOTalk();
-  renderListaMOTalk();
+  pushMotalk(_motalkCanal, msg);
   input.value = '';
   toast('Arquivo registrado: '+file.name,'gn');
 }
@@ -14701,7 +14720,7 @@ let _motalkBuscaAtiva  = false;
 function renderMsgsMOTalk() {
   const container = $('motalk-msgs');
   if(!container) return;
-  const msgs = getMOTalkMsgs(_motalkCanal);
+  const msgs = _motalkMsgsCache;
 
   if(!msgs.length) {
     container.innerHTML =
@@ -14788,7 +14807,7 @@ function renderMsgsMOTalk() {
 
 // ── Responder mensagem ──
 function responderMsg(msgId) {
-  const msgs = getMOTalkMsgs(_motalkCanal);
+  const msgs = _motalkMsgsCache;
   const m    = msgs.find(x=>x.id===msgId);
   if(!m) return;
   _motalkRespondendo = m;
@@ -14858,7 +14877,7 @@ function confirmarEncaminhar(msgId) {
   const destino = document.querySelector('input[name=fwd-canal]:checked')?.value;
   if(!destino){ toast('Selecione um destino.','rd'); return; }
 
-  const msgs = getMOTalkMsgs(_motalkCanal);
+  const msgs = _motalkMsgsCache;
   const orig = msgs.find(x=>x.id===msgId);
   if(!orig) return;
 
@@ -14874,21 +14893,20 @@ function confirmarEncaminhar(msgId) {
     ts:           Date.now(),
   };
 
-  const lista = getMOTalkMsgs(destino);
-  lista.push(novaMsg);
-  salvarMOTalkMsgs(destino, lista);
+  pushMotalk(destino, novaMsg);
   fecharModal();
   toast('Mensagem encaminhada.','gn');
-
-  if(destino === _motalkCanal) renderMsgsMOTalk();
-  renderListaMOTalk();
 }
 
 // ── Excluir mensagem ──
 function excluirMsgMotalk(msgId) {
   if(!confirm('Excluir esta mensagem?')) return;
+  if(db) {
+    try { db.ref('motalk/' + _motalkCanal + '/' + msgId).remove(); return; } catch(e) {}
+  }
   const lista = getMOTalkMsgs(_motalkCanal).filter(m=>m.id!==msgId);
   salvarMOTalkMsgs(_motalkCanal, lista);
+  _motalkMsgsCache = lista;
   renderMsgsMOTalk();
   renderListaMOTalk();
 }
@@ -15028,14 +15046,10 @@ enviarMsgMotalk = function() {
     ts:      Date.now(),
   };
 
-  const lista = getMOTalkMsgs(_motalkCanal);
-  lista.push(msg);
-  salvarMOTalkMsgs(_motalkCanal, lista);
   inp.value = '';
   inp.style.height = 'auto';
   cancelarResposta();
-  renderMsgsMOTalk();
-  renderListaMOTalk($('motalk-busca')?.value||'');
+  pushMotalk(_motalkCanal, msg);
 };
 
 
