@@ -1227,6 +1227,7 @@ auth.onAuthStateChanged(user => {
     // Usuário autenticado — verificar se já tem sessão montada
     if(window.PORTAL?.fid) return; // já logado, não faz nada
     if(_saindoIntencional) return;  // logout em progresso, não restaurar
+    if(window._trocandoSenha) return; // troca de senha em curso, não interferir
 
     // Tentar restaurar sessão do Firebase
     db.ref('portal_usuarios').orderByChild('email').equalTo(user.email).once('value')
@@ -1917,6 +1918,9 @@ function confirmarTrocaSenha() {
     btnConfirmar.textContent = '⏳ Salvando...';
   }
 
+  // Blindar o onAuthStateChanged para não interferir durante a troca
+  window._trocandoSenha = true;
+
   // PASSO 1 — Atualizar senha no Firebase Auth (fonte da verdade)
   const user = auth.currentUser;
   if(!user) {
@@ -1935,12 +1939,13 @@ function confirmarTrocaSenha() {
   // Guarda de segurança: se nada resolver em 20s, libera o botão
   let finalizado = false;
   const timeoutGuarda = setTimeout(() => {
-    if(!finalizado) reabilitar('A conexão demorou demais. Verifique sua internet e tente novamente.');
+    if(!finalizado) { window._trocandoSenha = false; reabilitar('A conexão demorou demais. Verifique sua internet e tente novamente.'); }
   }, 20000);
 
   // Sucesso: registra a troca e entra no portal
   const aoConcluir = () => {
     finalizado = true;
+    window._trocandoSenha = false;
     clearTimeout(timeoutGuarda);
     const agora_str = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     localStorage.setItem('senha_trocada_' + PORTAL.fid, '1');
@@ -1962,6 +1967,7 @@ function confirmarTrocaSenha() {
   // Falha: encerra guarda e reabilita
   const aoFalhar = (e) => {
     finalizado = true;
+    window._trocandoSenha = false;
     clearTimeout(timeoutGuarda);
     if(e && e.code === 'auth/weak-password') {
       reabilitar('A senha é muito fraca. Use pelo menos 6 caracteres.');
@@ -1972,13 +1978,12 @@ function confirmarTrocaSenha() {
     }
   };
 
-  // PADRÃO RECOMENDADO: reautenticar PRIMEIRO (token fresco), depois trocar.
-  // Isso elimina o estado intermediário que travava a página no 1º acesso.
-  const credential = firebase.auth.EmailAuthProvider.credential(
-    user.email, PORTAL._senhaAtual || '123456'
-  );
-  user.reauthenticateWithCredential(credential)
-    .then(() => user.updatePassword(nova))
+  // MÉTODO MAIS CONFIÁVEL: refazer o login (token garantidamente fresco),
+  // depois trocar a senha. Evita o estado intermediário e a corrida do
+  // onAuthStateChanged que travavam a página no 1º acesso.
+  const senhaProvisoria = PORTAL._senhaAtual || '123456';
+  auth.signInWithEmailAndPassword(user.email, senhaProvisoria)
+    .then(cred => cred.user.updatePassword(nova))
     .then(aoConcluir)
     .catch(aoFalhar);
 }
