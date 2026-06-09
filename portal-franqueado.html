@@ -961,8 +961,8 @@ body { overflow-x:hidden }
 }
 /* Modo chat: a tela inteira vira flex e o card preenche o espaço entre a
    topbar e a barra inferior. Só o quadro de mensagens rola, a página não. */
-#app.modo-chat { height:100dvh; }
-@supports not (height: 100dvh) { #app.modo-chat { height:100vh; } }
+#app.modo-chat { height:100dvh;min-height:100dvh;max-height:100dvh;overflow:hidden; }
+@supports not (height: 100dvh) { #app.modo-chat { height:100vh;min-height:100vh;max-height:100vh; } }
 #app.modo-chat .portal-content {
   flex:1;display:flex;flex-direction:column;min-height:0;
   padding:12px 16px 8px;
