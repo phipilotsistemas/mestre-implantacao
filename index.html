@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · logo-cabecalho-inteiro-v55','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · chat-firebase-voltar-swipe-v57','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -5100,8 +5100,6 @@ function renderChat() {
 function abrirChatImpl(fid, canal) {
   _chatAtual = canal;
   const f    = getFranqueado(fid);
-  const chats = JSON.parse(localStorage.getItem('mo_chats')||'{}');
-  const msgs  = chats[canal]||[];
 
   const area = $('chat-main-area'); if(!area) return;
   area.innerHTML = `
@@ -5112,41 +5110,55 @@ function abrirChatImpl(fid, canal) {
       </div>
       <button class="chat-formal-btn" onclick="enviarMsgFormal('${fid}','${canal}')">📋 Comunicado oficial</button>
     </div>
-    <div class="chat-msgs" id="chat-msgs-${canal}">
-      ${msgs.map(m=>{
-        const mine = m.autorToken===SESSAO.token;
-        if(m.formal) return `
-          <div class="msg-wrap" style="align-self:center;max-width:90%">
-            <div class="msg formal">
-              <div class="msg-formal-tag">Comunicado Oficial</div>
-              ${m.texto.replace(/\n/g,'<br>')}
-            </div>
-            <div class="msg-tm" style="text-align:center">${m.hora||''} · ${m.autorNome||''}</div>
-          </div>`;
-        return `<div class="msg-wrap ${mine?'mine':'theirs'}">
-          ${!mine?`<div style="font-size:10px;font-weight:700;color:var(--text-dim);margin-bottom:2px">${m.autorNome}</div>`:''}
-          <div class="msg ${mine?'mine':'theirs'}">${m.texto}</div>
-          <div class="msg-tm">${m.hora||''}</div>
-        </div>`;
-      }).join('')}
-    </div>
+    <div class="chat-msgs" id="chat-msgs-${canal}"></div>
     <div class="chat-inp-area">
       <textarea class="chat-inp" id="chat-inp-${canal}" rows="1" placeholder="Mensagem..."
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarMsgChat('${fid}','${canal}')}"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarMsgImpl('${fid}','${canal}')}"
         oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"></textarea>
-      <button class="chat-send" onclick="enviarMsgChat('${fid}','${canal}')">
+      <button class="chat-send" onclick="enviarMsgImpl('${fid}','${canal}')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>`;
 
-  // Scroll ao fim
-  setTimeout(()=>{
-    const msgsEl = $(`chat-msgs-${canal}`);
-    if(msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
-  }, 50);
+  // Firebase em tempo real: fonte da verdade do chat
+  if(_chatRef && _chatH){ try{ _chatRef.off('value', _chatH); }catch(e){} }
+  if(db){
+    _chatRef = db.ref(`chats/${canal}`);
+    _chatH = _chatRef.on('value', snap => {
+      const raw = snap.val();
+      const msgs = raw ? Object.values(raw).filter(Boolean).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)) : [];
+      // Cache local para leitura offline
+      try { const c=JSON.parse(localStorage.getItem('mo_chats')||'{}'); c[canal]=msgs; localStorage.setItem('mo_chats', JSON.stringify(c)); } catch(e){}
+      renderMsgsImpl(canal, msgs);
+    });
+  } else {
+    const chats = JSON.parse(localStorage.getItem('mo_chats')||'{}');
+    renderMsgsImpl(canal, chats[canal]||[]);
+  }
 }
 
-function enviarMsgChat(fid, canal) {
+function renderMsgsImpl(canal, msgs) {
+  const el = $(`chat-msgs-${canal}`); if(!el) return;
+  el.innerHTML = msgs.map(m=>{
+    const mine = m.autorToken===SESSAO.token;
+    if(m.formal) return `
+      <div class="msg-wrap" style="align-self:center;max-width:90%">
+        <div class="msg formal">
+          <div class="msg-formal-tag">Comunicado Oficial</div>
+          ${(m.texto||'').replace(/\n/g,'<br>')}
+        </div>
+        <div class="msg-tm" style="text-align:center">${m.hora||''} · ${m.autorNome||''}</div>
+      </div>`;
+    return `<div class="msg-wrap ${mine?'mine':'theirs'}">
+      ${!mine?`<div style="font-size:10px;font-weight:700;color:var(--text-dim);margin-bottom:2px">${m.autorNome||''}</div>`:''}
+      <div class="msg ${mine?'mine':'theirs'}">${(m.texto||'').replace(/\n/g,'<br>')}</div>
+      <div class="msg-tm">${m.hora||''}</div>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function enviarMsgImpl(fid, canal) {
   const inp  = $(`chat-inp-${canal}`);
   const texto = inp?.value.trim(); if(!texto) return;
   const msg  = {
@@ -5155,13 +5167,9 @@ function enviarMsgChat(fid, canal) {
     data: new Date().toLocaleDateString('pt-BR'),
     timestamp: Date.now(), lido:false,
   };
-  const chats = JSON.parse(localStorage.getItem('mo_chats')||'{}');
-  if(!chats[canal]) chats[canal]=[];
-  chats[canal].push(msg);
-  localStorage.setItem('mo_chats', JSON.stringify(chats));
   if(inp){inp.value='';inp.style.height='auto';}
-  if(db){ try{ db.ref(`chats/${canal}`).push(msg); }catch(e){} }
-  abrirChatImpl(fid, canal);
+  // Firebase é a fonte da verdade — o listener re-renderiza
+  if(db){ try{ db.ref(`chats/${canal}`).push(msg); }catch(e){ toast('Falha ao enviar. Verifique a conexão.','rd'); } }
 }
 
 function enviarMsgFormal(fid, canal) {
@@ -5190,15 +5198,11 @@ function confirmarMsgFormal(fid, canal) {
     data: new Date().toLocaleDateString('pt-BR'),
     timestamp: Date.now(), lido:false,
   };
-  const chats = JSON.parse(localStorage.getItem('mo_chats')||'{}');
-  if(!chats[canal]) chats[canal]=[];
-  chats[canal].push(msg);
-  localStorage.setItem('mo_chats', JSON.stringify(chats));
   if(db){ try{ db.ref(`chats/${canal}`).push(msg); }catch(e){} }
   gravarHistoricoFuncional({...msg, tipo:'comunicado_formal', fid});
   fecharModal();
   toast('Comunicado oficial enviado e registrado.','gn');
-  abrirChatImpl(fid, canal);
+  // O listener do Firebase re-renderiza automaticamente
 }
 
 function abrirChatFranqueado(fid) {
