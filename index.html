@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 86</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 87</div></div>
   </div>
 </div>
 
@@ -1580,7 +1580,13 @@ async function logarFirebase() {
   }
 
   // ── Identificar o membro pela equipe (e-mail é a chave de login) ──
-  const entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
+  let entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
+  // Se não achou, a equipe pode ainda não ter sido carregada do Firebase neste
+  // aparelho. Recarregar sob demanda e tentar de novo antes de recusar.
+  if(!entrada && db && !window._fbOffline) {
+    try { await carregarEquipeDoFirebase(); } catch(e) {}
+    entrada = Object.entries(EQUIPE).find(([,u]) => u.email?.toLowerCase() === email);
+  }
   if(!entrada) {
     if(erro) { erro.style.display='block'; erro.style.color='#DC2626'; erro.style.background='#FEE2E2'; erro.textContent='E-mail não cadastrado na equipe.'; }
     return;
@@ -15198,6 +15204,10 @@ function gerarTicket() {
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
+  // Carregar a EQUIPE do Firebase JÁ no abrir da página, antes do login.
+  // Sem isso, num aparelho que nunca logou, a tela de login só conhece o admin
+  // e o e-mail de um membro recém-cadastrado não é encontrado.
+  try { if(db && !window._fbOffline) { carregarEquipeDoFirebase().catch(()=>{}); carregarFranqueadosDoFirebase().catch(()=>{}); } } catch(e) {}
   // Sincronizar com Firebase em tempo real
   db.ref('franqueados').on('value', snap => {
     const raw = snap.val();
