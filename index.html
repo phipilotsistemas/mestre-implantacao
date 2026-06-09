@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · motalk-clique-offline-v61','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · equipe-acesso-email-v63','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1339,17 +1339,24 @@ try {
   auth = firebase.auth();
   db   = firebase.database();
   window._fbOffline = false;
-
-  // App secundário isolado — usado APENAS para criar conta do franqueado
-  // sem derrubar a sessão do gestor logado no painel
-  const appSecundario = firebase.initializeApp(firebaseConfig, 'portal-criacao');
-  authSecundario = appSecundario.auth();
 } catch(e) {
   console.info('Firebase: modo offline (localStorage). Recursos em tempo real desativados.');
   window._fbOffline = true;
   auth = { signInWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), onAuthStateChanged: (cb) => cb(null) };
   authSecundario = { createUserWithEmailAndPassword: () => Promise.reject(new Error('Firebase indisponível')), signOut: () => {} };
   db   = { ref: () => ({ set: ()=>Promise.resolve(), on: ()=>{}, off: ()=>{}, once: ()=>Promise.resolve({val:()=>null}), push: ()=>Promise.resolve(), update: ()=>Promise.resolve() }) };
+}
+// App secundário isolado — usado APENAS para criar conta do franqueado sem
+// derrubar a sessão do gestor. Em bloco próprio: se falhar, NÃO afeta o banco principal.
+if(!window._fbOffline) {
+  try {
+    const jaExiste = firebase.apps && firebase.apps.find(a => a && a.name === 'portal-criacao');
+    const appSecundario = jaExiste || firebase.initializeApp(firebaseConfig, 'portal-criacao');
+    authSecundario = appSecundario.auth();
+  } catch(e) {
+    console.warn('App secundário indisponível (cadastro de franqueado pode falhar):', e.message);
+    authSecundario = { createUserWithEmailAndPassword: () => Promise.reject(new Error('App secundário indisponível')), signOut: () => {} };
+  }
 }
 // ── APPS SCRIPT URL ──
 var APPS_SCRIPT_URL = localStorage.getItem('mo_apps_script_url') || 'https://script.google.com/macros/s/AKfycbxXkAERCOWTTzyuttwqvdCPrJyf2WmztdGIDZUn3skMkwR9E3SIQbO1ktdAYKZqw7Ys/exec';
@@ -5072,7 +5079,9 @@ function renderChat() {
         <div class="chat-lista">
           <div class="chat-lista-head">Conversas</div>
           <div class="chat-lista-scroll">
-            ${dados.map(f=>{
+            ${dados.length === 0
+              ? `<div style="padding:24px 16px;text-align:center;color:var(--text-dim);font-size:12px">${window._fbOffline ? 'Sem conexão com o servidor. Recarregue a página para carregar os franqueados.' : 'Nenhum franqueado cadastrado ainda.'}</div>`
+              : dados.map(f=>{
               const canal  = `chat_impl_${f.id}`;
               const msgs   = chats[canal]||[];
               const ultima = msgs[msgs.length-1];
@@ -6731,8 +6740,8 @@ function salvarColaborador(id) {
   if(idx>=0) lista[idx] = novo;
   else lista.push(novo);
 
-  // Atualizar EQUIPE em memória
-  EQUIPE[token] = { nome, cargo, tipo:novo.tipo, cor:novo.cor };
+  // Atualizar EQUIPE em memória (com email, para o login por e-mail funcionar de imediato)
+  EQUIPE[token] = { nome, cargo, tipo:novo.tipo, cor:novo.cor, email };
 
   // Inicializar pastas do colaborador (localStorage)
   inicializarPastasColaborador(novo);
@@ -15102,9 +15111,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
       localStorage.setItem('mo_franqueados', JSON.stringify(dados));
       // Badge sempre atualizado quando dados chegam do Firebase
       atualizarBadges();
-      // Re-renderizar só se estiver na aba de franqueados
-      if(typeof _abaAtual !== 'undefined' && _abaAtual === 'franqueados') {
-        renderFranqueados();
+      // Re-renderizar conforme a aba ativa
+      if(typeof _abaAtual !== 'undefined') {
+        if(_abaAtual === 'franqueados') renderFranqueados();
+        // Se está no chat e a lista de conversas está vazia/desatualizada, reconstrói
+        else if(_abaAtual === 'chat' && document.querySelectorAll('.conv-item').length !== dados.length) renderChat();
       }
     }
   });
