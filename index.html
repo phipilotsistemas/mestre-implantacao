@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 74</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 75</div></div>
   </div>
 </div>
 
@@ -866,6 +866,10 @@ select.inp{cursor:pointer}
         <span>Em implantação</span>
         <span class="badge" id="badge-frq" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
+      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
+        <div class="dot"></div><span>Chamados</span>
+        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
+      </button>
 
       <!-- AGENDA -->
       <div class="sb-group" id="sb-group-agenda">AGENDA</div>
@@ -873,21 +877,6 @@ select.inp{cursor:pointer}
         <span>Agenda</span>
         <span class="badge" id="badge-agenda" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
-
-      <!-- SUPORTE -->
-      <div class="sb-group" id="sb-group-suporte">SUPORTE</div>
-      <button class="sb-item" id="sb-manual-btn" onclick="toggleSubmenuManual()" style="justify-content:space-between">
-        <div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span>Manual do sistema</span></div>
-        <span id="sb-manual-chevron" style="font-size:10px;color:var(--text-muted);transition:transform .2s">▶</span>
-      </button>
-      <div id="sb-manual-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border);margin-left:16px">
-        <button class="sb-item" onclick="ir('manual',this)" style="font-size:12px">
-          <div class="dot" style="width:6px;height:6px"></div><span>Documentação</span>
-        </button>
-        <button class="sb-item" onclick="ir('onboarding_ref',this)" style="font-size:12px">
-          <div class="dot" style="width:6px;height:6px"></div><span>Onboarding</span>
-        </button>
-      </div>
 
       <!-- GESTÃO INTERNA -->
       <div class="sb-group" id="sb-group-admin" style="display:none">GESTÃO INTERNA</div>
@@ -905,10 +894,21 @@ select.inp{cursor:pointer}
       <button class="sb-item" id="sb-relatorios" onclick="ir('relatorios',this)" style="display:none">
         <div class="dot"></div><span>Relatórios</span>
       </button>
-      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
-        <div class="dot"></div><span>Chamados</span>
-        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
+
+      <!-- SUPORTE (último) -->
+      <div class="sb-group" id="sb-group-suporte">SUPORTE</div>
+      <button class="sb-item" id="sb-manual-btn" onclick="toggleSubmenuManual()" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span>Manual do sistema</span></div>
+        <span id="sb-manual-chevron" style="font-size:10px;color:var(--text-muted);transition:transform .2s">▶</span>
       </button>
+      <div id="sb-manual-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border);margin-left:16px">
+        <button class="sb-item" onclick="ir('manual',this)" style="font-size:12px">
+          <div class="dot" style="width:6px;height:6px"></div><span>Documentação</span>
+        </button>
+        <button class="sb-item" onclick="ir('onboarding_ref',this)" style="font-size:12px">
+          <div class="dot" style="width:6px;height:6px"></div><span>Onboarding</span>
+        </button>
+      </div>
     </div>
     <div class="sb-foot">
       <b>PhiPilot Sistemas</b><br>Todos os direitos reservados
@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · chamados-por-etapa-v74','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · menu-chamados-franqueados-v75','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
