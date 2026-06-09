@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 84</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 85</div></div>
   </div>
 </div>
 
@@ -1628,9 +1628,15 @@ async function logarFirebase() {
 
     // Autenticado com sucesso no Firebase
     const uid = cred.user?.uid || token;
-    // Verificar se a senha é provisória (definida pelo administrador) → trocar agora
+    // Verificar se a senha é provisória (definida pelo administrador) → trocar agora.
+    // O administrador principal NUNCA passa por troca de senha provisória.
     let provisoria = false;
     try { const s = await db.ref('equipe_meta/' + token + '/senhaProvisoria').once('value'); provisoria = s.val() === true; } catch(e) {}
+    if(token === 'ADM-PHILLIPE') {
+      // Limpar qualquer flag perdida que tenha sido marcada por engano para o admin
+      try { db.ref('equipe_meta/ADM-PHILLIPE/senhaProvisoria').set(false); } catch(e) {}
+      provisoria = false;
+    }
     if(provisoria) { abrirTrocaSenhaGestor(token, membro, uid); return; }
 
     _loginEmAndamento = false;
@@ -6744,6 +6750,19 @@ function salvarColaborador(id) {
   if(!nome)  { toast('Nome é obrigatório.','rd'); return; }
   if(!cargo) { toast('Cargo é obrigatório.','rd'); return; }
   if(!token) { toast('Token de acesso é obrigatório.','rd'); return; }
+
+  // Cada colaborador precisa de um e-mail ÚNICO (é a chave de login).
+  // Bloquear reuso do e-mail do administrador ou de outro colaborador,
+  // pois isso quebra o login e confunde a troca de senha provisória.
+  if(email) {
+    const emailLower = email.toLowerCase();
+    const usadoLista = getEquipe().some(c => c.id !== id && (c.email||'').toLowerCase() === emailLower);
+    const usadoConst = Object.entries(EQUIPE).some(([tk,u]) => tk !== token && (u.email||'').toLowerCase() === emailLower);
+    if(usadoLista || usadoConst) {
+      toast('Este e-mail já está em uso por outro acesso. Cada colaborador precisa de um e-mail único.','rd');
+      return;
+    }
+  }
 
   // Converter data DD/MM/AAAA para AAAA-MM-DD
   const toISO = d => { if(!d) return ''; const p=d.split('/'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:d; };
