@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · portal-botoes-v50','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · mural-eventos-v52','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1903,6 +1903,97 @@ function concluirTarefaMembro(tarefaId) {
   renderPainelOperacional();
 }
 
+// ── MURAL DE EVENTOS — atividades concluídas (hoje e ontem) ──
+function coletarEventosConcluidos() {
+  const dados = getDados();
+  // Tipos de evento que representam conclusão/marco
+  const tiposMarco = {
+    'etapa_concluida':       { rotulo:'Etapa concluída',        icone:'✅', cor:'#16A34A' },
+    'assinatura_gestora':    { rotulo:'Etapa validada e assinada', icone:'✍️', cor:'#16A34A' },
+    'concordancia_franqueado':{ rotulo:'Ciência do franqueado',  icone:'🤝', cor:'#2563EB' },
+    'tarefa_concluida':      { rotulo:'Tarefa concluída',        icone:'☑️', cor:'#0891B2' },
+    'tarefa_concluida_prazo':{ rotulo:'Tarefa concluída',        icone:'☑️', cor:'#0891B2' },
+    'ciencia_tarefa':        { rotulo:'Ciência em tarefa',       icone:'👁️', cor:'#7C3AED' },
+    'processo_iniciado':     { rotulo:'Processo iniciado',       icone:'🚀', cor:'#1F3864' },
+    'realizada':             { rotulo:'Reunião realizada',       icone:'📞', cor:'#D97706' },
+    'chamado_baixado_inatividade': { rotulo:'Chamado encerrado', icone:'🗄️', cor:'#92400E' },
+    'acesso_regenerado':     { rotulo:'Acesso regenerado',       icone:'🔑', cor:'#64748B' },
+  };
+
+  const hojeStr = hoje();
+  const ontem = new Date(); ontem.setDate(ontem.getDate()-1);
+  const ontemStr = ontem.toISOString().split('T')[0];
+
+  const eventos = { hoje:[], ontem:[] };
+
+  dados.forEach(f => {
+    for(let et=1; et<=ETAPAS.length; et++) {
+      const evs = getEventosEtapa(f.id, et);
+      evs.forEach(e => {
+        const marco = tiposMarco[e.tipo];
+        if(!marco) return;
+        // Data do evento (campo data = YYYY-MM-DD)
+        const dataEv = (e.data||'').split(' ')[0];
+        let bucket = null;
+        if(dataEv === hojeStr) bucket = 'hoje';
+        else if(dataEv === ontemStr) bucket = 'ontem';
+        if(!bucket) return;
+        const etObj = ETAPAS.find(x=>x.id===et);
+        eventos[bucket].push({
+          icone: marco.icone, cor: marco.cor, rotulo: marco.rotulo,
+          franqueado: f.nome, ticket: f.ticket,
+          etapa: et, etapaNome: etObj?etObj.nome:'',
+          hora: e.hora || '', autor: e.autor || '',
+          texto: e.texto || '',
+          ts: e.timestamp || 0,
+        });
+      });
+    }
+  });
+
+  // Ordenar por hora (mais recente primeiro)
+  eventos.hoje.sort((a,b)=>b.ts-a.ts);
+  eventos.ontem.sort((a,b)=>b.ts-a.ts);
+  return eventos;
+}
+
+function renderMuralEventos() {
+  const ev = coletarEventosConcluidos();
+  const card = (e) => `
+    <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${e.cor};border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px">${e.icone}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text)">${e.rotulo}${e.etapa?` · Etapa ${e.etapa}`:''}</div>
+          <div style="font-size:11px;color:var(--text-dim)">${e.franqueado.split(' ').slice(0,2).join(' ')} · ${e.ticket}</div>
+        </div>
+        ${e.hora?`<span style="font-size:10px;color:var(--text-muted);flex-shrink:0">${e.hora}</span>`:''}
+      </div>
+    </div>`;
+
+  const coluna = (titulo, lista, vazioMsg) => `
+    <div style="flex:1;min-width:260px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:800;color:var(--text)">${titulo}</div>
+        <span class="badge" style="background:${lista.length?'var(--primary)':'var(--border)'};color:${lista.length?'#fff':'var(--text-dim)'}">${lista.length}</span>
+      </div>
+      ${lista.length ? lista.map(card).join('') : `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:11px;font-style:italic;background:var(--bg-alt);border-radius:8px">${vazioMsg}</div>`}
+    </div>`;
+
+  return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="font-size:18px">📋</span>
+        <div style="font-size:15px;font-weight:800">Mural de eventos</div>
+        <span style="font-size:11px;color:var(--text-dim)">atividades concluídas</span>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${coluna('Hoje', ev.hoje, 'Nenhuma atividade concluída hoje ainda.')}
+        ${coluna('Ontem', ev.ontem, 'Nenhuma atividade concluída ontem.')}
+      </div>
+    </div>`;
+}
+
 function renderDashboard() {
   // Membro operacional vê o painel focado de atividades dele
   if(PERM && PERM.operacional) { renderPainelOperacional(); return; }
@@ -2031,6 +2122,7 @@ function renderDashboard() {
         <div style="font-size:11px;color:${s.cor};margin-top:2px;font-weight:600">${s.label}</div>
       </div>`).join('')}
     </div>
+    ${renderMuralEventos()}
     ${precisamAgora.length>0?`
     <div style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#DC2626;margin-bottom:10px">
