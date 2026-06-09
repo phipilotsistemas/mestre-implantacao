@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · equipe-acesso-email-v63','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · token-auto-visivel-v64','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -6360,7 +6360,7 @@ function renderEquipe() {
                 <div style="display:flex;align-items:center;gap:8px">
                   ${renderAvatar(col, 32, true)}
                   <div>
-                    <div class="frq-nome">${col.nome}</div>
+                    <div class="frq-nome"><span style="display:inline-block;font-family:monospace;font-size:10px;font-weight:700;background:${col.cor||'#64748B'};color:#fff;padding:1px 6px;border-radius:5px;margin-right:6px;letter-spacing:.5px;vertical-align:middle">${col.token||'—'}</span>${col.nome}</div>
                     <div style="font-size:11px;color:var(--text-dim)">${col.email||'—'}</div>
                   </div>
                 </div>
@@ -6388,6 +6388,24 @@ function renderEquipe() {
    FICHA COMPLETA DO COLABORADOR
    Modal com abas: Pessoal · Contrato · Banco · Emergência
 ══════════════════════════════════════════════════ */
+/* Prefixo do token por tipo de acesso */
+const TOKEN_PREFIXOS = {
+  gestor:'GES', estagiario:'EST', auxiliar:'AUX',
+  projeto:'PRJ', compras:'CMP', treinamento:'TRN',
+  marketing:'MKT', consultor:'CON', financeiro:'FIN',
+};
+/* Gera o próximo token único para o tipo (ex.: GES-001, GES-002...) */
+function gerarTokenColaborador(tipo) {
+  const pref = TOKEN_PREFIXOS[tipo] || 'COL';
+  const lista = getEquipe();
+  let max = 0;
+  lista.forEach(c => {
+    const m = (c.token||'').match(new RegExp('^' + pref + '-(\\d+)$'));
+    if(m) { const n = parseInt(m[1],10); if(n > max) max = n; }
+  });
+  return pref + '-' + String(max + 1).padStart(3,'0');
+}
+
 function abrirFichaColaborador(id) {
   const isNovo = !id;
   const col = id ? (getColaborador(id)||{}) : {
@@ -6493,7 +6511,7 @@ function abrirFichaColaborador(id) {
           </select>
         </div>
         <div class="field"><label>Tipo de acesso</label>
-          <select class="inp" id="fc-tipo">
+          <select class="inp" id="fc-tipo" onchange="var t=document.getElementById('fc-token'); if(t&&t.dataset.novo==='1') t.value=gerarTokenColaborador(this.value);">
             <optgroup label="Acesso administrativo">
               <option value="gestor"${col.tipo==='gestor'?' selected':''}>Gestor — acesso total</option>
               <option value="estagiario"${col.tipo==='estagiario'?' selected':''}>Estagiário — só visualiza</option>
@@ -6548,7 +6566,8 @@ function abrirFichaColaborador(id) {
         <div class="field"><label>Salário / Honorário</label>
           <input class="inp" id="fc-salario" data-mask="money" value="${col.salario||''}" placeholder="R$ 0,00"></div>
         <div class="field"><label>Token de acesso</label>
-          <input class="inp" id="fc-token" value="${col.token||''}" placeholder="Ex: GES-001" style="font-family:monospace" ${!isNovo?'readonly style="background:#F5F5F5;font-family:monospace"':''}></div>
+          <input class="inp" id="fc-token" data-novo="${isNovo?'1':'0'}" value="${isNovo ? gerarTokenColaborador(col.tipo) : (col.token||'')}" readonly style="background:#F5F5F5;font-family:monospace;color:var(--text-dim);letter-spacing:.5px">
+          <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">${isNovo ? 'Gerado automaticamente conforme o tipo de acesso.' : 'Identificador fixo do colaborador (não editável).'}</div></div>
         <div class="field"><label>Status</label>
           <select class="inp" id="fc-status">
             ${[['ativo','Ativo'],['ferias','Férias'],['atestado','Atestado médico'],['licenca','Licença'],['afastado','Afastamento INSS'],['licenca_maternidade','Licença maternidade'],['licenca_paternidade','Licença paternidade'],['suspensao','Suspensão disciplinar'],['desligado','Desligado']].map(([v,l])=>
