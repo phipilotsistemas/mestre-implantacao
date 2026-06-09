@@ -1090,6 +1090,7 @@ body { overflow-x:hidden }
 
     <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-muted)">
       Desenvolvido por <span style="font-weight:700;color:var(--primary)">PhiPilot Sistemas</span>
+      <div style="margin-top:3px;font-size:9px;opacity:.7">versão 60</div>
     </div>
   </div>
 </div>
@@ -1187,10 +1188,30 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.database();
 
-// PWA: registrar service worker para o portal ser instalável como app
+// PWA: registrar service worker + auto-atualização
 if ('serviceWorker' in navigator) {
+  let _recarregouSW = false;
+  // Quando o novo service worker assume, recarrega uma vez para aplicar a versão nova
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(_recarregouSW) return;
+    _recarregouSW = true;
+    location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW:', e.message));
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // Procurar atualização sempre que o app abre
+      reg.update();
+      reg.addEventListener('updatefound', () => {
+        const novo = reg.installing;
+        if(!novo) return;
+        novo.addEventListener('statechange', () => {
+          // Nova versão instalada e já existe um SW controlando: ativa e recarrega
+          if(novo.state === 'installed' && navigator.serviceWorker.controller) {
+            novo.postMessage('ATIVAR_AGORA');
+          }
+        });
+      });
+    }).catch(e => console.warn('SW:', e.message));
   });
 }
 
