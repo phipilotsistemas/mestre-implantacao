@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 85</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 86</div></div>
   </div>
 </div>
 
@@ -8626,16 +8626,10 @@ function seedProcessoFernando() {
   localStorage.setItem('mo_prazo_frq_1_et11', '2025-12-15');
 }
 
-// Executar seed do Fernando
-(function(){ try { seedProcessoFernando(); } catch(e){ console.warn('seed Fernando:', e); } })();
-
-// Executar seed se MO-001 ainda estiver na etapa 1
-(function() {
-  try {
-    // Sempre rodar o seed para garantir os eventos de assinatura
-    seedDemoMO001();
-  } catch(e) {}
-})();
+// SEEDS DE DEMONSTRAÇÃO DESATIVADOS — rodavam em toda carga e apagavam
+// mo_franqueados e mo_equipe_rh (a equipe real), reinjetando o franqueado
+// fictício "Fernando Dias Caldas". O sistema inicia vazio.
+// (Funções seedProcessoFernando/seedDemoMO001 seguem definidas, mas não são chamadas.)
 
 /* ── FIM DO SEED ── */
 
@@ -10881,7 +10875,7 @@ function seedCandidatosDemo() {
 }
 
 // Executar seed de candidatos
-seedCandidatosDemo();
+// seedCandidatosDemo() DESATIVADO — recriava candidatos fictícios a cada carga.
 
 
 
@@ -12253,7 +12247,7 @@ function seedAgendaDemo() {
   ];
   salvarEventosAgenda(demo);
 }
-seedAgendaDemo();
+// seedAgendaDemo() DESATIVADO — recriava reuniões/eventos fictícios a cada carga.
 verificarLembretesAgenda();
 
 
@@ -13713,7 +13707,7 @@ function seedPrazosDemo() {
   ];
   salvarTarefas(tarefas);
 }
-seedPrazosDemo();
+// seedPrazosDemo() DESATIVADO — recriava prazos/tarefas fictícios a cada carga.
 
 
 let _diaHoverTimer = null;
@@ -14468,7 +14462,7 @@ function seedChatDemo() {
   ];
   salvarChatMsgs(demo);
 }
-seedChatDemo();
+// seedChatDemo() DESATIVADO — recriava mensagens de chat fictícias a cada carga.
 
 
 
@@ -14837,7 +14831,7 @@ function seedMOTalkDemo() {
   ];
   salvarMOTalkMsgs('geral', msgs);
 }
-seedMOTalkDemo();
+// seedMOTalkDemo() DESATIVADO — recriava mensagens do MO Talk fictícias a cada carga.
 
 // Compatibilidade com funções antigas do chat simples
 function getChatMsgs() { return getMOTalkMsgs('geral'); }
@@ -15224,17 +15218,9 @@ window.addEventListener('DOMContentLoaded', ()=>{
     }
   });
   setTimeout(atualizarBadgeAlertas, 500);
-  // Verificar versão dos dados — limpar se for versão antiga (sem campos novos)
-  try {
-    const equipe = JSON.parse(localStorage.getItem('mo_equipe_rh')||'null');
-    if(equipe && equipe.length > 0) {
-      const temCamposNovos = equipe[0].cpf && equipe[0].horario && equipe[0].endereco;
-      if(!temCamposNovos) {
-        localStorage.removeItem('mo_equipe_rh');
-        console.log('Dados da equipe resetados — versão desatualizada');
-      }
-    }
-  } catch(e) {}
+  // NOTA: aqui havia uma "verificação de versão" que apagava TODA a equipe
+  // (mo_equipe_rh) quando o primeiro membro não tinha cpf/horario/endereco.
+  // Isso destruía a equipe real. Removido — a interface lida com campos ausentes.
 
 
   iniciarLogin();
@@ -15245,6 +15231,30 @@ window.addEventListener('DOMContentLoaded', ()=>{
 /* Verificar fechamento mensal a cada hora */
 setInterval(verificarFechamentoMensal, 3600000);
 verificarFechamentoMensal();
+
+/* Limpeza de dados de demonstração — remove resíduos dos antigos seeds (local + Firebase).
+   Só remove ids fixos de demonstração; dados reais usam ids por timestamp. */
+function limparDadosDemo() {
+  const DEMO = {
+    agenda:     ['ev_d1','ev_d2','ev_d3','ev_d4','ev_d5'],
+    prazos:     ['pz_d1','pz_d2','pz_d3'],
+    tarefas:    ['tar_d1','tar_d2'],
+    candidatos: ['cand_1','cand_2','cand_3'],
+    motalk:     ['cm1','cm2','cm3','mo1','mo2','mo3','mo4'],
+  };
+  try {
+    if(typeof getEventosAgenda==='function'){ const a=getEventosAgenda(); if(a.some(e=>DEMO.agenda.includes(e.id))) salvarEventosAgenda(a.filter(e=>!DEMO.agenda.includes(e.id))); }
+    if(typeof getPrazos==='function'){ const p=getPrazos(); if(p.some(x=>DEMO.prazos.includes(x.id))) salvarPrazos(p.filter(x=>!DEMO.prazos.includes(x.id))); }
+    if(typeof getTarefas==='function'){ const t=getTarefas(); if(t.some(x=>DEMO.tarefas.includes(x.id))) salvarTarefas(t.filter(x=>!DEMO.tarefas.includes(x.id))); }
+    if(typeof getCandidatos==='function'){ const c=getCandidatos(); if(Array.isArray(c)&&c.some(x=>DEMO.candidatos.includes(x.id))) salvarCandidatos(c.filter(x=>!DEMO.candidatos.includes(x.id))); }
+    if(typeof getMOTalkMsgs==='function'){ const m=getMOTalkMsgs('geral'); if(Array.isArray(m)&&m.some(x=>DEMO.motalk.includes(x.id))){ salvarMOTalkMsgs('geral', m.filter(x=>!DEMO.motalk.includes(x.id))); if(db){ DEMO.motalk.forEach(id=>{ try{ db.ref('motalk/geral/'+id).remove(); }catch(e){} }); } } }
+  } catch(e) { console.warn('limparDadosDemo:', e.message); }
+}
+(function(){
+  try { limparDadosDemo(); } catch(e) {}
+  setTimeout(function(){ try { limparDadosDemo(); } catch(e) {} }, 2500);
+  setTimeout(function(){ try { limparDadosDemo(); } catch(e) {} }, 5000);
+})();
 </script>
 
 
