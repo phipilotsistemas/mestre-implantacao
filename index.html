@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 73</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 74</div></div>
   </div>
 </div>
 
@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · sync-firebase-colecoes-v73','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · chamados-por-etapa-v74','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -8970,7 +8970,7 @@ async function gerarDossieEsteira(fid) {
   // ── Métricas globais ──
   const concluidas        = relEtapas.filter(r=>r.concluida);
   const totalDias         = f.diasTotais || 0;
-  const totalMensagens    = relEtapas.reduce((s,r)=>s+r.subchat.length,0);
+  const totalMensagens    = relEtapas.reduce((s,r)=>s+r.subchat.length,0) + (_dossieChamados||[]).length;
   const totalDocs         = relEtapas.reduce((s,r)=>s+r.docs.length,0);
   const totalRejeitados   = relEtapas.reduce((s,r)=>s+r.docsRejeitados.length,0);
   const totalEventos      = relEtapas.reduce((s,r)=>s+r.eventos.length,0);
@@ -9068,6 +9068,39 @@ async function gerarDossieEsteira(fid) {
     .rod-txt{font-size:7pt;color:#777;text-align:right;line-height:1.4;font-family:Arial,sans-serif}
     @media print{body{padding:12mm 14mm 24mm 14mm}.rod{position:fixed}@page{size:A4;margin:0}button{display:none}}
   `;
+
+  // ── Chamados de suporte agrupados por etapa (cada um sabe sua etapaAberta) ──
+  const escapeHtml = (t) => String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const chamadosPorEtapa = {};
+  (_dossieChamados||[]).forEach(c => {
+    const e = c.etapaAberta || 0;
+    (chamadosPorEtapa[e] = chamadosPorEtapa[e] || []).push(c);
+  });
+  function chamadosDaEtapaHTML(etId) {
+    const lista = chamadosPorEtapa[etId] || [];
+    if(!lista.length) return '';
+    return lista.map(c => {
+      const statusTxt = c.status==='concluido'?'Resolvido':c.status==='em_andamento'?'Em andamento':c.status==='cancelado'?'Cancelado':'Aberto';
+      const respostas = [];
+      if(c.respostaGestor) respostas.push({ quem:'gestora', autor:c.gestorNome||'Equipe de implantação', data:c.dataResposta||'', texto:c.respostaGestor });
+      if(c.retornoFranqueado) respostas.push({ quem:'franqueado', autor:c.franqueado||f.nome||'Franqueado', data:c.dataRetorno||'', texto:c.retornoFranqueado });
+      (c.historico||[]).forEach(h => {
+        if(h.respostaGestor) respostas.push({ quem:'gestora', autor:h.gestorNome||'Equipe de implantação', data:h.dataResposta||'', texto:h.respostaGestor });
+        if(h.retornoFranqueado) respostas.push({ quem:'franqueado', autor:c.franqueado||f.nome||'Franqueado', data:h.dataRetorno||'', texto:h.retornoFranqueado });
+      });
+      const respHTML = respostas.map(r => `<div class="chat-msg ${r.quem}">
+          <div class="chat-meta">${escapeHtml(r.autor)} · ${escapeHtml(r.data)}</div>
+          <div class="chat-txt">${escapeHtml(r.texto)}</div>
+        </div>`).join('');
+      return `<div style="border:1px solid #E5E7EB;border-radius:6px;padding:9px 11px;margin-bottom:8px;break-inside:avoid">
+        <div style="font-size:9pt;font-weight:bold">🛟 Chamado de suporte — ${escapeHtml(c.titulo||c.categoria||'Atendimento')}
+          <span style="font-size:8pt;font-weight:normal;color:#666"> · ${statusTxt} · aberto em ${escapeHtml(c.dataAbertura||'')} ${escapeHtml(c.horaAbertura||'')}</span></div>
+        <div class="chat-msg franqueado"><div class="chat-meta">${escapeHtml(c.franqueado||f.nome||'Franqueado')} · ${escapeHtml(c.dataAbertura||'')}</div>
+          <div class="chat-txt">${escapeHtml(c.descricao||'')}</div></div>
+        ${respHTML}
+      </div>`;
+    }).join('');
+  }
 
   // ── MONTAR HTML ──
   const etapasHTML = relEtapas.map(r => {
@@ -9177,11 +9210,18 @@ async function gerarDossieEsteira(fid) {
       </div>
 
       <!-- COMUNICAÇÃO -->
-      ${subchat.length||!concluida?`
+      ${(() => {
+        const chamadosHTML = chamadosDaEtapaHTML(et.id);
+        const qtdChamados = (chamadosPorEtapa[et.id] || []).length;
+        const totalComun = subchat.length + qtdChamados;
+        if(!totalComun && concluida) return '';
+        return `
       <div class="sec">
-        <div class="sec-tit">💬 Comunicação registrada (${subchat.length} mensagem${subchat.length!==1?'s':''})</div>
-        ${subchatHTML}
-      </div>`:'' }
+        <div class="sec-tit">💬 Comunicação registrada (${totalComun} registro${totalComun!==1?'s':''}${qtdChamados?` · ${qtdChamados} de suporte`:''})</div>
+        ${chamadosHTML}
+        ${subchat.length ? subchatHTML : (chamadosHTML ? '' : '<div style="font-size:9pt;color:#999;font-style:italic">Nenhuma mensagem registrada.</div>')}
+      </div>`;
+      })()}
 
       <!-- DOCUMENTOS -->
       <div class="sec">
@@ -9220,57 +9260,6 @@ async function gerarDossieEsteira(fid) {
     </div>`;
   }).join('');
 
-  // ── COMUNICAÇÃO PRINCIPAL E ATENDIMENTOS DE SUPORTE (do Firebase) ──
-  const escapeHtml = (t) => String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtTs = (ts) => { if(!ts) return ''; try { const d = new Date(ts); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
-
-  const chatHTML = (_dossieChat && _dossieChat.length)
-    ? _dossieChat.map(m => {
-        const daGestora = !m.deFranqueado;
-        const autor = m.autorNome || (daGestora ? 'Equipe de implantação' : (f.nome||'Franqueado'));
-        return `<div class="chat-msg ${daGestora?'gestora':'franqueado'}">
-          <div class="chat-meta">${escapeHtml(autor)} · ${fmtTs(m.ts||m.timestamp)}</div>
-          <div class="chat-txt">${escapeHtml(m.texto||m.msg||'')}</div>
-        </div>`;
-      }).join('')
-    : '<div style="font-size:9pt;color:#999;font-style:italic">Nenhuma mensagem trocada no canal de comunicação.</div>';
-
-  const suporteHTML = (_dossieChamados && _dossieChamados.length)
-    ? _dossieChamados.map(c => {
-        const statusTxt = c.status==='concluido'?'Concluído':c.status==='em_andamento'?'Em andamento':'Aberto';
-        const hist = (c.historico && c.historico.length)
-          ? c.historico.map(h => `<div class="chat-msg ${h.respostaGestor||h.gestorNome?'gestora':'franqueado'}">
-              <div class="chat-meta">${escapeHtml(h.gestorNome||c.nome||f.nome||'')} · ${escapeHtml(h.dataResposta||h.data||'')}</div>
-              <div class="chat-txt">${escapeHtml(h.respostaGestor||h.texto||h.mensagem||'')}</div>
-            </div>`).join('')
-          : '';
-        return `<div style="border:1px solid #E5E7EB;border-radius:6px;padding:10px 12px;margin-bottom:8px;break-inside:avoid">
-          <div style="font-size:9.5pt;font-weight:bold">${escapeHtml(c.titulo||c.assunto||'Chamado')}
-            <span style="font-size:8pt;font-weight:normal;color:#666"> · ${statusTxt} · ${escapeHtml(c.dataAbertura||c.data||'')}</span></div>
-          <div class="chat-txt" style="margin:4px 0 6px">${escapeHtml(c.descricao||c.mensagem||'')}</div>
-          ${c.respostaGestor?`<div class="chat-msg gestora"><div class="chat-meta">${escapeHtml(c.gestorNome||'Equipe')} · ${escapeHtml(c.dataResposta||'')}</div><div class="chat-txt">${escapeHtml(c.respostaGestor)}</div></div>`:''}
-          ${hist}
-        </div>`;
-      }).join('')
-    : '<div style="font-size:9pt;color:#999;font-style:italic">Nenhum atendimento de suporte registrado.</div>';
-
-  const comunicacaoSuporteHTML = `
-  <div class="etapa-bloco" style="break-inside:avoid">
-    <div class="etapa-cab">
-      <div class="etapa-badge num-c">💬</div>
-      <div class="etapa-nome">Comunicação com o Franqueado</div>
-      <div class="etapa-status">${(_dossieChat||[]).length} mensagens</div>
-    </div>
-    <div class="sec">${chatHTML}</div>
-  </div>
-  <div class="etapa-bloco" style="break-inside:avoid">
-    <div class="etapa-cab">
-      <div class="etapa-badge num-c">🛟</div>
-      <div class="etapa-nome">Atendimentos de Suporte</div>
-      <div class="etapa-status">${(_dossieChamados||[]).length} chamado(s)</div>
-    </div>
-    <div class="sec">${suporteHTML}</div>
-  </div>`;
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><style>${css}</style></head><body>
 
@@ -9430,8 +9419,6 @@ async function gerarDossieEsteira(fid) {
         <span style="font-size:8.5pt">Este documento registra todos os eventos, comunicações e assinaturas digitais do processo de implantação. Cada hash é único e imutável. Geolocalização registrada no momento de cada assinatura.</span></div>
     </div>
   </div>
-
-  ${comunicacaoSuporteHTML}
 
   <!-- RODAPÉ FIXO -->
   <div class="rod">
