@@ -820,7 +820,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 79</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 80</div></div>
   </div>
 </div>
 
@@ -967,7 +967,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · cobranca-chamado-responsavel-v79','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · minhas-tarefas-sync-atribuicoes-v80','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -6407,6 +6407,62 @@ function dispararTarefasEtapa(fid, etapaId) {
     });
   });
   salvarTarefas(lista);
+}
+
+// Sincroniza a lista de tarefas (mo_tarefas) com as atribuições atuais das etapas,
+// para TODOS os processos iniciados. Garante que cada membro veja em "Minhas tarefas"
+// toda tarefa que lhe foi atribuída, com a data do prazo da etapa, mesmo que a
+// atribuição tenha sido feita depois do início da etapa.
+function sincronizarTarefasComAtribuicoes() {
+  const dados = getDados();
+  const lista = getTarefas();
+  let mudou = false;
+  dados.forEach(f => {
+    if(!f.processoIniciado) return;
+    const atual = f.etapaAtual || 0;
+    ETAPAS.forEach(et => {
+      if(et.id > atual) return; // só etapas já iniciadas
+      const eq = getEquipeEtapa(f.id, et.id);
+      const tokens = new Set([...(eq.membros||[]), ...Object.values(eq.itens||{}).flat()]);
+      if(!tokens.size) return;
+      let prazo = '';
+      try { prazo = StorageAdapter.lerPrazo(f.id, et.id) || StorageAdapter.lerPrazoFranqueado(f.id, et.id) || ''; } catch(e) {}
+      tokens.forEach(tk => {
+        const membro = EQUIPE[tk] || membrosDelegaveis().find(m=>m.token===tk);
+        if(!membro) return;
+        const itensDoMembro = Object.entries(eq.itens||{})
+          .filter(([item,arr]) => (arr||[]).includes(tk))
+          .map(([item]) => item);
+        const escopo = itensDoMembro.length ? itensDoMembro.join('; ') : ('Etapa '+et.id+' — '+et.nome);
+        let tar = lista.find(t => t.fid===f.id && t.etapaId===et.id && t.responsavelToken===tk);
+        if(!tar) {
+          lista.push({
+            id:               'tar_'+Date.now()+'_'+tk+'_'+f.id+'_'+et.id,
+            titulo:           'Etapa '+et.id+' ('+et.nome+') — '+f.nome,
+            escopo,
+            fid:              f.id,
+            etapaId:          et.id,
+            responsavelToken: tk,
+            responsavelNome:  membro.nome,
+            dataVenc:         prazo,
+            desc:             'Você foi designado para a Etapa '+et.id+' ('+et.nome+') do franqueado '+f.nome+' ('+f.ticket+'). Escopo: '+escopo+'.',
+            status:           'pendente',
+            ciencia:          false,
+            criadoEm:         hoje(),
+            criadoTs:         Date.now(),
+            criadoPor:        'Sistema',
+            origem:           'sync_atribuicao',
+          });
+          mudou = true;
+        } else {
+          // Manter data e escopo alinhados ao prazo/atribuição atual
+          if(prazo && tar.dataVenc !== prazo) { tar.dataVenc = prazo; mudou = true; }
+          if(tar.escopo !== escopo) { tar.escopo = escopo; mudou = true; }
+        }
+      });
+    });
+  });
+  if(mudou) salvarTarefas(lista);
 }
 
 function getEquipe() {
@@ -13274,6 +13330,7 @@ function tarefaEtapa(t) {
 function renderSubTarefas() {
   const el = $('sub-tarefas');
   if(!el) return;
+  try { sincronizarTarefasComAtribuicoes(); } catch(e) { console.warn('sincronizarTarefas:', e.message); }
   const token    = SESSAO?.token || '';
   const todas    = getTarefas().filter(t=>t.responsavelToken===token);
 
