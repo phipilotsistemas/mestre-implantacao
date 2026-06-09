@@ -39,9 +39,7 @@ html,body{height:100%;-webkit-font-smoothing:antialiased;font-family:'DM Sans',s
   /* Superfícies */
   --surface:#FFFFFF;
   --surface-raised:#FFFFFF;
-  --card:#FFFFFF;
   --bg:#F0F4FB;
-  --bg-alt:#F0F4FB;
   --bg-mid:#E8EEF8;
 
   /* Bordas */
@@ -820,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 83</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 84</div></div>
   </div>
 </div>
 
@@ -868,10 +866,6 @@ select.inp{cursor:pointer}
         <span>Em implantação</span>
         <span class="badge" id="badge-frq" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
-      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
-        <div class="dot"></div><span>Chamados</span>
-        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
-      </button>
 
       <!-- AGENDA -->
       <div class="sb-group" id="sb-group-agenda">AGENDA</div>
@@ -879,6 +873,21 @@ select.inp{cursor:pointer}
         <span>Agenda</span>
         <span class="badge" id="badge-agenda" style="background:var(--accent);color:var(--primary-dark)">0</span>
       </button>
+
+      <!-- SUPORTE -->
+      <div class="sb-group" id="sb-group-suporte">SUPORTE</div>
+      <button class="sb-item" id="sb-manual-btn" onclick="toggleSubmenuManual()" style="justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span>Manual do sistema</span></div>
+        <span id="sb-manual-chevron" style="font-size:10px;color:var(--text-muted);transition:transform .2s">▶</span>
+      </button>
+      <div id="sb-manual-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border);margin-left:16px">
+        <button class="sb-item" onclick="ir('manual',this)" style="font-size:12px">
+          <div class="dot" style="width:6px;height:6px"></div><span>Documentação</span>
+        </button>
+        <button class="sb-item" onclick="ir('onboarding_ref',this)" style="font-size:12px">
+          <div class="dot" style="width:6px;height:6px"></div><span>Onboarding</span>
+        </button>
+      </div>
 
       <!-- GESTÃO INTERNA -->
       <div class="sb-group" id="sb-group-admin" style="display:none">GESTÃO INTERNA</div>
@@ -896,21 +905,10 @@ select.inp{cursor:pointer}
       <button class="sb-item" id="sb-relatorios" onclick="ir('relatorios',this)" style="display:none">
         <div class="dot"></div><span>Relatórios</span>
       </button>
-
-      <!-- SUPORTE (último) -->
-      <div class="sb-group" id="sb-group-suporte">SUPORTE</div>
-      <button class="sb-item" id="sb-manual-btn" onclick="toggleSubmenuManual()" style="justify-content:space-between">
-        <div style="display:flex;align-items:center;gap:8px"><div class="dot"></div><span>Manual do sistema</span></div>
-        <span id="sb-manual-chevron" style="font-size:10px;color:var(--text-muted);transition:transform .2s">▶</span>
+      <button class="sb-item" id="nav-chamados-btn" onclick="ir('suporte',this)">
+        <div class="dot"></div><span>Chamados</span>
+        <span id="badge-chamados-nav" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:auto">0</span>
       </button>
-      <div id="sb-manual-sub" style="display:none;padding-left:20px;border-left:2px solid var(--border);margin-left:16px">
-        <button class="sb-item" onclick="ir('manual',this)" style="font-size:12px">
-          <div class="dot" style="width:6px;height:6px"></div><span>Documentação</span>
-        </button>
-        <button class="sb-item" onclick="ir('onboarding_ref',this)" style="font-size:12px">
-          <div class="dot" style="width:6px;height:6px"></div><span>Onboarding</span>
-        </button>
-      </div>
     </div>
     <div class="sb-foot">
       <b>PhiPilot Sistemas</b><br>Todos os direitos reservados
@@ -967,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · limpeza-dados-demo-firebase-v83','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · menu-suporte-ultimo-v69','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1333,6 +1331,7 @@ const firebaseConfig = {
   appId: "1:75920848277:web:ccd5d229fdc9bd8a7d329c"
 };
 let auth, db, authSecundario;
+let _loginEmAndamento = false; // evita que onAuthStateChanged pule a troca de senha provisória
 try {
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
@@ -1464,26 +1463,15 @@ async function assinarDigital(caminho, textoDeclaracao) {
 
 function gravarHistoricoFuncional(registro) {
   const token = (typeof SESSAO !== 'undefined' && SESSAO?.token) ? SESSAO.token : (registro?.uid || 'geral');
-  gravarHistoricoFuncionalDe(token, registro);
-}
-
-// Grava no histórico funcional de um membro específico (não o logado)
-function gravarHistoricoFuncionalDe(token, registro) {
-  if(!token) return;
   const mesAno = hoje().slice(0,7).replace('-','_');
   const chave = `hf_${token}_${mesAno}`;
   try {
     const atual = JSON.parse(localStorage.getItem(chave)||'[]');
     atual.push({ ...registro, timestamp: Date.now() });
     localStorage.setItem(chave, JSON.stringify(atual));
+    // Espelhar no Firebase para o relatório consolidar entre dispositivos
     try { db.ref('historico_funcional/'+token+'/'+mesAno).set(atual).catch(()=>{}); } catch(e) {}
   } catch(e) {}
-}
-
-// Horas decorridas desde um timestamp (ms)
-function horasDesde(ts) {
-  if(!ts) return 0;
-  return Math.floor((Date.now() - ts) / 3600000);
 }
 
 /* Renderiza box de assinatura com scroll obrigatório */
@@ -1554,6 +1542,9 @@ function iniciarLogin() {
   $('tela-login').style.display = 'flex';
   $('app').style.display = 'none';
   auth.onAuthStateChanged(user => {
+    // Durante um login ativo, o logarFirebase controla o fluxo (inclui a troca
+    // de senha provisória). O listener não deve logar direto e pular essa etapa.
+    if(_loginEmAndamento) return;
     if(user) {
       // Usuário ainda autenticado — restaurar sessão
       const email = user.email?.toLowerCase();
@@ -1614,21 +1605,23 @@ async function logarFirebase() {
 
   if(erro) erro.style.display='none';
 
+  _loginEmAndamento = true;
   try {
     let cred;
     try {
       cred = await auth.signInWithEmailAndPassword(email, senha);
     } catch(e1) {
-      if(provedorDesligado(e1)) { loginLocal(); return; }
+      if(provedorDesligado(e1)) { loginLocal(); _loginEmAndamento = false; return; }
       // Senha curta nunca cria conta
-      if(senha.length < 6) { mostrarErro('Senha incorreta.'); return; }
+      if(senha.length < 6) { mostrarErro('Senha incorreta.'); _loginEmAndamento = false; return; }
       // Pode ser primeiro acesso (conta ainda não existe) — tentar criar
       try {
         cred = await auth.createUserWithEmailAndPassword(email, senha);
       } catch(e2) {
-        if(e2.code==='auth/email-already-in-use') { mostrarErro('Senha incorreta.'); return; }
-        if(provedorDesligado(e2)) { loginLocal(); return; }
+        if(e2.code==='auth/email-already-in-use') { mostrarErro('Senha incorreta.'); _loginEmAndamento = false; return; }
+        if(provedorDesligado(e2)) { loginLocal(); _loginEmAndamento = false; return; }
         mostrarErro('Não foi possível entrar. Verifique a senha e tente novamente.');
+        _loginEmAndamento = false;
         return;
       }
     }
@@ -1640,8 +1633,10 @@ async function logarFirebase() {
     try { const s = await db.ref('equipe_meta/' + token + '/senhaProvisoria').once('value'); provisoria = s.val() === true; } catch(e) {}
     if(provisoria) { abrirTrocaSenhaGestor(token, membro, uid); return; }
 
+    _loginEmAndamento = false;
     entrarNoApp(token, membro, uid);
   } catch(e) {
+    _loginEmAndamento = false;
     mostrarErro('Não foi possível entrar. Tente novamente.');
   }
 }
@@ -1652,14 +1647,7 @@ function entrarNoApp(token, membro, uid) {
   PERM   = PERMISSOES[membro.tipo] || PERMISSOES.auxiliar;
   localStorage.setItem('mo_impl_sessao', JSON.stringify(SESSAO));
   try {
-    if(db) {
-      carregarFranqueadosDoFirebase().catch(()=>{});
-      carregarEquipeDoFirebase().catch(()=>{});
-      hidratarColecoesGlobais().then(()=>limparDadosDemo()).catch(()=>{ try{ limparDadosDemo(); }catch(e){} });
-    } else {
-      try { limparDadosDemo(); } catch(e) {}
-    }
-    setTimeout(()=>{ try{ limparDadosDemo(); }catch(e){} }, 1800);
+    if(db) { carregarFranqueadosDoFirebase().catch(()=>{}); carregarEquipeDoFirebase().catch(()=>{}); }
   } catch(e) {}
   iniciarApp();
 }
@@ -1691,6 +1679,7 @@ async function confirmarTrocaSenhaGestor(token, uid) {
     if(auth.currentUser) await auth.currentUser.updatePassword(nova);
     await db.ref('equipe_meta/' + token + '/senhaProvisoria').set(false);
     const ctx = window._trocaSenhaCtx || {};
+    _loginEmAndamento = false;
     fecharModal();
     entrarNoApp(token, ctx.membro, uid);
   } catch(e) {
@@ -1755,8 +1744,7 @@ async function resetarSistema() {
   // 1) Limpar dados no Firebase (mantém configuração de etapas)
   const paths = ['franqueados','equipe','equipe_meta','chats','motalk','chamados','chamado_notif',
     'notif_franqueado','notif_gestor','portal_usuarios','reunioes','reunioes_conclusao','reunioes_notif',
-    'disponibilidade','historico','historico_funcional','implantacao','etapas','validacoes','pastas_equipe',
-    'candidatos','contatos_ext','tarefas','agenda','onboarding_notas','dossies_fechados','motalk_grupos'];
+    'disponibilidade','historico','historico_funcional','implantacao','etapas','validacoes','pastas_equipe'];
   try { if(db && !window._fbOffline) await Promise.all(paths.map(p => db.ref(p).remove().catch(()=>{}))); } catch(e){}
 
   // 2) Limpar localStorage (preserva sessão e configuração)
@@ -2382,7 +2370,7 @@ function renderAlertas() {
 function abrirCadastroFranqueado() {
   const proxNum = String(getDados().length + 1).padStart(3, '0');
   const gestores = Object.entries(EQUIPE).filter(function(e){ return e[1].tipo==='gestor'; })
-    .map(function(e){ return '<option value="'+e[0]+'"'+(e[0]===(SESSAO&&SESSAO.token)?' selected':'')+'>'+e[1].nome+'</option>'; }).join('');
+    .map(function(e){ return '<option value="'+e[0]+'">'+e[1].nome+'</option>'; }).join('');
 
   abrirModal('Cadastrar novo franqueado',
     '<div style="max-height:70vh;overflow-y:auto;padding-right:6px">' +
@@ -2875,10 +2863,10 @@ function renderFranqueados() {
       <button class="esteira-tab"       data-aba="arquivados"    onclick="trocarAbaEsteira('arquivados',this)" style="color:var(--text-muted)">Arquivados</button>
       ${PERM.assinar?`<div style="margin-left:auto;position:relative">
         <button onclick="toggleConfigImplantacao(event)" title="Configurações da implantação"
-          style="background:var(--accent);border:1.5px solid var(--accent-dark);border-radius:8px;width:36px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;transition:all .15s;box-shadow:0 2px 6px rgba(245,166,35,.4)"
-          onmouseover="this.style.background='var(--accent-dark)'"
-          onmouseout="this.style.background='var(--accent)'">⚙</button>
-        <div id="config-impl-menu" style="display:none;position:absolute;right:0;top:40px;background:#FFFFFF;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:220px;z-index:1200;overflow:hidden">
+          style="background:none;border:1.5px solid var(--border);border-radius:8px;width:36px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-dim);transition:all .15s"
+          onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">⚙</button>
+        <div id="config-impl-menu" style="display:none;position:absolute;right:0;top:40px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:220px;z-index:500;overflow:hidden">
           <div style="padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);border-bottom:1px solid var(--border)">Configurações</div>
           <button onclick="fecharConfigImplantacao();ir('config_equipe')" style="display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;border:none;background:none;cursor:pointer;font-size:13px;color:var(--text);text-align:left;font-family:inherit" onmouseover="this.style.background='var(--bg-alt)'" onmouseout="this.style.background='none'">
             <span style="font-size:16px">👥</span> Equipe das etapas
@@ -4829,41 +4817,6 @@ async function confirmarBaixaInatividade(fid, chamadoId) {
   }
 }
 
-// Cobra o responsável pelo chamado no MO Talk e registra no histórico funcional dele
-async function cobrarResponsavelChamado(fid, chamadoId) {
-  let lista = [];
-  try {
-    const snap = await db.ref('chamados/'+fid).once('value');
-    const v = snap.val();
-    lista = Array.isArray(v) ? v : (v ? Object.values(v) : []);
-  } catch(e) {}
-  const ch = lista.find(c => c && c.id === chamadoId);
-  if(!ch) { toast('Chamado não encontrado.','rd'); return; }
-  const f = getFranqueado(fid);
-  const token = ch.responsavelToken || responsavelDaEtapa(fid, ch.etapaAberta || f?.etapaAtual || 1);
-  if(!token || token === SESSAO?.token) {
-    toast('Esta etapa não tem outro responsável designado. Configure a equipe da etapa.','er');
-    return;
-  }
-  const nome = EQUIPE[token]?.nome || 'responsável';
-  const prim = nome.split(' ')[0];
-  const msg = 'Olá, ' + prim + '. O chamado "' + (ch.titulo||'suporte') + '" do franqueado ' + (f?.nome||ch.franqueado||'') + ' (' + (ch.ticket||fid) + ') está há mais de 24h sem retorno. Pode dar andamento, por favor?';
-  // Registrar no histórico funcional do RESPONSÁVEL
-  gravarHistoricoFuncionalDe(token, {
-    tipo: 'cobranca_chamado',
-    texto: 'Cobrança de retorno — chamado "' + (ch.titulo||'suporte') + '" do franqueado ' + (f?.nome||ch.franqueado||'') + ' (' + (ch.ticket||fid) + ') sem resposta há mais de 24h.',
-    data: hoje(), hora: agora(), autor: SESSAO?.nome || 'Gestão', fid, chamadoId,
-  });
-  // Marcar como cobrado e persistir
-  ch.cobrado24h = true; ch.dataCobranca = hoje() + ' ' + agora(); ch.responsavelToken = token;
-  try { await db.ref('chamados/'+fid).set(lista); localStorage.setItem('suporte_'+fid, JSON.stringify(lista)); } catch(e){}
-  // Abrir MO Talk no direto do responsável com a mensagem pronta
-  abrirChatFlutuante();
-  selecionarCanalMOTalk('dm_'+token);
-  setTimeout(()=>{ const inp=$('motalk-input'); if(inp){ inp.value=msg; inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,90)+'px'; inp.focus(); } }, 280);
-  toast('Cobrança registrada no histórico de ' + prim + '. Mensagem pronta no MO Talk.','gn');
-}
-
 async function renderSuportePainel() {
   $('content').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">⏳</div><div style="font-size:13px">Carregando chamados...</div></div>';
 
@@ -4924,9 +4877,6 @@ async function renderSuportePainel() {
           <div style="font-size:12px;font-weight:800;color:var(--text)">${c.id} · ${c.titulo}</div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
             ${fTick} · ${fNome.split(' ')[0]} · Aberto em ${c.dataAbertura} às ${c.horaAbertura}
-          </div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
-            👤 Responsável: <b style="color:var(--text)">${(EQUIPE[c.responsavelToken||responsavelDaEtapa(fid,c.etapaAberta||1)]?.nome||'Sem responsável definido').split(' ').slice(0,2).join(' ')}</b>${c.etapaAberta?` · ${c.nomeEtapa||('Etapa '+c.etapaAberta)}`:''}
           </div>
         </div>
         <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;
@@ -5020,27 +4970,6 @@ async function renderSuportePainel() {
       </div>
       <button onclick="renderSuportePainel()" class="btn sm">↻ Atualizar</button>
     </div>
-
-    ${(() => {
-      const semRetorno = abertos.filter(c => !c.respostaGestor && horasDesde(c.timestamp) >= 24);
-      if(!semRetorno.length) return '';
-      return `<div style="background:#FEF2F2;border:1px solid var(--red-border);border-radius:12px;padding:14px 16px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:800;color:#991B1B;margin-bottom:6px">⚠ ${semRetorno.length} chamado(s) há mais de 24h sem retorno do responsável</div>
-        <div style="font-size:11px;color:#7F1D1D;margin-bottom:8px">Cobre o responsável diretamente no MO Talk. A cobrança fica registrada no histórico funcional dele.</div>
-        ${semRetorno.map(c => {
-          const fid2 = c._franqueado?.id || c.fid;
-          const tk = c.responsavelToken || responsavelDaEtapa(fid2, c.etapaAberta||1);
-          const nomeResp = EQUIPE[tk]?.nome || 'Sem responsável definido';
-          const h = horasDesde(c.timestamp);
-          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #FECACA">
-            <div style="font-size:12px;color:#7F1D1D;min-width:0">
-              <b>${c.titulo||'Chamado'}</b> · ${(c._franqueado?.nome||c.franqueado||'').split(' ')[0]} · resp.: <b>${nomeResp.split(' ')[0]}</b> · há ${h}h${c.cobrado24h?' · já cobrado':''}
-            </div>
-            <button onclick="cobrarResponsavelChamado('${fid2}','${c.id}')" style="padding:6px 12px;border-radius:8px;background:#991B1B;color:#fff;border:none;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0">💬 Cobrar no MO Talk</button>
-          </div>`;
-        }).join('')}
-      </div>`;
-    })()}
 
     ${todosChamados.length === 0 ? `
     <div style="text-align:center;padding:60px 20px;color:var(--text-dim)">
@@ -5829,7 +5758,6 @@ function verificarFechamentoMensal() {
 
   fechados.push(chave);
   localStorage.setItem('mo_dossies_fechados', JSON.stringify(fechados));
-  _syncFB('dossies_fechados', fechados);
   toast(`Dossiês funcionais de ${mesAno} gerados automaticamente para ${lista.length} colaboradores.`,'gn');
 }
 
@@ -6121,20 +6049,6 @@ function getEquipeEtapa(fid, etapaId) {
   };
 }
 
-// Responsável pela etapa (para direcionar o chamado do franqueado).
-// Prioriza o primeiro membro designado à etapa; senão, alguém atribuído a uma tarefa;
-// por fim, o gestor do franqueado.
-function responsavelDaEtapa(fid, etapaId) {
-  try {
-    const eq = getEquipeEtapa(fid, etapaId);
-    if(eq.membros && eq.membros.length) return eq.membros[0];
-    const itensTokens = Object.values(eq.itens||{}).flat();
-    if(itensTokens.length) return itensTokens[0];
-  } catch(e) {}
-  const f = getFranqueado(fid);
-  return f?.gestorToken || f?.gestor || '';
-}
-
 // Membros que recebem tarefas (exclui acesso puramente administrativo opcional)
 function membrosDelegaveis() {
   const eq = getEquipe();
@@ -6416,62 +6330,6 @@ function dispararTarefasEtapa(fid, etapaId) {
   salvarTarefas(lista);
 }
 
-// Sincroniza a lista de tarefas (mo_tarefas) com as atribuições atuais das etapas,
-// para TODOS os processos iniciados. Garante que cada membro veja em "Minhas tarefas"
-// toda tarefa que lhe foi atribuída, com a data do prazo da etapa, mesmo que a
-// atribuição tenha sido feita depois do início da etapa.
-function sincronizarTarefasComAtribuicoes() {
-  const dados = getDados();
-  const lista = getTarefas();
-  let mudou = false;
-  dados.forEach(f => {
-    if(!f.processoIniciado) return;
-    const atual = f.etapaAtual || 0;
-    ETAPAS.forEach(et => {
-      if(et.id > atual) return; // só etapas já iniciadas
-      const eq = getEquipeEtapa(f.id, et.id);
-      const tokens = new Set([...(eq.membros||[]), ...Object.values(eq.itens||{}).flat()]);
-      if(!tokens.size) return;
-      let prazo = '';
-      try { prazo = StorageAdapter.lerPrazo(f.id, et.id) || StorageAdapter.lerPrazoFranqueado(f.id, et.id) || ''; } catch(e) {}
-      tokens.forEach(tk => {
-        const membro = EQUIPE[tk] || membrosDelegaveis().find(m=>m.token===tk);
-        if(!membro) return;
-        const itensDoMembro = Object.entries(eq.itens||{})
-          .filter(([item,arr]) => (arr||[]).includes(tk))
-          .map(([item]) => item);
-        const escopo = itensDoMembro.length ? itensDoMembro.join('; ') : ('Etapa '+et.id+' — '+et.nome);
-        let tar = lista.find(t => t.fid===f.id && t.etapaId===et.id && t.responsavelToken===tk);
-        if(!tar) {
-          lista.push({
-            id:               'tar_'+Date.now()+'_'+tk+'_'+f.id+'_'+et.id,
-            titulo:           'Etapa '+et.id+' ('+et.nome+') — '+f.nome,
-            escopo,
-            fid:              f.id,
-            etapaId:          et.id,
-            responsavelToken: tk,
-            responsavelNome:  membro.nome,
-            dataVenc:         prazo,
-            desc:             'Você foi designado para a Etapa '+et.id+' ('+et.nome+') do franqueado '+f.nome+' ('+f.ticket+'). Escopo: '+escopo+'.',
-            status:           'pendente',
-            ciencia:          false,
-            criadoEm:         hoje(),
-            criadoTs:         Date.now(),
-            criadoPor:        'Sistema',
-            origem:           'sync_atribuicao',
-          });
-          mudou = true;
-        } else {
-          // Manter data e escopo alinhados ao prazo/atribuição atual
-          if(prazo && tar.dataVenc !== prazo) { tar.dataVenc = prazo; mudou = true; }
-          if(tar.escopo !== escopo) { tar.escopo = escopo; mudou = true; }
-        }
-      });
-    });
-  });
-  if(mudou) salvarTarefas(lista);
-}
-
 function getEquipe() {
   try {
     const s = localStorage.getItem('mo_equipe_rh');
@@ -6490,69 +6348,7 @@ function getEquipe() {
 
 function salvarEquipe(lista) {
   localStorage.setItem('mo_equipe_rh', JSON.stringify(lista));
-  if(db){ try{
-    const obj = {};
-    (lista||[]).forEach(c => { if(c) obj[c.id || c.token] = c; });
-    db.ref('equipe').set(obj);
-  }catch(e){} }
-}
-
-// ── Sincronização de coleções globais (localStorage = cache, Firebase = fonte) ──
-function _syncFB(caminho, dados) { if(db){ try{ db.ref(caminho).set(dados); }catch(e){} } }
-async function _hidratarFB(chaveLocal, caminho) {
-  if(!db || window._fbOffline) return;
-  try {
-    const s = await db.ref(caminho).once('value');
-    const v = s.val();
-    if(v !== null && v !== undefined) localStorage.setItem(chaveLocal, JSON.stringify(v));
-  } catch(e) {}
-}
-async function hidratarColecoesGlobais() {
-  await Promise.all([
-    _hidratarFB('mo_candidatos','candidatos'),
-    _hidratarFB('mo_contatos_ext','contatos_ext'),
-    _hidratarFB('mo_tarefas','tarefas'),
-    _hidratarFB('mo_agenda','agenda'),
-    _hidratarFB('mo_onboarding_notas','onboarding_notas'),
-    _hidratarFB('mo_dossies_fechados','dossies_fechados'),
-    _hidratarFB('motalk_grupos','motalk_grupos'),
-  ]).catch(()=>{});
-}
-
-// Limpeza única dos dados de demonstração que ficaram persistidos (localStorage + Firebase).
-// Remove apenas registros com ids fixos dos antigos seeds; não toca em dados reais
-// (que usam ids gerados por timestamp). Roda após a hidratação do Firebase.
-function limparDadosDemo() {
-  const DEMO = {
-    agenda:     ['ev_d1','ev_d2','ev_d3','ev_d4','ev_d5'],
-    prazos:     ['pz_d1','pz_d2','pz_d3'],
-    tarefas:    ['tar_d1','tar_d2'],
-    candidatos: ['cand_1','cand_2','cand_3'],
-    motalk:     ['cm1','cm2','cm3','mo1','mo2','mo3','mo4'],
-  };
-  try {
-    const ag = getEventosAgenda();
-    if(ag.some(e=>DEMO.agenda.includes(e.id))) salvarEventosAgenda(ag.filter(e=>!DEMO.agenda.includes(e.id)));
-
-    const pz = getPrazos();
-    if(pz.some(p=>DEMO.prazos.includes(p.id))) salvarPrazos(pz.filter(p=>!DEMO.prazos.includes(p.id)));
-
-    const tf = getTarefas();
-    if(tf.some(t=>DEMO.tarefas.includes(t.id))) salvarTarefas(tf.filter(t=>!DEMO.tarefas.includes(t.id)));
-
-    if(typeof getCandidatos==='function') {
-      const cd = getCandidatos();
-      if(Array.isArray(cd) && cd.some(c=>DEMO.candidatos.includes(c.id))) salvarCandidatos(cd.filter(c=>!DEMO.candidatos.includes(c.id)));
-    }
-
-    if(typeof getMOTalkMsgs==='function') {
-      const mt = getMOTalkMsgs('geral');
-      if(Array.isArray(mt) && mt.some(m=>DEMO.motalk.includes(m.id))) {
-        salvarMOTalkMsgs('geral', mt.filter(m=>!DEMO.motalk.includes(m.id)));
-        if(db){ DEMO.motalk.forEach(id=>{ try{ db.ref('motalk/geral/'+id).remove(); }catch(e){} }); }
-      }
-    }
-  } catch(e) { console.warn('limparDadosDemo:', e.message); }
+  if(db){ try{ db.ref('equipe').set(lista); }catch(e){} }
 }
 
 function getColaborador(id) {
@@ -8222,7 +8018,6 @@ function getContatosExternos() {
 
 function salvarContatosExternos(lista) {
   localStorage.setItem('mo_contatos_ext', JSON.stringify(lista));
-  _syncFB('contatos_ext', lista);
 }
 
 function salvarContatoExterno(dados) {
@@ -8812,12 +8607,16 @@ function seedProcessoFernando() {
   localStorage.setItem('mo_prazo_frq_1_et11', '2025-12-15');
 }
 
-// ── SEEDS DE DEMONSTRAÇÃO DESATIVADOS ──
-// Estes seeds rodavam em TODA carga da página e apagavam mo_franqueados e
-// mo_equipe_rh (a equipe real do usuário), reinjetando o franqueado fictício
-// "Fernando Dias Caldas". O sistema inicia vazio (v66), então a execução
-// automática foi removida. As funções seguem definidas, mas não são chamadas.
-// (Antes: seedProcessoFernando() e seedDemoMO001() eram invocados aqui.)
+// Executar seed do Fernando
+(function(){ try { seedProcessoFernando(); } catch(e){ console.warn('seed Fernando:', e); } })();
+
+// Executar seed se MO-001 ainda estiver na etapa 1
+(function() {
+  try {
+    // Sempre rodar o seed para garantir os eventos de assinatura
+    seedDemoMO001();
+  } catch(e) {}
+})();
 
 /* ── FIM DO SEED ── */
 
@@ -8847,7 +8646,6 @@ const StorageAdapter = {
     };
     docs.push(doc);
     localStorage.setItem(key, JSON.stringify(docs));
-    if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/documentos/${doc.id}`).set(doc); }catch(e){} }
     return doc;
   },
 
@@ -8869,7 +8667,6 @@ const StorageAdapter = {
       doc.validadoEm = new Date().toLocaleDateString('pt-BR');
       doc.validadoPor = SESSAO?.nome || '—';
       localStorage.setItem(key, JSON.stringify(docs));
-      if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/documentos/${doc.id}`).set(doc); }catch(e){} }
     }
     return doc;
   },
@@ -8877,7 +8674,6 @@ const StorageAdapter = {
   // Salvar prazo da GESTORA (para concluir a validação)
   salvarPrazo(fid, etapaId, dataISO) {
     localStorage.setItem(`mo_prazo_${fid}_et${etapaId}`, dataISO);
-    if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/prazo`).set(dataISO); }catch(e){} }
   },
   lerPrazo(fid, etapaId) {
     return localStorage.getItem(`mo_prazo_${fid}_et${etapaId}`) || '';
@@ -8886,7 +8682,6 @@ const StorageAdapter = {
   // Salvar prazo do FRANQUEADO (para entregar documentos e assinar)
   salvarPrazoFranqueado(fid, etapaId, dataISO) {
     localStorage.setItem(`mo_prazo_frq_${fid}_et${etapaId}`, dataISO);
-    if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/prazoFrq`).set(dataISO); }catch(e){} }
   },
   lerPrazoFranqueado(fid, etapaId) {
     return localStorage.getItem(`mo_prazo_frq_${fid}_et${etapaId}`) || '';
@@ -8958,9 +8753,7 @@ const StorageAdapter = {
       lido:      false,
     });
     localStorage.setItem(key, JSON.stringify(msgs));
-    const nova = msgs[msgs.length-1];
-    if(db){ try{ db.ref(`implantacao/${fid}/etapas/${etapaId}/subchat/${nova.id}`).set(nova); }catch(e){} }
-    return nova;
+    return msgs[msgs.length-1];
   },
 
   listarSubchat(fid, etapaId) {
@@ -9004,59 +8797,10 @@ function getTemplatesMensagem(f, et, prazo) {
   ];
 }
 
-// Busca no Firebase os dados reais do franqueado (gerados em outros aparelhos)
-// e os grava nas chaves locais que o dossiê lê. Retorna chamados e chat para
-// as seções de comunicação e suporte.
-async function hidratarDossieDoFirebase(fid) {
-  const resultado = { chamados: [], chat: [] };
-  if(!db || window._fbOffline) return resultado;
-  try {
-    const snapEt = await db.ref('implantacao/' + fid + '/etapas').once('value');
-    const etapas = snapEt.val() || {};
-    Object.entries(etapas).forEach(([etRaw, dados]) => {
-      if(!dados) return;
-      const etId = String(etRaw).replace(/\D/g, '') || etRaw;
-      // Eventos — mesclar com o que houver no aparelho, sem duplicar
-      if(dados.eventos) {
-        const remotos = Object.values(dados.eventos).filter(Boolean);
-        const key = `mo_eventos_${fid}_etapa${etId}`;
-        const locais = JSON.parse(localStorage.getItem(key) || '[]');
-        const mapa = {};
-        [...locais, ...remotos].forEach(e => { if(e) mapa[e.id || ((e.timestamp||'') + '-' + (e.tipo||''))] = e; });
-        const merged = Object.values(mapa).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
-        localStorage.setItem(key, JSON.stringify(merged));
-      }
-      if(dados.documentos) {
-        localStorage.setItem(`mo_docs_${fid}_et${etId}`, JSON.stringify(Object.values(dados.documentos).filter(Boolean)));
-      }
-      if(dados.subchat) {
-        localStorage.setItem(`mo_subchat_${fid}_et${etId}`, JSON.stringify(Object.values(dados.subchat).filter(Boolean)));
-      }
-      if(dados.prazo)    localStorage.setItem(`mo_prazo_${fid}_et${etId}`, dados.prazo);
-      if(dados.prazoFrq) localStorage.setItem(`mo_prazo_frq_${fid}_et${etId}`, dados.prazoFrq);
-    });
-  } catch(e) { console.warn('hidratarDossie (etapas):', e.message); }
-  // Atendimentos de suporte (chamados) e conversa principal — vivem só no Firebase
-  try {
-    const s = await db.ref('chamados/' + fid).once('value');
-    const v = s.val();
-    if(v) resultado.chamados = (Array.isArray(v) ? v : Object.values(v)).filter(Boolean);
-  } catch(e) {}
-  try {
-    const s = await db.ref('chats/chat_impl_' + fid).once('value');
-    const v = s.val();
-    if(v) resultado.chat = Object.values(v).filter(Boolean).sort((a,b)=>(a.ts||a.timestamp||0)-(b.ts||b.timestamp||0));
-  } catch(e) {}
-  return resultado;
-}
-
-async function gerarDossieEsteira(fid) {
+function gerarDossieEsteira(fid) {
   const dados = getDados();
   const f     = dados.find(x => x.id === fid);
   if(!f) return;
-
-  toast('Reunindo os dados do servidor...', 'or');
-  const { chamados: _dossieChamados, chat: _dossieChat } = await hidratarDossieDoFirebase(fid);
 
   const emitidoEm  = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const LOGO       = 'data:image/jpeg;base64,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';
@@ -9151,7 +8895,7 @@ async function gerarDossieEsteira(fid) {
   // ── Métricas globais ──
   const concluidas        = relEtapas.filter(r=>r.concluida);
   const totalDias         = f.diasTotais || 0;
-  const totalMensagens    = relEtapas.reduce((s,r)=>s+r.subchat.length,0) + (_dossieChamados||[]).length;
+  const totalMensagens    = relEtapas.reduce((s,r)=>s+r.subchat.length,0);
   const totalDocs         = relEtapas.reduce((s,r)=>s+r.docs.length,0);
   const totalRejeitados   = relEtapas.reduce((s,r)=>s+r.docsRejeitados.length,0);
   const totalEventos      = relEtapas.reduce((s,r)=>s+r.eventos.length,0);
@@ -9249,39 +8993,6 @@ async function gerarDossieEsteira(fid) {
     .rod-txt{font-size:7pt;color:#777;text-align:right;line-height:1.4;font-family:Arial,sans-serif}
     @media print{body{padding:12mm 14mm 24mm 14mm}.rod{position:fixed}@page{size:A4;margin:0}button{display:none}}
   `;
-
-  // ── Chamados de suporte agrupados por etapa (cada um sabe sua etapaAberta) ──
-  const escapeHtml = (t) => String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const chamadosPorEtapa = {};
-  (_dossieChamados||[]).forEach(c => {
-    const e = c.etapaAberta || 0;
-    (chamadosPorEtapa[e] = chamadosPorEtapa[e] || []).push(c);
-  });
-  function chamadosDaEtapaHTML(etId) {
-    const lista = chamadosPorEtapa[etId] || [];
-    if(!lista.length) return '';
-    return lista.map(c => {
-      const statusTxt = c.status==='concluido'?'Resolvido':c.status==='em_andamento'?'Em andamento':c.status==='cancelado'?'Cancelado':'Aberto';
-      const respostas = [];
-      if(c.respostaGestor) respostas.push({ quem:'gestora', autor:c.gestorNome||'Equipe de implantação', data:c.dataResposta||'', texto:c.respostaGestor });
-      if(c.retornoFranqueado) respostas.push({ quem:'franqueado', autor:c.franqueado||f.nome||'Franqueado', data:c.dataRetorno||'', texto:c.retornoFranqueado });
-      (c.historico||[]).forEach(h => {
-        if(h.respostaGestor) respostas.push({ quem:'gestora', autor:h.gestorNome||'Equipe de implantação', data:h.dataResposta||'', texto:h.respostaGestor });
-        if(h.retornoFranqueado) respostas.push({ quem:'franqueado', autor:c.franqueado||f.nome||'Franqueado', data:h.dataRetorno||'', texto:h.retornoFranqueado });
-      });
-      const respHTML = respostas.map(r => `<div class="chat-msg ${r.quem}">
-          <div class="chat-meta">${escapeHtml(r.autor)} · ${escapeHtml(r.data)}</div>
-          <div class="chat-txt">${escapeHtml(r.texto)}</div>
-        </div>`).join('');
-      return `<div style="border:1px solid #E5E7EB;border-radius:6px;padding:9px 11px;margin-bottom:8px;break-inside:avoid">
-        <div style="font-size:9pt;font-weight:bold">🛟 Chamado de suporte — ${escapeHtml(c.titulo||c.categoria||'Atendimento')}
-          <span style="font-size:8pt;font-weight:normal;color:#666"> · ${statusTxt} · aberto em ${escapeHtml(c.dataAbertura||'')} ${escapeHtml(c.horaAbertura||'')}</span></div>
-        <div class="chat-msg franqueado"><div class="chat-meta">${escapeHtml(c.franqueado||f.nome||'Franqueado')} · ${escapeHtml(c.dataAbertura||'')}</div>
-          <div class="chat-txt">${escapeHtml(c.descricao||'')}</div></div>
-        ${respHTML}
-      </div>`;
-    }).join('');
-  }
 
   // ── MONTAR HTML ──
   const etapasHTML = relEtapas.map(r => {
@@ -9391,18 +9102,11 @@ async function gerarDossieEsteira(fid) {
       </div>
 
       <!-- COMUNICAÇÃO -->
-      ${(() => {
-        const chamadosHTML = chamadosDaEtapaHTML(et.id);
-        const qtdChamados = (chamadosPorEtapa[et.id] || []).length;
-        const totalComun = subchat.length + qtdChamados;
-        if(!totalComun && concluida) return '';
-        return `
+      ${subchat.length||!concluida?`
       <div class="sec">
-        <div class="sec-tit">💬 Comunicação registrada (${totalComun} registro${totalComun!==1?'s':''}${qtdChamados?` · ${qtdChamados} de suporte`:''})</div>
-        ${chamadosHTML}
-        ${subchat.length ? subchatHTML : (chamadosHTML ? '' : '<div style="font-size:9pt;color:#999;font-style:italic">Nenhuma mensagem registrada.</div>')}
-      </div>`;
-      })()}
+        <div class="sec-tit">💬 Comunicação registrada (${subchat.length} mensagem${subchat.length!==1?'s':''})</div>
+        ${subchatHTML}
+      </div>`:'' }
 
       <!-- DOCUMENTOS -->
       <div class="sec">
@@ -9440,7 +9144,6 @@ async function gerarDossieEsteira(fid) {
       <div class="prog-label">${et.nome.split(' ').slice(0,2).join(' ')}</div>
     </div>`;
   }).join('');
-
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><style>${css}</style></head><body>
 
@@ -9975,28 +9678,14 @@ function abrirEtapaProcesso(fid, etapaId) {
     <div class="card">
       <div class="card-head"><div class="card-title">✅ Checklist de tarefas</div></div>
       <div class="card-body">
-        ${tarefas.length ? tarefas.map((t,idx) => {
-          const resp = (getEquipeEtapa(fid, etapaId).itens || {})[t] || [];
-          const respHTML = resp.length
-            ? '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">' + resp.map(tk => {
-                const u = EQUIPE[tk] || {};
-                const nome = (u.nome || tk).split(' ').slice(0,2).join(' ');
-                const cor = u.cor || '#1B3F8B';
-                return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:'+cor+';background:#F3F6FC;border:1px solid var(--border);padding:1px 8px;border-radius:10px"><span style="width:6px;height:6px;border-radius:50%;background:'+cor+'"></span>'+nome+'</span>';
-              }).join('') + '</div>'
-            : '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;font-style:italic">Sem responsável definido</div>';
-          return `
-          <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;${idx===tarefas.length-1?'border-bottom:none':''}" >
+        ${tarefas.length ? tarefas.map((t,idx) => `
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;${idx===tarefas.length-1?'border-bottom:none':''}" >
             <input type="checkbox" id="task-${etapaId}-${idx}"
               ${concluida?'checked disabled':''}
               style="margin-top:2px;accent-color:var(--primary);width:15px;height:15px;flex-shrink:0"
               onchange="registrarTarefa('${fid}',${etapaId},${idx},this.checked)">
-            <div style="flex:1;min-width:0">
-              <span style="font-size:12px;color:var(--text);line-height:1.5">${t}</span>
-              ${respHTML}
-            </div>
-          </label>`;
-        }).join('')
+            <span style="font-size:12px;color:var(--text);line-height:1.5">${t}</span>
+          </label>`).join('')
         : '<div style="font-size:12px;color:var(--text-dim)">Nenhuma tarefa definida.</div>'}
       </div>
     </div>
@@ -10547,7 +10236,6 @@ function autoSalvarNota(id, valor) {
   const notas = JSON.parse(localStorage.getItem('mo_onboarding_notas')||'{}');
   notas[id] = valor;
   localStorage.setItem('mo_onboarding_notas', JSON.stringify(notas));
-  _syncFB('onboarding_notas', notas);
   const status = document.getElementById('status-'+id);
   if(status) {
     status.textContent = '✓ Salvo automaticamente';
@@ -10595,7 +10283,6 @@ function getCandidatos() {
 }
 function salvarCandidatos(lista) {
   localStorage.setItem('mo_candidatos', JSON.stringify(lista));
-  _syncFB('candidatos', lista);
   // Atualizar badge
   const badge = $('badge-cand');
   const ativos = lista.filter(c=>!['aprovado','reprovado'].includes(c.status));
@@ -11174,7 +10861,8 @@ function seedCandidatosDemo() {
   localStorage.setItem('mo_candidatos', JSON.stringify(demo));
 }
 
-// Seed de candidatos DESATIVADO (reinjetava dados fictícios a cada carga).
+// Executar seed de candidatos
+seedCandidatosDemo();
 
 
 
@@ -12062,7 +11750,6 @@ function getEventosAgenda() {
 }
 function salvarEventosAgenda(lista) {
   localStorage.setItem('mo_agenda', JSON.stringify(lista));
-  _syncFB('agenda', lista);
   atualizarBadgeAgenda();
 }
 function atualizarBadgeAgenda() {
@@ -12547,7 +12234,7 @@ function seedAgendaDemo() {
   ];
   salvarEventosAgenda(demo);
 }
-// seedAgendaDemo() DESATIVADO — recriava reuniões/eventos fictícios do calendário a cada carga.
+seedAgendaDemo();
 verificarLembretesAgenda();
 
 
@@ -12580,7 +12267,7 @@ function salvarPrazos(l)  {
   // Atualizar calendário se estiver visível
   if($('cal-corpo')) renderCalendario();
 }
-function salvarTarefas(l) { localStorage.setItem('mo_tarefas', JSON.stringify(l)); _syncFB('tarefas', l); atualizarBadgesAgenda(); }
+function salvarTarefas(l) { localStorage.setItem('mo_tarefas', JSON.stringify(l)); atualizarBadgesAgenda(); }
 
 function atualizarBadgesAgenda() {
   const hoje2 = new Date(); hoje2.setHours(0,0,0,0);
@@ -13368,7 +13055,6 @@ function tarefaEtapa(t) {
 function renderSubTarefas() {
   const el = $('sub-tarefas');
   if(!el) return;
-  try { sincronizarTarefasComAtribuicoes(); } catch(e) { console.warn('sincronizarTarefas:', e.message); }
   const token    = SESSAO?.token || '';
   const todas    = getTarefas().filter(t=>t.responsavelToken===token);
 
@@ -14008,7 +13694,7 @@ function seedPrazosDemo() {
   ];
   salvarTarefas(tarefas);
 }
-// seedPrazosDemo() DESATIVADO — recriava prazos e tarefas fictícios a cada carga.
+seedPrazosDemo();
 
 
 let _diaHoverTimer = null;
@@ -14763,7 +14449,7 @@ function seedChatDemo() {
   ];
   salvarChatMsgs(demo);
 }
-// seedChatDemo() DESATIVADO — recriava mensagens de chat fictícias a cada carga.
+seedChatDemo();
 
 
 
@@ -14783,7 +14469,7 @@ function salvarMOTalkMsgs(canal, lista) {
 function getMOTalkGrupos() {
   try { return JSON.parse(localStorage.getItem('motalk_grupos')||'[]'); } catch(e){ return []; }
 }
-function salvarMOTalkGrupos(g) { localStorage.setItem('motalk_grupos', JSON.stringify(g)); _syncFB('motalk_grupos', g); }
+function salvarMOTalkGrupos(g) { localStorage.setItem('motalk_grupos', JSON.stringify(g)); }
 
 // ── Sincronização em tempo real (Firebase) ──
 let _motalkMsgsCache = [];
@@ -14828,7 +14514,6 @@ function abrirChatFlutuante() {
   setTimeout(()=>{ painel.style.opacity='1'; painel.style.transform='translateY(0) scale(1)'; },10);
   renderListaMOTalk();
   selecionarCanalMOTalk('geral');
-  painel.classList.remove('ver-conversa'); // no celular, começa mostrando a lista de contatos
   const badge = $('chat-fab-badge');
   if(badge) badge.style.display='none';
 }
@@ -14894,17 +14579,9 @@ function renderItemListaMO(item) {
 
 function filtrarContatosMOTalk(v) { renderListaMOTalk(v); }
 
-// No celular, volta da conversa para a lista de contatos
-function voltarListaMOTalk() {
-  const painel = $('chat-painel');
-  if(painel) painel.classList.remove('ver-conversa');
-}
-
 // ── Selecionar canal ──
 function selecionarCanalMOTalk(canalId) {
   _motalkCanal = canalId;
-  const painel = $('chat-painel');
-  if(painel) painel.classList.add('ver-conversa'); // no mobile, abre a conversa em tela cheia
   renderListaMOTalk($('motalk-busca')?.value||'');
 
   // Atualizar header
@@ -15141,7 +14818,7 @@ function seedMOTalkDemo() {
   ];
   salvarMOTalkMsgs('geral', msgs);
 }
-// seedMOTalkDemo() DESATIVADO — recriava mensagens do MO Talk fictícias a cada carga.
+seedMOTalkDemo();
 
 // Compatibilidade com funções antigas do chat simples
 function getChatMsgs() { return getMOTalkMsgs('geral'); }
@@ -15528,10 +15205,17 @@ window.addEventListener('DOMContentLoaded', ()=>{
     }
   });
   setTimeout(atualizarBadgeAlertas, 500);
-  // NOTA: aqui havia uma "verificação de versão" que apagava TODA a equipe
-  // (mo_equipe_rh) quando o primeiro membro não tinha os campos cpf/horario/endereco.
-  // Isso destruía a equipe real cadastrada sem esses campos opcionais. Removido.
-  // A interface já lida com campos ausentes sem precisar apagar nada.
+  // Verificar versão dos dados — limpar se for versão antiga (sem campos novos)
+  try {
+    const equipe = JSON.parse(localStorage.getItem('mo_equipe_rh')||'null');
+    if(equipe && equipe.length > 0) {
+      const temCamposNovos = equipe[0].cpf && equipe[0].horario && equipe[0].endereco;
+      if(!temCamposNovos) {
+        localStorage.removeItem('mo_equipe_rh');
+        console.log('Dados da equipe resetados — versão desatualizada');
+      }
+    }
+  } catch(e) {}
 
 
   iniciarLogin();
@@ -15542,15 +15226,6 @@ window.addEventListener('DOMContentLoaded', ()=>{
 /* Verificar fechamento mensal a cada hora */
 setInterval(verificarFechamentoMensal, 3600000);
 verificarFechamentoMensal();
-
-/* Limpeza de dados de demonstração — remove resíduos dos antigos seeds.
-   Roda no carregamento (limpa o localStorage) e novamente após a hidratação
-   do Firebase (limpa o que vier de lá). Só remove ids fixos de demonstração. */
-(function(){
-  try { limparDadosDemo(); } catch(e) {}
-  setTimeout(function(){ try { limparDadosDemo(); } catch(e) {} }, 2500);
-  setTimeout(function(){ try { limparDadosDemo(); } catch(e) {} }, 5000);
-})();
 </script>
 
 
@@ -15568,17 +15243,6 @@ verificarFechamentoMensal();
 
   <!-- ── PAINEL CHAT FLUTUANTE ── -->
   <<!-- ── PAINEL MO TALK ── -->
-<style>
-.motalk-voltar{display:none}
-@media (max-width:700px){
-  #chat-painel{width:calc(100vw - 12px) !important;height:calc(100dvh - 80px) !important;right:6px !important;left:6px !important;bottom:68px !important;}
-  #motalk-sidebar{width:100% !important;border-radius:18px !important;flex-shrink:1 !important;}
-  #motalk-conversa{display:none !important;}
-  #chat-painel.ver-conversa #motalk-sidebar{display:none !important;}
-  #chat-painel.ver-conversa #motalk-conversa{display:flex !important;}
-  .motalk-voltar{display:flex !important;}
-}
-</style>
 <div id="chat-painel" style="display:none;position:fixed;bottom:90px;right:28px;width:680px;height:500px;background:#F0F2F5;border-radius:18px;box-shadow:0 16px 48px rgba(0,0,0,.18);z-index:799;flex-direction:row;overflow:hidden;border:1px solid rgba(0,0,0,.08)">
 
   <!-- COLUNA ESQUERDA — contatos/grupos -->
@@ -15611,13 +15275,10 @@ verificarFechamentoMensal();
   </div>
 
   <!-- COLUNA DIREITA — conversa ativa -->
-  <div id="motalk-conversa" style="flex:1;display:flex;flex-direction:column;min-width:0">
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0">
 
     <!-- Header da conversa -->
     <div id="motalk-conv-header" style="background:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #E5E7EB;flex-shrink:0;min-height:58px">
-      <button class="motalk-voltar" onclick="voltarListaMOTalk()" title="Voltar" style="width:30px;height:30px;background:none;border:none;cursor:pointer;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;padding:0">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
       <div id="motalk-conv-avatar" style="width:36px;height:36px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0">MO</div>
       <div style="flex:1;min-width:0">
         <div id="motalk-conv-nome" style="font-size:13px;font-weight:700;color:var(--text)">Selecione uma conversa</div>
