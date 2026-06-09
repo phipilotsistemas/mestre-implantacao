@@ -820,7 +820,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 81</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 82</div></div>
   </div>
 </div>
 
@@ -967,7 +967,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · fix-seed-destrutivo-equipe-v81','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · fix-seeds-demo-calendario-v82','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -11131,8 +11131,7 @@ function seedCandidatosDemo() {
   localStorage.setItem('mo_candidatos', JSON.stringify(demo));
 }
 
-// Executar seed de candidatos
-seedCandidatosDemo();
+// Seed de candidatos DESATIVADO (reinjetava dados fictícios a cada carga).
 
 
 
@@ -12505,7 +12504,7 @@ function seedAgendaDemo() {
   ];
   salvarEventosAgenda(demo);
 }
-seedAgendaDemo();
+// seedAgendaDemo() DESATIVADO — recriava reuniões/eventos fictícios do calendário a cada carga.
 verificarLembretesAgenda();
 
 
@@ -13966,7 +13965,7 @@ function seedPrazosDemo() {
   ];
   salvarTarefas(tarefas);
 }
-seedPrazosDemo();
+// seedPrazosDemo() DESATIVADO — recriava prazos e tarefas fictícios a cada carga.
 
 
 let _diaHoverTimer = null;
@@ -14721,7 +14720,7 @@ function seedChatDemo() {
   ];
   salvarChatMsgs(demo);
 }
-seedChatDemo();
+// seedChatDemo() DESATIVADO — recriava mensagens de chat fictícias a cada carga.
 
 
 
@@ -15099,7 +15098,7 @@ function seedMOTalkDemo() {
   ];
   salvarMOTalkMsgs('geral', msgs);
 }
-seedMOTalkDemo();
+// seedMOTalkDemo() DESATIVADO — recriava mensagens do MO Talk fictícias a cada carga.
 
 // Compatibilidade com funções antigas do chat simples
 function getChatMsgs() { return getMOTalkMsgs('geral'); }
