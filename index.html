@@ -820,7 +820,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 77</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 78</div></div>
   </div>
 </div>
 
@@ -967,7 +967,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · menu-config-opaco-engrenagem-v77','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · responsavel-por-tarefa-v78','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -9796,14 +9796,28 @@ function abrirEtapaProcesso(fid, etapaId) {
     <div class="card">
       <div class="card-head"><div class="card-title">✅ Checklist de tarefas</div></div>
       <div class="card-body">
-        ${tarefas.length ? tarefas.map((t,idx) => `
-          <label style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;${idx===tarefas.length-1?'border-bottom:none':''}" >
+        ${tarefas.length ? tarefas.map((t,idx) => {
+          const resp = (getEquipeEtapa(fid, etapaId).itens || {})[t] || [];
+          const respHTML = resp.length
+            ? '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">' + resp.map(tk => {
+                const u = EQUIPE[tk] || {};
+                const nome = (u.nome || tk).split(' ').slice(0,2).join(' ');
+                const cor = u.cor || '#1B3F8B';
+                return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:'+cor+';background:#F3F6FC;border:1px solid var(--border);padding:1px 8px;border-radius:10px"><span style="width:6px;height:6px;border-radius:50%;background:'+cor+'"></span>'+nome+'</span>';
+              }).join('') + '</div>'
+            : '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;font-style:italic">Sem responsável definido</div>';
+          return `
+          <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;${idx===tarefas.length-1?'border-bottom:none':''}" >
             <input type="checkbox" id="task-${etapaId}-${idx}"
               ${concluida?'checked disabled':''}
               style="margin-top:2px;accent-color:var(--primary);width:15px;height:15px;flex-shrink:0"
               onchange="registrarTarefa('${fid}',${etapaId},${idx},this.checked)">
-            <span style="font-size:12px;color:var(--text);line-height:1.5">${t}</span>
-          </label>`).join('')
+            <div style="flex:1;min-width:0">
+              <span style="font-size:12px;color:var(--text);line-height:1.5">${t}</span>
+              ${respHTML}
+            </div>
+          </label>`;
+        }).join('')
         : '<div style="font-size:12px;color:var(--text-dim)">Nenhuma tarefa definida.</div>'}
       </div>
     </div>
