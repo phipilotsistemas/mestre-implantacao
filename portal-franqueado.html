@@ -1096,7 +1096,7 @@ body { overflow-x:hidden }
 
     <div style="text-align:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:10.5px;color:var(--text-muted)">
       Desenvolvido por <span style="font-weight:700;color:var(--primary)">PhiPilot Sistemas</span>
-      <div style="margin-top:3px;font-size:9px;opacity:.7">versão 70</div>
+      <div style="margin-top:3px;font-size:9px;opacity:.7">versão 71</div>
     </div>
   </div>
 </div>
@@ -1558,6 +1558,7 @@ const USUARIOS = {
 };
 
 let PORTAL = {};
+let EQUIPE_ETAPAS_TPL = {}; // template global de equipe por etapa (fallback de atribuição)
 let _aba = 'inicio';
 let _saindoIntencional = false; // flag para evitar restauração após logout
 
@@ -1888,6 +1889,7 @@ function montarPortal(f, senhaUsada) {
     gestor:          gestorObj,
     _senhaAtual:     senhaUsada,
     drivePasstas:    f.drivePasstas || null,
+    equipeEtapas:    f.equipeEtapas || {},
   };
 
   $('tela-login').style.display='none';
@@ -1910,6 +1912,8 @@ function montarPortal(f, senhaUsada) {
 function entrarNoPortal() {
   $('app').style.display='flex';
   $('app').style.flexDirection='column';
+  // Carregar o template global de equipe por etapa (para direcionar dúvidas ao responsável)
+  try { db.ref('equipe_etapas_template').once('value').then(s => { EQUIPE_ETAPAS_TPL = s.val() || {}; }).catch(()=>{}); } catch(e) {}
   $('topbar-av').textContent = ini(PORTAL.nome);
   $('topbar-ticket').textContent = PORTAL.ticket || PORTAL.fid || '';
   irAba('inicio', document.querySelector('[data-aba=inicio]'));
@@ -2488,6 +2492,85 @@ function atualizarItensChamado(categoriaId) {
   fieldItem.style.display = 'block';
   sel.innerHTML = '<option value="">Selecione...</option>' +
     tipo.itens.map(i => `<option value="${i}">${i}</option>`).join('');
+}
+
+// Resolve quem está atribuído a uma tarefa da etapa (espelha a lógica do painel:
+// override do franqueado se existir, senão template; item específico, senão membros da etapa).
+function responsaveisDaTarefa(etId, taskName) {
+  const ov  = (PORTAL.equipeEtapas || {})[etId];
+  const tpl = (EQUIPE_ETAPAS_TPL || {})[etId];
+  const fonte = ov ? ov : (tpl || {});
+  const itens = fonte.itens || {};
+  if(taskName && Array.isArray(itens[taskName]) && itens[taskName].length) return itens[taskName].slice();
+  if(Array.isArray(fonte.membros) && fonte.membros.length) return fonte.membros.slice();
+  const todos = Object.values(itens).flat();
+  if(todos.length) return [...new Set(todos)];
+  return PORTAL.gestor?.token ? [PORTAL.gestor.token] : [];
+}
+
+// Modal: franqueado escolhe a tarefa da etapa que gerou a dúvida
+function abrirDuvidaEtapa(etId) {
+  const et      = ETAPAS_P.find(e=>e.id===etId);
+  const tarefas = getTarefas(etId);
+  const opcoes  = tarefas.map(t => '<option value="'+String(t.titulo).replace(/"/g,'&quot;')+'">'+t.titulo+'</option>').join('');
+  abrirModal(
+    'Tenho dúvidas — Etapa '+etId,
+    '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px">Selecione a tarefa desta etapa que gerou a dúvida. O chamado vai direto ao responsável por ela, e seu gestor acompanha.</div>' +
+    '<label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Tarefa</label>' +
+    '<select id="duvida-tarefa" style="width:100%;padding:10px;border-radius:9px;border:1px solid var(--border);font-family:inherit;font-size:13px;margin:6px 0 14px;background:#fff;color:var(--text)">' +
+      '<option value="">Dúvida geral sobre a etapa</option>' + opcoes +
+    '</select>' +
+    '<label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Descreva sua dúvida</label>' +
+    '<textarea id="duvida-desc" rows="4" placeholder="Explique com detalhes o que precisa..." style="width:100%;padding:10px;border-radius:9px;border:1px solid var(--border);font-family:inherit;font-size:13px;margin-top:6px;resize:vertical;box-sizing:border-box"></textarea>' +
+    '<div id="duvida-erro" style="display:none;color:var(--red);font-size:11.5px;margin-top:8px"></div>',
+    '<button onclick="confirmarDuvidaEtapa('+etId+')" style="flex:1;padding:11px;border-radius:10px;background:var(--primary);color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:800">Enviar dúvida</button>' +
+    '<button class="btn" onclick="fecharModal()">Cancelar</button>'
+  );
+}
+
+function confirmarDuvidaEtapa(etId) {
+  const tarefa = $('duvida-tarefa')?.value || '';
+  const desc   = ($('duvida-desc')?.value || '').trim();
+  const erro   = $('duvida-erro');
+  if(!desc || desc.length < 10) {
+    if(erro) { erro.style.display='block'; erro.textContent='Descreva sua dúvida (mínimo 10 caracteres).'; }
+    return;
+  }
+  const responsaveis = responsaveisDaTarefa(etId, tarefa);
+  const et = ETAPAS_P.find(e=>e.id===etId);
+  const id = gerarIdChamado();
+  const chamado = {
+    id,
+    categoria:          'duvida',
+    titulo:             tarefa || ('Dúvida geral — Etapa '+etId),
+    tarefaRelacionada:  tarefa || '',
+    descricao:          desc,
+    etapaAberta:        etId,
+    nomeEtapa:          'Etapa '+etId+(et?(' — '+et.nome):''),
+    status:             'aberto',
+    dataAbertura:       hoje(),
+    horaAbertura:       agora(),
+    timestamp:          Date.now(),
+    franqueado:         PORTAL.nome,
+    ticket:             PORTAL.ticket,
+    fid:                PORTAL.fid,
+    responsavelToken:   responsaveis[0] || '',
+    responsaveisTokens: responsaveis,
+    gestorToken:        PORTAL.gestor?.token || '',
+  };
+  getChamados().then(raw => {
+    const lista = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    lista.unshift(chamado);
+    salvarChamados(lista);
+    fecharModal();
+    toast('Dúvida enviada ao responsável. Seu gestor acompanha.', 'gn');
+    renderSuporte();
+  }).catch(e => {
+    salvarChamados([chamado]);
+    fecharModal();
+    toast('Dúvida enviada.', 'gn');
+    renderSuporte();
+  });
 }
 
 function confirmarAbrirChamado() {
@@ -3395,7 +3478,7 @@ function abrirDetalheEtapa(etId) {
     <button class="btn-validar" onclick="solicitarValidacao(${etId})" style="flex:1">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"/></svg> Concluí esta etapa
     </button>
-    <button onclick="fecharModal();irAba('suporte')" style="padding:10px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
+    <button onclick="fecharModal();abrirDuvidaEtapa(${etId})" style="padding:10px 16px;border-radius:10px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap">
       💬 Tenho dúvidas
     </button>`:'') +
     `<button class="btn" onclick="fecharModal()">Fechar</button>`
