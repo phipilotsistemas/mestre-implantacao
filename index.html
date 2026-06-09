@@ -964,7 +964,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · motalk-firebase-naofecha-v58','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · chat-dimensao-listalive-v60','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1356,6 +1356,7 @@ var _abaAtual = 'franqueados';
 var _chatAtual = null;
 var _chatRef   = null;
 var _chatH     = null;
+var _chatListaH = null;
 
 /* ══════════════════════════════════════════════════
    HELPERS
@@ -5074,7 +5075,7 @@ function renderChat() {
               const msgs   = chats[canal]||[];
               const ultima = msgs[msgs.length-1];
               const nLidas = msgs.filter(m=>!m.lido&&m.autorToken!==SESSAO.token).length;
-              return `<div class="conv-item${_chatAtual===canal?' ativo':''}" onclick="abrirChatImpl('${f.id}','${canal}')">
+              return `<div class="conv-item${_chatAtual===canal?' ativo':''}" data-fid="${f.id}" onclick="abrirChatImpl('${f.id}','${canal}')">
                 <div class="conv-nome">${f.ticket} · ${f.nome.split(' ')[0]}</div>
                 <div class="conv-prev">${ultima?ultima.texto.slice(0,40)+'...':'Sem mensagens'}</div>
                 ${nLidas>0?`<span class="conv-badge">${nLidas}</span>`:''}
@@ -5094,6 +5095,29 @@ function renderChat() {
   if(_chatAtual) {
     const f = getDados().find(f=>`chat_impl_${f.id}`===_chatAtual);
     if(f) abrirChatImpl(f.id, _chatAtual);
+  }
+
+  // Listener ao vivo: atualiza prévia e contador de não-lidas de cada conversa
+  if(db) {
+    if(_chatListaH) { try { db.ref('chats').off('value', _chatListaH); } catch(e) {} }
+    _chatListaH = db.ref('chats').on('value', snap => {
+      const all = snap.val() || {};
+      getDados().forEach(f => {
+        const node = all['chat_impl_' + f.id];
+        const msgs = node ? Object.values(node).filter(Boolean).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)) : [];
+        const item = document.querySelector('.conv-item[data-fid="' + f.id + '"]');
+        if(!item) return;
+        const ultima = msgs[msgs.length-1];
+        const prev = item.querySelector('.conv-prev');
+        if(prev) prev.textContent = ultima ? (ultima.texto||'📷 Imagem').slice(0,40)+'...' : 'Sem mensagens';
+        const nLidas = msgs.filter(m => !m.lido && m.autorToken !== SESSAO.token).length;
+        let badge = item.querySelector('.conv-badge');
+        if(nLidas > 0) {
+          if(!badge) { badge = document.createElement('span'); badge.className = 'conv-badge'; item.appendChild(badge); }
+          badge.textContent = nLidas;
+        } else if(badge) { badge.remove(); }
+      });
+    });
   }
 }
 
