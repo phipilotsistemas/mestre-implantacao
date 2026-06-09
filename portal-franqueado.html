@@ -1176,6 +1176,59 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ══ NAVEGAÇÃO PARA TRÁS (botão + gesto de arrastar estilo iPhone) ══
+function voltarTela() {
+  // 1) Se há um modal aberto, fecha ele primeiro
+  const modal = document.getElementById('modal-bg');
+  if(modal && modal.classList.contains('open')) { fecharModal(); return; }
+  // 2) Se está no chat, usa o fluxo próprio do chat
+  if(_aba === 'chat') { if(typeof voltarDoChat==='function') voltarDoChat(); return; }
+  // 3) Em qualquer outra aba, volta para o Início
+  if(_aba !== 'inicio') { irAba('inicio', document.querySelector('[data-aba=inicio]')); }
+}
+
+// Gesto: arrastar da borda esquerda para a direita = voltar
+(function() {
+  let x0 = null, y0 = null, t0 = 0, arrastando = false;
+  const BORDA = 28;   // só inicia se o toque começar perto da borda esquerda
+  const MIN   = 65;   // distância mínima para confirmar o voltar
+  const MAX_Y = 70;   // tolerância vertical (evita confundir com rolagem)
+
+  const alvo = () => document.getElementById('portal-content');
+
+  document.addEventListener('touchstart', (e) => {
+    if(e.touches.length !== 1) { x0 = null; return; }
+    const t = e.touches[0];
+    if(t.clientX <= BORDA) { x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); arrastando = false; }
+    else x0 = null;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if(x0 === null) return;
+    const t = e.touches[0];
+    const dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+    if(!arrastando && dx > 12 && dx > dy) arrastando = true;
+    if(arrastando) {
+      const el = alvo();
+      if(el) {
+        el.style.transition = 'none';
+        el.style.transform  = 'translateX(' + Math.min(dx, 150) + 'px)';
+        el.style.opacity    = Math.max(1 - dx / 380, 0.45);
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    if(x0 === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = Math.abs(t.clientY - y0), dt = Date.now() - t0;
+    const el = alvo();
+    if(el) { el.style.transition = 'transform .2s ease, opacity .2s ease'; el.style.transform = ''; el.style.opacity = ''; }
+    if(arrastando && dx > MIN && dy < MAX_Y && dt < 700) voltarTela();
+    x0 = null; arrastando = false;
+  }, { passive: true });
+})();
+
 // PWA: banner de instalação
 let _promptPWA = null;
 function jaInstalado() {
@@ -1424,6 +1477,9 @@ async function appsPost(body) {
   }
 }
 let _chatCanal = 'gestor';
+let _chatMsgsCache = [];   // mensagens do Firebase em cache
+let _chatRef = null;       // referência do listener Firebase
+let _abaAnterior = 'inicio'; // para o botão voltar
 let _calMes = new Date().getMonth();
 let _calAno = new Date().getFullYear();
 
@@ -3548,19 +3604,47 @@ function salvarEvento() {
 /* ══ CHAT ══ */
 function renderChat() {
   $('portal-content').innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button id="btn-g" class="chat-canal-btn ativo" onclick="trocarCanal('gestor')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>${PORTAL.gestor.nome.split(' ')[0]}
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <button onclick="voltarDoChat()" aria-label="Voltar"
+        style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;background:var(--primary-soft);border:1.5px solid var(--primary-border);cursor:pointer;flex-shrink:0;color:var(--primary)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
-      <button id="btn-gl" class="chat-canal-btn" onclick="trocarCanal('global')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M3 11l15-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Global
-      </button>
+      <div style="display:flex;gap:8px;flex:1">
+        <button id="btn-g" class="chat-canal-btn ativo" onclick="trocarCanal('gestor')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>${PORTAL.gestor.nome.split(' ')[0]}
+        </button>
+        <button id="btn-gl" class="chat-canal-btn" onclick="trocarCanal('global')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px"><path d="M3 11l15-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Global
+        </button>
+      </div>
     </div>
     <div class="card" style="height:calc(100vh - 240px);display:flex;flex-direction:column;overflow:hidden;padding:0">
       <div id="chat-msgs-p" class="chat-msgs"></div>
       <div id="chat-inp-p" style="padding:10px 12px;border-top:1px solid var(--border);background:#fff;display:flex;gap:8px;align-items:flex-end"></div>
     </div>`;
+  escutarChat();
   trocarCanal(_chatCanal);
+}
+
+// Assina o chat no Firebase (mesmo caminho que o painel usa: chats/chat_impl_<fid>)
+function escutarChat() {
+  if(!PORTAL.fid || !db) return;
+  const canal = 'chat_impl_' + PORTAL.fid;
+  if(_chatRef) { try { _chatRef.off(); } catch(e) {} }
+  _chatRef = db.ref('chats/' + canal);
+  _chatRef.on('value', snap => {
+    const raw = snap.val();
+    _chatMsgsCache = raw
+      ? Object.values(raw).filter(Boolean).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))
+      : [];
+    if(_aba === 'chat' && _chatCanal === 'gestor') renderMsgs();
+  });
+}
+
+function voltarDoChat() {
+  if(_chatRef) { try { _chatRef.off(); } catch(e) {} _chatRef = null; }
+  // Volta para a tela inicial (que decide entre boas-vindas e portal normal)
+  irAba('inicio', document.querySelector('[data-aba=inicio]'));
 }
 
 function trocarCanal(canal) {
@@ -3587,14 +3671,25 @@ function renderMsgs() {
       : '<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:12px">Nenhum comunicado ainda.</div>';
     c.scrollTop = c.scrollHeight; return;
   }
-  const msgs = getMsgs();
+  const msgs = _chatMsgsCache;
   c.innerHTML = msgs.length
-    ? msgs.slice(-60).map(m => {
-        const eu = m.deFranqueado===true;
+    ? msgs.slice(-80).map(m => {
+        const eu = m.deFranqueado===true || (m.autorToken && String(m.autorToken).startsWith('fr_'));
+        // Comunicado oficial enviado pelo gestor
+        if(m.formal) {
+          return `<div style="align-self:center;max-width:92%;margin:6px auto">
+            <div style="background:var(--accent-soft);border:1.5px solid var(--accent-border);border-radius:12px;padding:10px 12px">
+              <div style="font-size:9px;font-weight:800;color:var(--accent-dark);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">📋 Comunicado Oficial</div>
+              <div style="font-size:13px;line-height:1.6;color:var(--text)">${(m.texto||'').replace(/\n/g,'<br>')}</div>
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);text-align:center;margin-top:3px">${m.hora||''} · ${m.autorNome||''}</div>
+          </div>`;
+        }
+        const autor = eu ? '' : (m.autorNome || PORTAL.gestor.nome).split(' ')[0];
         return `<div style="display:flex;flex-direction:column;align-items:${eu?'flex-end':'flex-start'}">
-          ${!eu?`<div style="font-size:10px;font-weight:700;color:var(--primary);margin-bottom:3px;padding-left:3px">${PORTAL.gestor.nome.split(' ')[0]}</div>`:''}
-          <div class="${eu?'balao-eu':'balao-deles'}">${m.texto}</div>
-          <div style="font-size:9px;color:var(--text-muted);margin-top:3px;padding:${eu?'0 3px 0 0':'0 0 0 3px'}">${m.hora}</div>
+          ${!eu?`<div style="font-size:10px;font-weight:700;color:var(--primary);margin-bottom:3px;padding-left:3px">${autor}</div>`:''}
+          <div class="${eu?'balao-eu':'balao-deles'}">${(m.texto||'').replace(/\n/g,'<br>')}</div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:3px;padding:${eu?'0 3px 0 0':'0 0 0 3px'}">${m.hora||''}</div>
         </div>`;
       }).join('')
     : `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:12px;font-style:italic">Inicie a conversa com ${PORTAL.gestor.nome.split(' ')[0]}.</div>`;
@@ -3620,11 +3715,23 @@ function renderChatInput() {
 function enviarMsg() {
   const inp=$('chat-inp-txt'); const txt=inp?.value?.trim();
   if(!txt) return;
-  const msgs=getMsgs();
-  msgs.push({id:'pm_'+Date.now(),texto:txt,deFranqueado:true,hora:agora(),data:hoje(),ts:Date.now()});
-  localStorage.setItem('portal_chat_'+PORTAL.fid, JSON.stringify(msgs));
+  const msg = {
+    autorToken: 'fr_' + PORTAL.fid,
+    autorNome:  PORTAL.nome,
+    texto:      txt,
+    formal:     false,
+    deFranqueado: true,
+    hora:       agora(),
+    data:       hoje(),
+    timestamp:  Date.now(),
+    lido:       false,
+  };
+  // Limpa o input já (o listener do Firebase re-renderiza com a nova mensagem)
   inp.value=''; inp.style.height='auto';
-  renderMsgs();
+  if(db && PORTAL.fid) {
+    try { db.ref('chats/chat_impl_' + PORTAL.fid).push(msg); }
+    catch(e) { toast('Não foi possível enviar. Verifique sua conexão.','or'); }
+  }
 }
 
 /* ══ PERFIL ══ */
