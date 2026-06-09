@@ -818,7 +818,7 @@ select.inp{cursor:pointer}
     </div>
     <button class="btn" style="width:100%;margin-top:18px;padding:13px;font-size:15px;font-weight:800;border-radius:12px;background:#F5A623;color:#1B3F8B;border:none;cursor:pointer;text-align:center;letter-spacing:.04em;display:flex;align-items:center;justify-content:center" onclick="logarFirebase()">Entrar</button>
     <div style="text-align:center;margin-top:12px"><a href="javascript:void(0)" onclick="recuperarSenhaPainel()" style="font-size:12px;color:var(--primary);text-decoration:none">Esqueci minha senha</a></div>
-    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 65</div></div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">PhiPilot Sistemas · Mestre da Obra<div style="margin-top:3px;font-size:9px;opacity:.7">painel versão 66</div></div>
   </div>
 </div>
 
@@ -965,7 +965,7 @@ select.inp{cursor:pointer}
 <script>
 'use strict';
 
-console.log('%cPAINEL BUILD 2026-06-06 · firebase-auth-equipe-v65','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
+console.log('%cPAINEL BUILD 2026-06-06 · reset-sistema-vazio-v66','background:#0F6E56;color:#fff;padding:4px 10px;border-radius:4px;font-weight:bold');
 
 const URL_GAS = 'https://script.google.com/macros/s/AKfycbxDU_4kOS9yeL-WmrsyBInEIbduV7JqWvBckb0qTNbXIKdmlMahNP5ij5OvNvK9uoAqMg/exec';
 
@@ -1023,11 +1023,7 @@ function gasPost(body) {
    Perfis, acessos e cores
 ══════════════════════════════════════════════════ */
 const EQUIPE = {
-  'ADM-PHILLIPE': { nome:'Phillipe de Paula',    cargo:'Administrador',           tipo:'gestor',    cor:'#1B3F8B', email:'phillipedpaula@gmail.com' },
-  'GES-001':      { nome:'Maria Cláudia Souza',  cargo:'Gestora de Implantação',  tipo:'gestor',    cor:'#EA580C', email:'claudia@mestrework.com'  },
-  'GES-002':      { nome:'Rafael Torres',         cargo:'Consultor de Implantação',tipo:'gestor',    cor:'#1E40AF', email:'rafael@mestrework.com'   },
-  'EST-001':      { nome:'Beatriz Oliveira',       cargo:'Estagiária',             tipo:'estagiario',cor:'#16A34A', email:'beatriz@mestrework.com'  },
-  'AUX-001':      { nome:'Lucas Pereira',          cargo:'Auxiliar Administrativo',tipo:'auxiliar',  cor:'#7C3AED', email:'lucas@mestrework.com'    },
+  'ADM-PHILLIPE': { nome:'Phillipe de Paula', cargo:'Administrador', tipo:'gestor', cor:'#1B3F8B', email:'phillipedpaula@gmail.com' },
 };
 
 /* Permissões por tipo */
@@ -1700,6 +1696,57 @@ async function recuperarSenhaPainel() {
 function logar(token) {
   // Mantido para compatibilidade — não deve mais ser chamado
   console.warn('logar() chamado com token:', token);
+}
+
+/* ══════════════════════════════════════════════════
+   DEV TOOLS — manutenção (apenas administrador)
+══════════════════════════════════════════════════ */
+function renderDev() {
+  const ehAdmin = SESSAO?.token === 'ADM-PHILLIPE';
+  $('content').innerHTML = `
+    <div class="card">
+      <div class="card-head"><div class="card-title">Ferramentas de manutenção</div></div>
+      <div style="padding:4px 2px 8px">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:18px;line-height:1.5">
+          Status do servidor: <b style="color:${window._fbOffline?'#DC2626':'#16A34A'}">${window._fbOffline?'sem conexão (offline)':'conectado'}</b>.
+        </div>
+
+        <div style="border:1px solid #FECACA;background:#FEF2F2;border-radius:12px;padding:16px">
+          <div style="font-size:14px;font-weight:800;color:#C00000;margin-bottom:6px">Resetar sistema para teste</div>
+          <div style="font-size:12.5px;color:#7F1D1D;line-height:1.55;margin-bottom:14px">
+            Apaga <b>todos os franqueados, colaboradores, conversas, agenda, chamados, notificações e reuniões</b>, tanto neste aparelho quanto no servidor. Mantém apenas o seu acesso de administrador e as configurações do sistema. Esta ação não pode ser desfeita.
+          </div>
+          ${ehAdmin
+            ? `<button class="btn" style="background:#C00000;color:#fff;border:none;font-weight:700" onclick="resetarSistema()">Resetar sistema agora</button>`
+            : `<div style="font-size:12px;color:#7F1D1D">Apenas o administrador pode executar o reset.</div>`}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function resetarSistema() {
+  if(SESSAO?.token !== 'ADM-PHILLIPE') { toast('Apenas o administrador pode resetar.','rd'); return; }
+  if(!confirm('ATENÇÃO: isto apaga TODOS os franqueados, colaboradores, conversas, agenda, chamados e notificações, neste aparelho e no servidor. Não pode ser desfeito. Continuar?')) return;
+  const txt = prompt('Para confirmar o reset total, digite exatamente: RESETAR');
+  if(txt !== 'RESETAR') { toast('Reset cancelado.','or'); return; }
+
+  toast('Resetando... aguarde.','or');
+
+  // 1) Limpar dados no Firebase (mantém configuração de etapas)
+  const paths = ['franqueados','equipe','equipe_meta','chats','motalk','chamados','chamado_notif',
+    'notif_franqueado','notif_gestor','portal_usuarios','reunioes','reunioes_conclusao','reunioes_notif',
+    'disponibilidade','historico','historico_funcional','implantacao','etapas','validacoes','pastas_equipe'];
+  try { if(db && !window._fbOffline) await Promise.all(paths.map(p => db.ref(p).remove().catch(()=>{}))); } catch(e){}
+
+  // 2) Limpar localStorage (preserva sessão e configuração)
+  const KEEP = ['mo_impl_sessao','mo_apps_script_url','mo_equipe_etapas_template','mo_etapas_custom'];
+  const guardados = {};
+  KEEP.forEach(k => { const v = localStorage.getItem(k); if(v !== null) guardados[k] = v; });
+  try { localStorage.clear(); } catch(e){}
+  Object.entries(guardados).forEach(([k,v]) => { try{ localStorage.setItem(k,v); }catch(e){} });
+
+  toast('Sistema resetado. Recarregando...','gn');
+  setTimeout(() => location.reload(), 1300);
 }
 
 function sair() {
@@ -2606,7 +2653,7 @@ const RENDERS = {
   contatos:        renderContatosExternos,
   dashboard:       renderDashboard,
   suporte:         () => { renderSuportePainel(); },
-  dev:             () => { $('content').innerHTML='<div style="padding:40px;text-align:center;color:var(--text-dim)">Dev Tools (apenas em desenvolvimento local)</div>'; },
+  dev:             renderDev,
 }
 // Armazena o fid do processo em visualização
 let _processoAtual = null;;
@@ -6283,105 +6330,8 @@ function getEquipe() {
     const s = localStorage.getItem('mo_equipe_rh');
     if(s) return JSON.parse(s);
   } catch(e) {}
-    // Dados demo completos para visualização da ficha de registro
-  return [
-    {
-      id:'GES-001', token:'GES-001',
-      nome:'Maria Cláudia Souza Ferreira',
-      cargo:'Gestora de Implantação',
-      tipo:'gestor', cor:'#EA580C', modalidade:'CLT', status:'ativo',
-      cpf:'321.654.987-10', rg:'12.345.678-9', nasc:'1985-03-22',
-      email:'maria.claudia@mestradeobra.com.br',
-      tel:'(11) 98765-4321', ramal:'201',
-      admissao:'2022-03-01', salario:'R$ 8.500,00',
-      cargaHoraria:'44h semanais',
-      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'17:48', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'01310-100', logradouro:'Av. Paulista', numero:'1578', complemento:'Conj. 42', bairro:'Bela Vista', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Nubank', agencia:'0001', conta:'12345678-9', tipoConta:'Corrente', pix:'321.654.987-10' },
-      emergencia:{ nome:'Roberto Souza Ferreira', parentesco:'Cônjuge', tel:'(11) 97654-3210' },
-      obs:'Responsável pela implantação de todas as unidades da região Sudeste. Experiência em gestão de redes de franquias desde 2018. Coordena equipe de consultores e estagiários.',
-      foto:'',
-    },
-    {
-      id:'GES-002', token:'GES-002',
-      nome:'Rafael Torres Mendonça',
-      cargo:'Consultor de Implantação',
-      tipo:'gestor', cor:'#1E40AF', modalidade:'CLT', status:'ativo',
-      cpf:'123.456.789-00', rg:'98.765.432-1', nasc:'1990-07-15',
-      email:'rafael.torres@mestradeobra.com.br',
-      tel:'(11) 97777-8888', ramal:'202',
-      admissao:'2023-06-15', salario:'R$ 6.200,00',
-      cargaHoraria:'44h semanais',
-      horario:{ entrada:'08:30', saidaAlmoco:'12:30', retornoAlmoco:'13:30', saida:'18:18', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'04038-001', logradouro:'Rua Domingos de Morais', numero:'2187', complemento:'Apto 54', bairro:'Vila Mariana', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Itaú', agencia:'3456', conta:'87654-3', tipoConta:'Corrente', pix:'rafael.torres@mestradeobra.com.br' },
-      emergencia:{ nome:'Carla Torres Mendonça', parentesco:'Cônjuge', tel:'(11) 96666-5555' },
-      obs:'Carteira de franqueados nas regiões Sul e Centro-Oeste. Formação em Administração pela USP. Especialização em gestão de franquias pelo IBF.',
-      foto:'',
-    },
-    {
-      id:'EST-001', token:'EST-001',
-      nome:'Beatriz Oliveira Santos',
-      cargo:'Estagiária Administrativa',
-      tipo:'estagiario', cor:'#16A34A', modalidade:'Estágio', status:'ativo',
-      cpf:'456.789.123-55', rg:'23.456.789-0', nasc:'2002-11-08',
-      email:'beatriz.oliveira@mestradeobra.com.br',
-      tel:'(11) 94444-3333', ramal:'',
-      admissao:'2025-08-01', salario:'R$ 1.320,00',
-      cargaHoraria:'30h semanais (estágio)',
-      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'14:00', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'05407-002', logradouro:'Rua Teodoro Sampaio', numero:'744', complemento:'Apto 12', bairro:'Pinheiros', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Bradesco', agencia:'2222', conta:'56789-1', tipoConta:'Poupança', pix:'456.789.123-55' },
-      emergencia:{ nome:'Fernanda Oliveira Santos', parentesco:'Mãe', tel:'(11) 93333-2222' },
-      obs:'Cursando 4° ano de Administração na FGV-SP. Estágio supervisionado — carga horária 30h semanais. Benefícios: bolsa R$ 1.320,00 + vale-transporte. Previsão de encerramento: 31/07/2026.',
-      foto:'',
-    },
-    {
-      id:'AUX-001', token:'AUX-001',
-      nome:'Lucas Pereira Carvalho',
-      cargo:'Auxiliar Administrativo',
-      tipo:'auxiliar', cor:'#7C3AED', modalidade:'CLT', status:'ativo',
-      cpf:'789.123.456-88', rg:'34.567.890-1', nasc:'1997-04-20',
-      email:'lucas.pereira@mestradeobra.com.br',
-      tel:'(11) 92222-1111', ramal:'203',
-      admissao:'2024-02-12', salario:'R$ 2.800,00',
-      cargaHoraria:'44h semanais',
-      horario:{ entrada:'08:00', saidaAlmoco:'12:00', retornoAlmoco:'13:00', saida:'17:48', tolerancia:10, dias:'Segunda a Sexta' },
-      statusInicio:'', statusRetorno:'',
-      endereco:{ cep:'03301-000', logradouro:'Av. Radial Leste', numero:'1203', complemento:'Casa 2', bairro:'Tatuapé', cidade:'São Paulo', uf:'SP' },
-      banco:{ banco:'Banco do Brasil', agencia:'1111', conta:'23456-7', tipoConta:'Corrente', pix:'lucas.pereira@mestradeobra.com.br' },
-      emergencia:{ nome:'Ana Pereira Carvalho', parentesco:'Mãe', tel:'(11) 91111-0000' },
-      obs:'Responsável pelo suporte administrativo, arquivo físico e digital de documentos e controle de correspondências. Ensino médio completo. Em processo de qualificação interna.',
-      foto:'',
-    },
-    {
-      id:'EQ-VANESSA', token:'EQ-VANESSA',
-      nome:'Vanessa Martins', cargo:'Projeto, Layout e Fachada',
-      tipo:'projeto', cor:'#0891B2', modalidade:'PJ', status:'ativo',
-      email:'vanessa@mestrework.com', tel:'(42) 99100-0001',
-    },
-    {
-      id:'EQ-PRISCILA', token:'EQ-PRISCILA',
-      nome:'Priscila Andrade', cargo:'Compras e Suprimentos',
-      tipo:'compras', cor:'#CA8A04', modalidade:'CLT', status:'ativo',
-      email:'priscila@mestrework.com', tel:'(42) 99100-0002',
-    },
-    {
-      id:'EQ-ERICA', token:'EQ-ERICA',
-      nome:'Érica Souza', cargo:'Treinamento',
-      tipo:'treinamento', cor:'#DB2777', modalidade:'PJ', status:'ativo',
-      email:'erica@mestrework.com', tel:'(42) 99100-0003',
-    },
-    {
-      id:'EQ-LEANDRO', token:'EQ-LEANDRO',
-      nome:'Leandro Dias', cargo:'Marketing e Comunicação',
-      tipo:'marketing', cor:'#9333EA', modalidade:'PJ', status:'ativo',
-      email:'leandro@mestrework.com', tel:'(42) 99100-0004',
-    },
-  ];
+  // Sistema inicia vazio — colaboradores são cadastrados pelo administrador
+  return [];
 }
 
 function salvarEquipe(lista) {
